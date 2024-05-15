@@ -1,0 +1,2 @@
+# DnsSafeguard
+Secure DNS Client

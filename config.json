@@ -1,5 +1,5 @@
 {
 	"server_name": "cloudflare-dns.com",
-	"socket_addrs": "192.0.63.134:443",
+	"socket_addrs": "1.1.1.1:443",
 	"udp_socket_addrs": "127.0.0.1:53"
 }

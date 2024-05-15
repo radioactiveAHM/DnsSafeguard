@@ -13,6 +13,7 @@ fn main() {
     let conf = config::load_config();
 
     // Main loop
+    let mut frag_retry = 0;
     'main: loop {
         println!("New TLS connection");
         // Generate Certificate Store for TLS
@@ -35,47 +36,24 @@ fn main() {
         let mut c = client.unwrap();
 
         // TCP socket for TLS
-        let mut tcp = std::net::TcpStream::connect(conf.socket_addrs).unwrap_or_else(|e| {
+        let mut tcp = std::net::TcpStream::connect(&conf.socket_addrs).unwrap_or_else(|e| {
             println!("{}", e);
             panic!();
         });
 
-        // Buffer to store TLS Client Hello
-        let mut buff = Vec::with_capacity(1024);
-        let mut cur = std::io::Cursor::new(&mut buff);
-        // Write TLS Client Hello to Buffer
-        let l = c.write_tls(&mut cur).unwrap();
-
-        // Split TLS Client Hello into 3 parts
-        let packs = (l - 5) / 3;
-
-        // Send TLS Client Hello with 3 steps
-        // #1
-        let xbuf = [
-            &vec![22, 3, 1, 0, buff[5..packs].len() as u8],
-            &buff[5..packs],
-        ];
-        let xtls = xbuf.concat();
-        tcp.write(&xtls).unwrap();
-        tcp.flush().unwrap();
-        sleep(Duration::from_millis(50));
-        // #2
-        let xbuf = [
-            &vec![22, 3, 1, 0, buff[packs..packs * 2].len() as u8],
-            &buff[packs..packs * 2],
-        ];
-        let xtls = xbuf.concat();
-        tcp.write(&xtls).unwrap();
-        tcp.flush().unwrap();
-        sleep(Duration::from_millis(50));
-        // #3
-        let xbuf = [
-            &vec![22, 3, 1, 0, buff[packs * 2..].len() as u8],
-            &buff[packs * 2..],
-        ];
-        let xtls = xbuf.concat();
-        tcp.write(&xtls).unwrap();
-        tcp.flush().unwrap();
+        // Perform TLS Client Hello fragmenting
+        let fraged = fragment::fragment_client_hello(&mut c, &mut tcp);
+        if fraged.is_err(){
+            if frag_retry == 5 {
+                // 5 times retried so exit
+                println!("{}", fraged.unwrap_err());
+                panic!();
+            } else {
+                // Can't send Tls client hello so retry
+                frag_retry = frag_retry + 1;
+                continue 'main;
+            }
+        }
 
         // Complete TLS handshake
         c.complete_io(&mut tcp).unwrap();

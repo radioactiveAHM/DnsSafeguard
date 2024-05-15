@@ -1,26 +1,26 @@
 # DnsSafeguard
 
-This project is a secure DNS client built in Rust that captures DNS queries over a UDP socket and sends them to a DNS server using the DNS over HTTPS (DOH) protocol. Additionally, it employs TLS client hello fragmenting to bypass Great Firewall (GFW) censorship.
+**DnsSafeguard** is a secure DNS client built in Rust, designed to intercept DNS queries over a UDP socket and securely transmit them to a DNS server using the DNS over HTTPS (DOH) protocol. It also features TLS client hello fragmenting to circumvent Great Firewall (GFW) censorship.
 
 ## Features
 
-* Secure Communication: Utilizes Rustls for secure communication with DNS servers.
-* UDP Socket: Listens for DNS queries on a UDP socket.
-* DoH Protocol: Transmits DNS queries to a DNS server using the DoH protocol.
-* Censorship Bypass: Implements TLS client hello fragmenting to evade GFW censorship.
+* **Secure Communication**: Leverages Rustls for encrypted communication with DNS servers.
+* **UDP Socket**: Captures DNS queries on a UDP socket.
+* **DoH Protocol**: Sends DNS queries using the DoH protocol for enhanced privacy.
+* **Censorship Bypass**: Utilizes TLS client hello fragmenting to evade GFW censorship.
 
 ## Roadmap
 
-- [x] Ipv4
-- [ ] Configuration options for blocking dns query by specific key in domain name
-- [ ] DNS over TLS (Port 853)
+- [x] **IPv4 Support**: Current implementation.
+- [ ] **Domain Filtering**: Configuration options to block DNS queries containing specific keywords.
+- [ ] **DNS over TLS**: Implementation on Port 853 for additional security.
 
-## Build
+## Building the Project
 
-To build run `cargo build --release` in project directory
+To build the project, execute the following command in the project directory: `cargo build --release`
 
 ## Config File
 
-* server_name: Required for TLS config.
-* socket_addrs: DNS server IP and port.
-* udp_socket_addrs: Configure the IP address and port for listening to DNS queries on a UDP socket. DNS servers typically listen on port 53.
+* `server_name`: Specifies the server name for TLS configuration.
+* `socket_addrs`: Sets the DNS server IP and port.
+* `udp_socket_addrs`: Configures the IP and port for the UDP socket listening to DNS queries.

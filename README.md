@@ -11,7 +11,7 @@ This project is a secure DNS client built in Rust that captures DNS queries over
 
 ## Roadmap
 
-- [ ] Dual Stack
+- [x] Ipv4
 - [ ] Configuration options for blocking dns query by specific key in domain name
 - [ ] DNS over TLS (Port 853)
 

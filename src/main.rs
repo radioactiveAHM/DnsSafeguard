@@ -12,6 +12,28 @@ fn main() {
     // If config file does not exist or malformed, panic occurs.
     let conf = config::load_config();
 
+    if conf.ipv6.enable{
+        std::thread::spawn(move||{
+            dns(conf.ipv6.server_name, &conf.ipv6.socket_addrs, &conf.ipv6.udp_socket_addrs)
+        });
+    }
+
+    dns(conf.server_name, &conf.socket_addrs, &conf.udp_socket_addrs);
+}
+
+fn catch_in_buff(find: &[u8], buff: &[u8]) -> (usize, usize) {
+    let size = find.len();
+    let mut index = size;
+    for _ in &buff[size..] {
+        if find == &buff[index - size..index] {
+            return (index - size, index);
+        }
+        index = index + 1
+    }
+    return (0, 0);
+}
+
+fn dns(server_name: String, socket_addrs: &str, udp_socket_addrs: &str) {
     // Main loop
     let mut frag_retry = 0;
     'main: loop {
@@ -30,20 +52,22 @@ fn main() {
 
         let rc_config = Arc::new(config);
         // Add Server Name
-        let example_com = (conf.server_name.clone()).try_into().expect("Invalid server name");
+        let example_com = (server_name.clone())
+            .try_into()
+            .expect("Invalid server name");
         let client = rustls::ClientConnection::new(rc_config, example_com);
 
         let mut c = client.unwrap();
 
         // TCP socket for TLS
-        let mut tcp = std::net::TcpStream::connect(&conf.socket_addrs).unwrap_or_else(|e| {
+        let mut tcp = std::net::TcpStream::connect(socket_addrs).unwrap_or_else(|e| {
             println!("{}", e);
             panic!();
         });
 
         // Perform TLS Client Hello fragmenting
         let fraged = fragment::fragment_client_hello(&mut c, &mut tcp);
-        if fraged.is_err(){
+        if fraged.is_err() {
             if frag_retry == 5 {
                 // 5 times retried so exit
                 println!("{}", fraged.unwrap_err());
@@ -59,7 +83,7 @@ fn main() {
         c.complete_io(&mut tcp).unwrap();
 
         // UDP socket to listen for DNS query
-        let udp = UdpSocket::bind(conf.udp_socket_addrs).unwrap_or_else(|e| {
+        let udp = UdpSocket::bind(udp_socket_addrs).unwrap_or_else(|e| {
             println!("{}", e);
             panic!();
         });
@@ -74,10 +98,10 @@ fn main() {
             let (query_size, addr) = udp_ok.unwrap();
             // dbg!("udp.recv_from");
             let http = format!(
-                "POST /dns-query HTTP/1.1\r\nHost: {}\r\nAccept: application/dns-message\r\nContent-type: application/dns-message\r\nContent-length: {}\r\n\r\n",
-                conf.server_name,
-                dns_query[..query_size].len()
-            );
+                    "POST /dns-query HTTP/1.1\r\nHost: {}\r\nAccept: application/dns-message\r\nContent-type: application/dns-message\r\nContent-length: {}\r\n\r\n",
+                    server_name,
+                    dns_query[..query_size].len()
+                );
             let data = [http.as_bytes(), &dns_query[..query_size]].concat();
             c.writer().write(&data).unwrap();
             // dbg!("c.writer()");
@@ -122,16 +146,4 @@ fn main() {
             // dbg!("success");
         }
     }
-}
-
-fn catch_in_buff(find: &[u8], buff: &[u8]) -> (usize, usize) {
-    let size = find.len();
-    let mut index = size;
-    for _ in &buff[size..] {
-        if find == &buff[index - size..index] {
-            return (index - size, index);
-        }
-        index = index + 1
-    }
-    return (0, 0);
 }

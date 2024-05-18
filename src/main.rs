@@ -112,6 +112,7 @@ fn dns(server_name: String, socket_addrs: &str, udp_socket_addrs: &str) {
                             {
                                 // Connection is dead
                                 // dbg!("Connection dead while write tls");
+                                c.send_close_notify();
                                 continue 'main;
                             }
                         }
@@ -134,6 +135,7 @@ fn dns(server_name: String, socket_addrs: &str, udp_socket_addrs: &str) {
                         {
                             // Connection is dead
                             // dbg!("Connection dead while read_tls");
+                            c.send_close_notify();
                             continue 'main;
                         }
                     }

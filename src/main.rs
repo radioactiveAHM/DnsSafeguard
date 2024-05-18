@@ -137,8 +137,12 @@ fn dns(server_name: String, socket_addrs: &str, udp_socket_addrs: &str) {
                             continue 'main;
                         }
                     }
-                    let stat = c.process_new_packets().unwrap();
-                    if stat.peer_has_closed() {
+                    let stat = c.process_new_packets();
+                    if stat.is_err(){
+                        c.send_close_notify();
+                        continue 'main;
+                    }
+                    if stat.unwrap().peer_has_closed() {
                         dead_conn = true;
                     }
 

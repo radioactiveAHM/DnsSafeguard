@@ -1,20 +1,25 @@
 mod config;
 mod fragment;
+mod tls;
 
+use std::io::ErrorKind;
 use std::io::{Read, Write};
 use std::net::UdpSocket;
-use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
-use std::vec;
+
 fn main() {
     // Load config
     // If config file does not exist or malformed, panic occurs.
     let conf = config::load_config();
 
-    if conf.ipv6.enable{
-        std::thread::spawn(move||{
-            dns(conf.ipv6.server_name, &conf.ipv6.socket_addrs, &conf.ipv6.udp_socket_addrs)
+    if conf.ipv6.enable {
+        std::thread::spawn(move || {
+            dns(
+                conf.ipv6.server_name,
+                &conf.ipv6.socket_addrs,
+                &conf.ipv6.udp_socket_addrs,
+            )
         });
     }
 
@@ -38,32 +43,17 @@ fn dns(server_name: String, socket_addrs: &str, udp_socket_addrs: &str) {
     let mut frag_retry = 0;
     'main: loop {
         println!("New TLS connection");
-        // Generate Certificate Store for TLS
-        let root_store =
-            rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 
-        // Generate Config for TLS
-        let mut config = rustls::ClientConfig::builder()
-            .with_root_certificates(root_store)
-            .with_no_client_auth();
-
-        // Add ALPN to TLS Config
-        config.alpn_protocols = vec![b"http/1.1".to_vec()];
-
-        let rc_config = Arc::new(config);
-        // Add Server Name
-        let example_com = (server_name.clone())
-            .try_into()
-            .expect("Invalid server name");
-        let client = rustls::ClientConnection::new(rc_config, example_com);
-
-        let mut c = client.unwrap();
+        // TLS Client
+        let mut c = tls::client(server_name.clone()).unwrap();
 
         // TCP socket for TLS
-        let mut tcp = std::net::TcpStream::connect(socket_addrs).unwrap_or_else(|e| {
-            println!("{}", e);
-            panic!();
-        });
+        let mut tcp = std::net::TcpStream::connect(socket_addrs).unwrap();
+        // Set writing timeout to tcp connection
+        tcp.set_write_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
+        tcp.set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
 
         // Perform TLS Client Hello fragmenting
         let fraged = fragment::fragment_client_hello(&mut c, &mut tcp);
@@ -80,53 +70,76 @@ fn dns(server_name: String, socket_addrs: &str, udp_socket_addrs: &str) {
         }
 
         // Complete TLS handshake
-        c.complete_io(&mut tcp).unwrap();
+        if c.complete_io(&mut tcp).is_err() {
+            continue 'main;
+        }
 
         // UDP socket to listen for DNS query
-        let udp = UdpSocket::bind(udp_socket_addrs).unwrap_or_else(|e| {
-            println!("{}", e);
-            panic!();
-        });
+        let udp = UdpSocket::bind(udp_socket_addrs).unwrap();
 
+        let mut dead_conn = false;
         loop {
-            // dbg!("loop start");
+            if dead_conn {
+                println!("connection closed by peer");
+                break;
+            }
             let mut dns_query: [u8; 8196] = [0u8; 8196];
             let udp_ok = udp.recv_from(&mut dns_query);
             if udp_ok.is_err() {
                 continue;
             }
             let (query_size, addr) = udp_ok.unwrap();
-            // dbg!("udp.recv_from");
             let http = format!(
                     "POST /dns-query HTTP/1.1\r\nHost: {}\r\nAccept: application/dns-message\r\nContent-type: application/dns-message\r\nContent-length: {}\r\n\r\n",
                     server_name,
                     dns_query[..query_size].len()
                 );
-            let data = [http.as_bytes(), &dns_query[..query_size]].concat();
-            c.writer().write(&data).unwrap();
-            // dbg!("c.writer()");
+            let http_req = [http.as_bytes(), &dns_query[..query_size]].concat();
+
+            // Write http request as plaintext to tls container
+            c.writer().write(&http_req).unwrap();
 
             // Handle sending request
             loop {
-                // dbg!("Handle sending request");
                 if c.wants_write() {
-                    let written = c.write_tls(&mut tcp).unwrap();
-                    if written != 0 {
-                        break;
+                    match c.write_tls(&mut tcp) {
+                        Ok(_) => break,
+                        Err(e) => {
+                            if e.kind() == ErrorKind::TimedOut
+                                || e.kind() == ErrorKind::ConnectionAborted
+                                || e.kind() == ErrorKind::ConnectionRefused
+                                || e.kind() == ErrorKind::ConnectionReset
+                            {
+                                // Connection is dead
+                                // dbg!("Connection dead while write tls");
+                                continue 'main;
+                            }
+                        }
                     }
                 }
                 sleep(Duration::from_millis(50));
             }
             // Handle Reciving Data
-            // dbg!("Handle Reciving Data");
             let mut http_resp = [0u8; 8196];
             let http_resp_size;
             'rt: loop {
                 if c.wants_read() {
-                    c.read_tls(&mut tcp).unwrap();
+                    let rtls_e = c.read_tls(&mut tcp);
+                    if rtls_e.is_err() {
+                        let e = rtls_e.unwrap_err();
+                        if e.kind() == ErrorKind::TimedOut
+                            || e.kind() == ErrorKind::ConnectionAborted
+                            || e.kind() == ErrorKind::ConnectionRefused
+                            || e.kind() == ErrorKind::ConnectionReset
+                        {
+                            // Connection is dead
+                            // dbg!("Connection dead while read_tls");
+                            continue 'main;
+                        }
+                    }
                     let stat = c.process_new_packets().unwrap();
                     if stat.peer_has_closed() {
-                        break 'main;
+                        dead_conn = true;
                     }
 
                     let wp = c.reader().read(&mut http_resp);
@@ -138,12 +151,13 @@ fn dns(server_name: String, socket_addrs: &str, udp_socket_addrs: &str) {
                 sleep(Duration::from_millis(50));
             }
 
-            udp.send_to(
-                &http_resp[catch_in_buff("\r\n\r\n".as_bytes(), &http_resp).1..http_resp_size],
-                addr,
-            )
-            .unwrap_or(0);
-            // dbg!("success");
+            let body =
+                &http_resp[catch_in_buff("\r\n\r\n".as_bytes(), &http_resp).1..http_resp_size];
+
+            if body.len() == 0 {
+                continue;
+            }
+            udp.send_to(body, addr).unwrap_or(0);
         }
     }
 }

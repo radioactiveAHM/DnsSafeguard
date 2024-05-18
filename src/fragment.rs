@@ -1,11 +1,16 @@
 use std::error::Error;
 use std::{io::Write, net::TcpStream};
 
+use rand::Rng;
+use rustls::ClientConnection;
 use std::thread::sleep;
 use std::time::Duration;
-use rustls::ClientConnection;
 
-pub fn fragment_client_hello(c: &mut ClientConnection, tcp: &mut TcpStream)->Result<(),Box<dyn Error>>{
+#[allow(dead_code)]
+pub fn fragment_client_hello(
+    c: &mut ClientConnection,
+    tcp: &mut TcpStream,
+) -> Result<(), Box<dyn Error>> {
     // Buffer to store TLS Client Hello
     let mut buff = Vec::with_capacity(1024);
     let mut cur = std::io::Cursor::new(&mut buff);
@@ -42,6 +47,55 @@ pub fn fragment_client_hello(c: &mut ClientConnection, tcp: &mut TcpStream)->Res
     let xtls = xbuf.concat();
     tcp.write(&xtls)?;
     tcp.flush()?;
+
+    Ok(())
+}
+
+#[allow(dead_code)]
+pub fn fragment_client_hello_rand(
+    c: &mut ClientConnection,
+    tcp: &mut TcpStream,
+) -> Result<(), Box<dyn Error>> {
+    // Buffer to store TLS Client Hello
+    let mut buff = Vec::with_capacity(1024 * 4);
+    let mut cur = std::io::Cursor::new(&mut buff);
+    // Write TLS Client Hello to Buffer
+    c.write_tls(&mut cur).unwrap();
+
+    // Split TLS Client Hello into chunks
+    let mut mr_randy = rand::rngs::OsRng::default();
+    let mut written = 5;
+
+    // Send TLS Client Hello with random chunks
+    loop {
+        let chunck_size = mr_randy.gen_range(10..buff.len());
+        if chunck_size + written >= buff.len() {
+            let xbuf = [
+                &vec![22, 3, 1, 0, buff[written..].len() as u8],
+                &buff[written..],
+            ];
+            let xtls = xbuf.concat();
+            tcp.write(&xtls)?;
+            tcp.flush()?;
+            break;
+        } else {
+            let xbuf = [
+                &vec![
+                    22,
+                    3,
+                    1,
+                    0,
+                    buff[written..(chunck_size + written)].len() as u8,
+                ],
+                &buff[written..(chunck_size + written)],
+            ];
+            let xtls = xbuf.concat();
+            tcp.write(&xtls)?;
+            tcp.flush()?;
+            written = written + chunck_size;
+            sleep(Duration::from_millis(mr_randy.gen_range(10..21)));
+        }
+    }
 
     Ok(())
 }

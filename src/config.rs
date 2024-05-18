@@ -1,9 +1,9 @@
 #[derive(serde::Deserialize)]
-pub struct Ipv6{
+pub struct Ipv6 {
     pub enable: bool,
     pub server_name: String,
     pub socket_addrs: String,
-    pub udp_socket_addrs: String
+    pub udp_socket_addrs: String,
 }
 
 #[derive(serde::Deserialize)]
@@ -11,7 +11,7 @@ pub struct Config {
     pub server_name: String,
     pub socket_addrs: String,
     pub udp_socket_addrs: String,
-    pub ipv6: Ipv6
+    pub ipv6: Ipv6,
 }
 
 pub fn load_config() -> Config {

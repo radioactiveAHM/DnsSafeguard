@@ -11,7 +11,7 @@
 
 ## Roadmap
 
-- [x] **IPv4 Support**: Current implementation.
+- [x] **IPv6 Support**: Current implementation.
 - [ ] **Domain Filtering**: Configuration options to block DNS queries containing specific keywords.
 
 ## Building the Project

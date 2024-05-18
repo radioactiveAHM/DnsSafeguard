@@ -96,12 +96,15 @@ fn dns(server_name: String, socket_addrs: &str, udp_socket_addrs: &str) {
                 continue;
             }
             let (query_size, addr) = udp_ok.unwrap();
-            let http = format!(
-                    "POST /dns-query HTTP/1.1\r\nHost: {}\r\nAccept: application/dns-message\r\nContent-type: application/dns-message\r\nContent-length: {}\r\n\r\n",
-                    server_name,
-                    dns_query[..query_size].len()
-                );
-            let http_req = [http.as_bytes(), &dns_query[..query_size]].concat();
+
+            let http_req = [
+                b"POST /dns-query HTTP/1.1\r\nHost: ",
+                server_name.as_bytes(),
+                b"\r\nAccept: application/dns-message\r\nContent-type: application/dns-message\r\nContent-length: ",
+                dns_query[..query_size].len().to_string().as_bytes(),
+                b"\r\n\r\n",
+                &dns_query[..query_size]
+            ].concat();
 
             // Write http request as plaintext to tls container
             c.writer().write(&http_req).unwrap();

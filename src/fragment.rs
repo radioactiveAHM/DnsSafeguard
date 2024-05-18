@@ -12,7 +12,7 @@ pub fn fragment_client_hello(
     tcp: &mut TcpStream,
 ) -> Result<(), Box<dyn Error>> {
     // Buffer to store TLS Client Hello
-    let mut buff = Vec::with_capacity(1024);
+    let mut buff = Vec::with_capacity(1024 * 4);
     let mut cur = std::io::Cursor::new(&mut buff);
     // Write TLS Client Hello to Buffer
     let l = c.write_tls(&mut cur).unwrap();

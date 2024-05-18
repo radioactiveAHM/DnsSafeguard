@@ -35,7 +35,7 @@ fn catch_in_buff(find: &[u8], buff: &[u8]) -> (usize, usize) {
         }
         index = index + 1
     }
-    return (0, 0);
+    (0, 0)
 }
 
 fn dns(server_name: String, socket_addrs: &str, udp_socket_addrs: &str) {
@@ -70,8 +70,15 @@ fn dns(server_name: String, socket_addrs: &str, udp_socket_addrs: &str) {
         }
 
         // Complete TLS handshake
-        if c.complete_io(&mut tcp).is_err() {
-            continue 'main;
+        match c.complete_io(&mut tcp){
+            Err(e)=> {
+                // If TLS handshake failed
+                println!("{}", e);
+                continue 'main;
+            },
+            Ok(_)=>{
+                println!("Connection Established");
+            }
         }
 
         // UDP socket to listen for DNS query
@@ -140,7 +147,7 @@ fn dns(server_name: String, socket_addrs: &str, udp_socket_addrs: &str) {
                         }
                     }
                     let stat = c.process_new_packets();
-                    if stat.is_err(){
+                    if stat.is_err() {
                         c.send_close_notify();
                         continue 'main;
                     }
@@ -160,7 +167,7 @@ fn dns(server_name: String, socket_addrs: &str, udp_socket_addrs: &str) {
             let body =
                 &http_resp[catch_in_buff("\r\n\r\n".as_bytes(), &http_resp).1..http_resp_size];
 
-            if body.len() == 0 {
+            if body.is_empty() {
                 continue;
             }
             udp.send_to(body, addr).unwrap_or(0);

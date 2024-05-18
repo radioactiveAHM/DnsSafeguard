@@ -22,17 +22,14 @@ pub fn fragment_client_hello(
 
     // Send TLS Client Hello with 3 steps
     // #1
-    let xbuf = [
-        &vec![22, 3, 1, 0, buff[5..packs].len() as u8],
-        &buff[5..packs],
-    ];
+    let xbuf = [&[22, 3, 1, 0, buff[5..packs].len() as u8], &buff[5..packs]];
     let xtls = xbuf.concat();
     tcp.write(&xtls)?;
     tcp.flush()?;
     sleep(Duration::from_millis(50));
     // #2
     let xbuf = [
-        &vec![22, 3, 1, 0, buff[packs..packs * 2].len() as u8],
+        &[22, 3, 1, 0, buff[packs..packs * 2].len() as u8],
         &buff[packs..packs * 2],
     ];
     let xtls = xbuf.concat();
@@ -41,7 +38,7 @@ pub fn fragment_client_hello(
     sleep(Duration::from_millis(50));
     // #3
     let xbuf = [
-        &vec![22, 3, 1, 0, buff[packs * 2..].len() as u8],
+        &[22, 3, 1, 0, buff[packs * 2..].len() as u8],
         &buff[packs * 2..],
     ];
     let xtls = xbuf.concat();
@@ -71,7 +68,7 @@ pub fn fragment_client_hello_rand(
         let chunck_size = mr_randy.gen_range(10..buff.len());
         if chunck_size + written >= buff.len() {
             let xbuf = [
-                &vec![22, 3, 1, 0, buff[written..].len() as u8],
+                &[22, 3, 1, 0, buff[written..].len() as u8],
                 &buff[written..],
             ];
             let xtls = xbuf.concat();
@@ -80,7 +77,7 @@ pub fn fragment_client_hello_rand(
             break;
         } else {
             let xbuf = [
-                &vec![
+                &[
                     22,
                     3,
                     1,

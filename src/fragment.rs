@@ -6,6 +6,7 @@ use rustls::ClientConnection;
 use std::thread::sleep;
 use std::time::Duration;
 
+/// 3 TCP segments with TLS client hello pack
 #[allow(dead_code)]
 pub fn fragment_client_hello(
     c: &mut ClientConnection,
@@ -48,6 +49,7 @@ pub fn fragment_client_hello(
     Ok(())
 }
 
+/// random TCP segments with TLS client hello pack
 #[allow(dead_code)]
 pub fn fragment_client_hello_rand(
     c: &mut ClientConnection,
@@ -93,6 +95,29 @@ pub fn fragment_client_hello_rand(
             sleep(Duration::from_millis(mr_randy.gen_range(10..21)));
         }
     }
+
+    Ok(())
+}
+
+/// 2 packs of TLS client hello in one tcp segment
+#[allow(dead_code)]
+pub fn fragment_client_hello_pack(
+    c: &mut ClientConnection,
+    tcp: &mut TcpStream,
+) -> Result<(), Box<dyn Error>> {
+    // Buffer to store TLS Client Hello
+    let mut buff = Vec::with_capacity(1024 * 4);
+    let mut cur = std::io::Cursor::new(&mut buff);
+    // Write TLS Client Hello to Buffer
+    let l = c.write_tls(&mut cur).unwrap();
+    let psize = (l - 5) / 2;
+    let xtls = [
+        [&[22, 3, 1, 0, buff[5..psize].len() as u8], &buff[5..psize]].concat(),
+        [&[22, 3, 1, 0, buff[psize..].len() as u8], &buff[psize..]].concat(),
+    ]
+    .concat();
+    tcp.write(&xtls)?;
+    tcp.flush()?;
 
     Ok(())
 }

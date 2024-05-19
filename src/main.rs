@@ -19,11 +19,17 @@ fn main() {
                 conf.ipv6.server_name,
                 &conf.ipv6.socket_addrs,
                 &conf.ipv6.udp_socket_addrs,
+                &conf.ipv6.fragment_method,
             )
         });
     }
 
-    dns(conf.server_name, &conf.socket_addrs, &conf.udp_socket_addrs);
+    dns(
+        conf.server_name,
+        &conf.socket_addrs,
+        &conf.udp_socket_addrs,
+        &conf.fragment_method,
+    );
 }
 
 fn catch_in_buff(find: &[u8], buff: &[u8]) -> (usize, usize) {
@@ -38,7 +44,7 @@ fn catch_in_buff(find: &[u8], buff: &[u8]) -> (usize, usize) {
     (0, 0)
 }
 
-fn dns(server_name: String, socket_addrs: &str, udp_socket_addrs: &str) {
+fn dns(server_name: String, socket_addrs: &str, udp_socket_addrs: &str, fragment_method: &str) {
     // Main loop
     let mut frag_retry = 0;
     'main: loop {
@@ -56,7 +62,12 @@ fn dns(server_name: String, socket_addrs: &str, udp_socket_addrs: &str) {
             .unwrap();
 
         // Perform TLS Client Hello fragmenting
-        let fraged = fragment::fragment_client_hello(&mut c, &mut tcp);
+        let fraged = match fragment_method {
+            "linear" => fragment::fragment_client_hello(&mut c, &mut tcp),
+            "random" => fragment::fragment_client_hello_rand(&mut c, &mut tcp),
+            "single" => fragment::fragment_client_hello_pack(&mut c, &mut tcp),
+            _ => panic!("Invalid fragment method"),
+        };
         if fraged.is_err() {
             if frag_retry == 5 {
                 // 5 times retried so exit
@@ -70,13 +81,13 @@ fn dns(server_name: String, socket_addrs: &str, udp_socket_addrs: &str) {
         }
 
         // Complete TLS handshake
-        match c.complete_io(&mut tcp){
-            Err(e)=> {
+        match c.complete_io(&mut tcp) {
+            Err(e) => {
                 // If TLS handshake failed
                 println!("{}", e);
                 continue 'main;
-            },
-            Ok(_)=>{
+            }
+            Ok(_) => {
                 println!("Connection Established");
             }
         }

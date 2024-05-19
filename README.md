@@ -27,3 +27,11 @@ To build the project, execute the following command in the project directory: `c
     - Random Method: In this approach, random TCP segments are used, each containing one TLS client hello packet.
     - Single Method: With the single method, a single TCP segment carries two TLS client hello packets.
 * `ipv6`: Support for IPv6
+
+## About
+
+DnsSafeguard is dedicated to providing a secure DNS client solution, ensuring your DNS queries remain private and uncensored.
+
+## License
+
+This project is licensed under the Apache-2.0 License - see the LICENSE file for details.

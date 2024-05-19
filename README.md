@@ -11,7 +11,9 @@
 
 ## Roadmap
 
-- [x] **IPv6 Support**: Current implementation.
+- [x] **IPv4 Support**: Current implementation.
+- [ ] **Domain Filtering**: Configuration options to block DNS queries containing specific keywords.
+- [ ] **DNS over TLS**: Implementation on Port 853 for additional security.
 
 ## Building the Project
 

@@ -2,8 +2,7 @@ mod config;
 mod fragment;
 mod tls;
 
-use std::io::ErrorKind;
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::net::UdpSocket;
 use std::thread::sleep;
 use std::time::Duration;
@@ -19,7 +18,7 @@ fn main() {
                 conf.ipv6.server_name,
                 &conf.ipv6.socket_addrs,
                 &conf.ipv6.udp_socket_addrs,
-                &conf.ipv6.fragment_method,
+                &conf.ipv6.fragmenting,
             )
         });
     }
@@ -28,7 +27,7 @@ fn main() {
         conf.server_name,
         &conf.socket_addrs,
         &conf.udp_socket_addrs,
-        &conf.fragment_method,
+        &conf.fragmenting,
     );
 }
 
@@ -44,10 +43,19 @@ fn catch_in_buff(find: &[u8], buff: &[u8]) -> (usize, usize) {
     (0, 0)
 }
 
-fn dns(server_name: String, socket_addrs: &str, udp_socket_addrs: &str, fragment_method: &str) {
+fn dns(
+    server_name: String,
+    socket_addrs: &str,
+    udp_socket_addrs: &str,
+    fragmenting: &config::Fragmenting,
+) {
     // Main loop
-    let mut frag_retry = 0;
+    let mut tls_handshake_retry = 0u8;
     'main: loop {
+        if tls_handshake_retry == 5 {
+            println!("Cannot perform TLS handshake");
+            panic!();
+        }
         println!("New TLS connection");
 
         // TLS Client
@@ -62,20 +70,15 @@ fn dns(server_name: String, socket_addrs: &str, udp_socket_addrs: &str, fragment
             .unwrap();
 
         // Perform TLS Client Hello fragmenting
-        let fraged = match fragment_method {
-            "linear" => fragment::fragment_client_hello(&mut c, &mut tcp),
-            "random" => fragment::fragment_client_hello_rand(&mut c, &mut tcp),
-            "single" => fragment::fragment_client_hello_pack(&mut c, &mut tcp),
-            _ => panic!("Invalid fragment method"),
-        };
-        if fraged.is_err() {
-            if frag_retry == 5 {
-                // 5 times retried so exit
-                println!("{}", fraged.unwrap_err());
-                panic!();
-            } else {
-                // Can't send Tls client hello so retry
-                frag_retry = frag_retry + 1;
+        if fragmenting.enable {
+            let fraged = match fragmenting.method.as_str() {
+                "linear" => fragment::fragment_client_hello(&mut c, &mut tcp),
+                "random" => fragment::fragment_client_hello_rand(&mut c, &mut tcp),
+                "single" => fragment::fragment_client_hello_pack(&mut c, &mut tcp),
+                _ => panic!("Invalid fragment method"),
+            };
+            if fraged.is_err() {
+                tls_handshake_retry = tls_handshake_retry + 1;
                 continue 'main;
             }
         }
@@ -85,6 +88,7 @@ fn dns(server_name: String, socket_addrs: &str, udp_socket_addrs: &str, fragment
             Err(e) => {
                 // If TLS handshake failed
                 println!("{}", e);
+                tls_handshake_retry = tls_handshake_retry + 1;
                 continue 'main;
             }
             Ok(_) => {

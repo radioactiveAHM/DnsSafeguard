@@ -45,10 +45,8 @@ pub async fn doh3(server_name: String, socket_addrs: &str, udp_socket_addrs: &st
     
         // UDP socket to listen for DNS query
         let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
-        let m_udp = Mutex::new(h3);
 
         // prepare for atomic
-        let am_h3 = Arc::new(m_udp);
         let am_udp = Arc::new(Mutex::new(udp));
         
         let dead_conn = Arc::new(Mutex::new(false));
@@ -85,7 +83,7 @@ pub async fn doh3(server_name: String, socket_addrs: &str, udp_socket_addrs: &st
 
             if let Ok((query_size, addr)) = udp_ok.unwrap(){
                 let dq = dns_query[..query_size].to_vec();
-                let h3 = am_h3.clone();
+                let h3 = h3.clone();
                 let sn = server_name.clone();
                 tokio::spawn(async move{
                     // TODO: Handle Errors. 1: Closed Connection
@@ -107,7 +105,7 @@ pub async fn doh3(server_name: String, socket_addrs: &str, udp_socket_addrs: &st
 
 async fn send_request(
     server_name: String,
-    h3: Arc<Mutex<SendRequest<h3_quinn::OpenStreams, bytes::Bytes>>>,
+    mut h3: SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
     dns_query: Vec<u8>,
     addr: SocketAddr,
     udp: Arc<Mutex<tokio::net::UdpSocket>>
@@ -122,8 +120,7 @@ async fn send_request(
     .body(()).unwrap();
 
     // Send HTTP request
-    let mut h3_locked = h3.lock().await;
-    let mut reqs = h3_locked.borrow_mut().send_request(req).await?;
+    let mut reqs = h3.borrow_mut().send_request(req).await?;
     reqs.finish().await?;
 
     // HTTP respones
@@ -135,7 +132,6 @@ async fn send_request(
             let mut buff = [0; 8196];
             let body_len = body.reader().read(&mut buff).unwrap_or(0);
             // early drop
-            drop(reqs); drop(h3_locked);
             if body_len==0{
                 return Ok(());
             }

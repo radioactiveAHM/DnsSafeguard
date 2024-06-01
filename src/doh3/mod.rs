@@ -50,13 +50,23 @@ pub async fn doh3(server_name: String, socket_addrs: &str, udp_socket_addrs: &st
         // prepare for atomic
         let am_h3 = Arc::new(m_udp);
         let am_udp = Arc::new(Mutex::new(udp));
-    
+        
+        let dead_conn = Arc::new(Mutex::new(false));
+
         loop {
-            // TODO: Handle quic closed connection
-            // TODO: Handle Errors
+            // Check if Connection is dead
+            // quic_conn_dead will be passed to task if connection alive
+            let quic_conn_dead = dead_conn.clone();
+            let quic_conn_dead_locked = quic_conn_dead.lock().await;
+            if *quic_conn_dead_locked{
+                break;
+            }
+            // Unlock
+            drop(quic_conn_dead_locked);
+
             let mut timeout = Duration::from_millis(30);
             // if only one udp bing used means no h3 task running so go for longer timeout
-            if dbg!(Arc::strong_count(&am_udp))==1{
+            if Arc::strong_count(&am_udp)==1{
                 timeout = Duration::from_secs(5);
             }
             // Recive dns query
@@ -69,16 +79,27 @@ pub async fn doh3(server_name: String, socket_addrs: &str, udp_socket_addrs: &st
             }).await;
             // Drop udp to unlock
             drop(locked_udp);
-            dbg!("incoming");
             if udp_ok.is_err() {
                 continue;
             }
 
             if let Ok((query_size, addr)) = udp_ok.unwrap(){
-                let dq = &dns_query[..query_size];
-                
+                let dq = dns_query[..query_size].to_vec();
                 let h3 = am_h3.clone();
-                tokio::spawn(send_request(server_name.clone(),h3, dq.to_owned(),addr,udp));
+                let sn = server_name.clone();
+                tokio::spawn(async move{
+                    // TODO: Handle Errors. 1: Closed Connection
+                    let h3_stat = send_request(sn,h3, dq,addr,udp).await;
+                    match h3_stat{
+                        Err(e)=>{
+                            // Handle what to do if diffrent errors
+                            if e.to_string()=="timeout"{
+                                *(quic_conn_dead.lock().await) = true;
+                            }
+                        }
+                        Ok(_)=>()
+                    }
+                });
             }
         }
     }
@@ -107,7 +128,6 @@ async fn send_request(
 
     // HTTP respones
     let resp = reqs.recv_response().await?;
-    dbg!(resp.status());
 
     if resp.status() == http::status::StatusCode::OK {
         // get body
@@ -119,12 +139,10 @@ async fn send_request(
             if body_len==0{
                 return Ok(());
             }
-            println!("waiting to lock udp");
             if udp.lock().await.send_to(&buff[..body_len], addr).await.is_err(){
                 return Ok(());
             };
         }
     }
-    println!("finished the job");
     Ok(())
 }

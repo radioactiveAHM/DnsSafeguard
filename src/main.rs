@@ -1,10 +1,7 @@
-// DEBUG
-#![allow(dead_code)]
-
 mod config;
+mod doh3;
 mod fragment;
 mod tls;
-mod doh3;
 
 use std::io::{ErrorKind, Read, Write};
 use std::net::UdpSocket;
@@ -13,37 +10,55 @@ use std::time::Duration;
 
 #[tokio::main]
 async fn main() {
-
     rustls::crypto::aws_lc_rs::default_provider()
-    .install_default()
-    .unwrap();
+        .install_default()
+        .unwrap();
     // Load config
     // If config file does not exist or malformed, panic occurs.
     let conf = config::load_config();
 
-    // if conf.ipv6.enable {
-    //     std::thread::spawn(move || {
-    //         dns(
-    //             conf.ipv6.server_name,
-    //             &conf.ipv6.socket_addrs,
-    //             &conf.ipv6.udp_socket_addrs,
-    //             &conf.ipv6.fragmenting,
-    //         )
-    //     });
-    // }
+    if conf.ipv6.enable {
+        match conf.ipv6.http_version {
+            1 => {
+                std::thread::spawn(move || {
+                    http1(
+                        conf.ipv6.server_name,
+                        &conf.ipv6.socket_addrs,
+                        &conf.ipv6.udp_socket_addrs,
+                        &conf.ipv6.fragmenting,
+                    )
+                });
+            }
+            2 => println!("Coming soon"),
+            3 => {
+                doh3::http3(
+                    conf.ipv6.server_name,
+                    &conf.ipv6.socket_addrs,
+                    &conf.ipv6.udp_socket_addrs,
+                )
+                .await
+            }
+            _ => {
+                println!("Invalid http version");
+                panic!();
+            },
+        }
+    }
 
-    // dns(
-    //     conf.server_name,
-    //     &conf.socket_addrs,
-    //     &conf.udp_socket_addrs,
-    //     &conf.fragmenting,
-    // );
-
-    doh3::doh3(
-        conf.server_name,
-        &conf.socket_addrs,
-        &conf.udp_socket_addrs,
-    ).await;
+    match conf.http_version {
+        1 => http1(
+            conf.server_name,
+            &conf.socket_addrs,
+            &conf.udp_socket_addrs,
+            &conf.fragmenting,
+        ),
+        2 => println!("Coming soon"),
+        3 => doh3::http3(conf.server_name, &conf.socket_addrs, &conf.udp_socket_addrs).await,
+        _ => {
+            println!("Invalid http version");
+            panic!();
+        },
+    }
 }
 
 fn catch_in_buff(find: &[u8], buff: &[u8]) -> (usize, usize) {
@@ -58,7 +73,7 @@ fn catch_in_buff(find: &[u8], buff: &[u8]) -> (usize, usize) {
     (0, 0)
 }
 
-fn dns(
+fn http1(
     server_name: String,
     socket_addrs: &str,
     udp_socket_addrs: &str,

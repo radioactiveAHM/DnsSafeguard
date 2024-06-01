@@ -1,4 +1,5 @@
 {
+	"http_version":1,
 	"server_name": "dns.nextdns.io",
 	"socket_addrs": "193.168.204.73:443",
 	"udp_socket_addrs": "127.0.0.1:53",
@@ -8,6 +9,7 @@
 	},
 	"ipv6": {
 		"enable": false,
+		"http_version":1,
 		"server_name": "cloudflare-dns.com",
 		"socket_addrs": "[2606:4700:4700::1111]:443",
 		"udp_socket_addrs": "[::1]:53",

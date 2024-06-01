@@ -1,9 +1,9 @@
 {
-	"server_name": "dns.google",
-	"socket_addrs": "8.8.8.8:443",
+	"server_name": "dns.nextdns.io",
+	"socket_addrs": "193.168.204.73:443",
 	"udp_socket_addrs": "127.0.0.1:53",
 	"fragmenting": {
-		"enable": false,
+		"enable": true,
 		"method": "single"
 	},
 	"ipv6": {

@@ -11,26 +11,31 @@
 
 ## Roadmap
 
-- [x] **IPv6 Support**: Current implementation.
+* [x] **IPv6 Support**
+* [x] **HTTP/3**
+* [ ] **HTTP/2**
 
 ## Building the Project
 
 To build the project, execute the following command in the project directory: `cargo build --release`
 
-## Config File
+## Configuration File - `config.json`
 
-* `server_name`: Specifies the server name for TLS configuration.
-* `socket_addrs`: Sets the DNS server IP and port.
-* `udp_socket_addrs`: Configures the IP and port for the UDP socket listening to DNS queries.
-* `fragment_method`: The fragmentation method to use during the TLS handshake has three valid values: `linear`, `random`, and `single`. Here’s what each method entails:
-    - Linear Method: This method sends three TLS client hello packets in three separate TCP segments.
-    - Random Method: In this approach, random TCP segments are used, each containing one TLS client hello packet.
-    - Single Method: With the single method, a single TCP segment carries two TLS client hello packets.
-* `ipv6`: Support for IPv6
+The `config.json` file is a crucial part of the DnsSafeguard application. It contains the necessary settings to control the behavior of the DNS client.
 
-## About
+### Structure
 
-DnsSafeguard is dedicated to providing a secure DNS client solution, ensuring your DNS queries remain private and uncensored.
+The configuration file is structured in JSON format and includes the following settings:
+
+* `HTTP Version`: Specifies the HTTP protocol version used for DNS queries (HTTP version 3 does not support Fragmenting).
+* `Server Name`: The domain name of the DNS server.
+* `Socket Addresses`: The IP address and port for the DNS server connection.
+* `UDP Socket Addresses`: Local UDP address and port for DNS queries.
+* `Fragmenting`: The fragmentation method to use during the TLS handshake has three valid values: `linear`, `random`, and `single`. Here’s what each method entails:
+  * Linear Method: This method sends three TLS client hello packets in three separate TCP segments.
+  * Random Method: In this approach, random TCP segments are used, each containing one TLS client hello packet.
+  * Single Method: With the single method, a single TCP segment carries two TLS client hello packets.
+* `IPv6`: Contains IPv6 specific settings, similar to the IPv4 configuration.
 
 ## License
 

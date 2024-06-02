@@ -1,5 +1,5 @@
 {
-	"http_version":1,
+	"http_version":2,
 	"server_name": "dns.403.online",
 	"socket_addrs": "10.202.10.202:443",
 	"udp_socket_addrs": "127.0.0.1:53",

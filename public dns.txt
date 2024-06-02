@@ -7,3 +7,6 @@ cloudflare-dns.com
 
 dns.google
 8.8.8.8
+
+dns.403.online
+10.202.10.202

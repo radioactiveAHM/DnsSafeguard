@@ -16,6 +16,8 @@ h3 = "0.0.5"
 http = "1.1"
 bytes = "1.6.0"
 base64-url = "3.0.0"
+h2 = "0.4.5"
+tokio-rustls = "0.26.0"
 
 [profile.release]
 panic = "abort"

@@ -1,5 +1,8 @@
+#![allow(dead_code)]
+
 mod config;
 mod doh3;
+mod doh2;
 mod fragment;
 mod tls;
 
@@ -29,7 +32,7 @@ async fn main() {
                     )
                 });
             }
-            2 => println!("HTTP/2 coming soon"),
+            2 => doh2::http2(conf.ipv6.server_name, &conf.ipv6.socket_addrs, &conf.ipv6.udp_socket_addrs).await,
             3 => {
                 doh3::http3(
                     conf.ipv6.server_name,
@@ -52,7 +55,7 @@ async fn main() {
             &conf.udp_socket_addrs,
             &conf.fragmenting,
         ),
-        2 => println!("HTTP/2 coming soon"),
+        2 => doh2::http2(conf.server_name, &conf.socket_addrs, &conf.udp_socket_addrs).await,
         3 => doh3::http3(conf.server_name, &conf.socket_addrs, &conf.udp_socket_addrs).await,
         _ => {
             println!("Invalid http version");
@@ -89,7 +92,7 @@ fn http1(
         println!("New TLS connection");
 
         // TLS Client
-        let mut c = tls::client(server_name.clone()).unwrap();
+        let mut c = tls::client(server_name.clone(), vec![b"http/1.1".to_vec()]).unwrap();
 
         // TCP socket for TLS
         let mut tcp = std::net::TcpStream::connect(socket_addrs).unwrap();

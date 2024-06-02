@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-pub fn client(server_name: String) -> Result<rustls::ClientConnection, rustls::Error> {
+pub fn client(server_name: String, alpn: Vec<Vec<u8>>) -> Result<rustls::ClientConnection, rustls::Error> {
     // Generate Certificate Store for TLS
     let root_store =
         rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
@@ -11,7 +11,7 @@ pub fn client(server_name: String) -> Result<rustls::ClientConnection, rustls::E
         .with_no_client_auth();
 
     // Add ALPN to TLS Config
-    config.alpn_protocols = vec![b"http/1.1".to_vec()];
+    config.alpn_protocols = alpn;
 
     // Add Server Name
     let example_com = (server_name).try_into().expect("Invalid server name");

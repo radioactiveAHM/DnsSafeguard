@@ -38,6 +38,11 @@ The configuration file is structured in JSON format and includes the following s
   * Single Method: With the single method, a single TCP segment carries two TLS client hello packets.
 * `IPv6`: Contains IPv6 specific settings, similar to the IPv4 configuration.
 
+## Notes
+
+> [!WARNING]
+> Using modified verion of tokio-rustls
+
 ## License
 
 This project is licensed under the Apache-2.0 License - see the LICENSE file for details.

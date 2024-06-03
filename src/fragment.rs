@@ -1,16 +1,13 @@
-use std::error::Error;
-use std::{io::Write, net::TcpStream};
-
 use rand::Rng;
-use rustls::ClientConnection;
-use std::thread::sleep;
 use std::time::Duration;
+use tokio::{io::AsyncWriteExt, time::sleep};
+use tokio_rustls::rustls::ClientConnection;
 
 /// 3 TCP segments with TLS client hello pack
-pub fn fragment_client_hello(
+pub async fn fragment_client_hello<IO: AsyncWriteExt + std::marker::Unpin>(
     c: &mut ClientConnection,
-    tcp: &mut TcpStream,
-) -> Result<(), Box<dyn Error>> {
+    tcp: &mut IO,
+) {
     // Buffer to store TLS Client Hello
     let mut buff = Vec::with_capacity(1024 * 4);
     let mut cur = std::io::Cursor::new(&mut buff);
@@ -24,35 +21,33 @@ pub fn fragment_client_hello(
     // #1
     let xbuf = [&[22, 3, 1, 0, buff[5..packs].len() as u8], &buff[5..packs]];
     let xtls = xbuf.concat();
-    tcp.write(&xtls)?;
-    tcp.flush()?;
-    sleep(Duration::from_millis(50));
+    tcp.write(&xtls).await.unwrap_or_default();
+    tcp.flush().await.unwrap_or_default();
+    sleep(Duration::from_millis(50)).await;
     // #2
     let xbuf = [
         &[22, 3, 1, 0, buff[packs..packs * 2].len() as u8],
         &buff[packs..packs * 2],
     ];
     let xtls = xbuf.concat();
-    tcp.write(&xtls)?;
-    tcp.flush()?;
-    sleep(Duration::from_millis(50));
+    tcp.write(&xtls).await.unwrap_or_default();
+    tcp.flush().await.unwrap_or_default();
+    sleep(Duration::from_millis(50)).await;
     // #3
     let xbuf = [
         &[22, 3, 1, 0, buff[packs * 2..].len() as u8],
         &buff[packs * 2..],
     ];
     let xtls = xbuf.concat();
-    tcp.write(&xtls)?;
-    tcp.flush()?;
-
-    Ok(())
+    tcp.write(&xtls).await.unwrap_or_default();
+    tcp.flush().await.unwrap_or_default();
 }
 
 /// random TCP segments with TLS client hello pack
-pub fn fragment_client_hello_rand(
+pub async fn fragment_client_hello_rand<IO: AsyncWriteExt + std::marker::Unpin>(
     c: &mut ClientConnection,
-    tcp: &mut TcpStream,
-) -> Result<(), Box<dyn Error>> {
+    tcp: &mut IO,
+) {
     // Buffer to store TLS Client Hello
     let mut buff = Vec::with_capacity(1024 * 4);
     let mut cur = std::io::Cursor::new(&mut buff);
@@ -72,8 +67,8 @@ pub fn fragment_client_hello_rand(
                 &buff[written..],
             ];
             let xtls = xbuf.concat();
-            tcp.write(&xtls)?;
-            tcp.flush()?;
+            tcp.write(&xtls).await.unwrap_or_default();
+            tcp.flush().await.unwrap_or_default();
             break;
         } else {
             let xbuf = [
@@ -87,21 +82,19 @@ pub fn fragment_client_hello_rand(
                 &buff[written..(chunck_size + written)],
             ];
             let xtls = xbuf.concat();
-            tcp.write(&xtls)?;
-            tcp.flush()?;
+            tcp.write(&xtls).await.unwrap_or_default();
+            tcp.flush().await.unwrap_or_default();
             written = written + chunck_size;
-            sleep(Duration::from_millis(mr_randy.gen_range(10..21)));
+            sleep(Duration::from_millis(mr_randy.gen_range(10..21))).await;
         }
     }
-
-    Ok(())
 }
 
 /// 2 packs of TLS client hello in one tcp segment
-pub fn fragment_client_hello_pack(
+pub async fn fragment_client_hello_pack<IO: AsyncWriteExt + std::marker::Unpin>(
     c: &mut ClientConnection,
-    tcp: &mut TcpStream,
-) -> Result<(), Box<dyn Error>> {
+    tcp: &mut IO,
+) {
     // Buffer to store TLS Client Hello
     let mut buff = Vec::with_capacity(1024 * 4);
     let mut cur = std::io::Cursor::new(&mut buff);
@@ -113,8 +106,6 @@ pub fn fragment_client_hello_pack(
         [&[22, 3, 1, 0, buff[psize..].len() as u8], &buff[psize..]].concat(),
     ]
     .concat();
-    tcp.write(&xtls)?;
-    tcp.flush()?;
-
-    Ok(())
+    tcp.write(&xtls).await.unwrap_or_default();
+    tcp.flush().await.unwrap_or_default();
 }

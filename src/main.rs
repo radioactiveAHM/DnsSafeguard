@@ -6,10 +6,7 @@ mod doh3;
 mod fragment;
 mod tls;
 
-use std::io::{ErrorKind, Read, Write};
-use std::net::UdpSocket;
-use std::thread::sleep;
-use std::time::Duration;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[tokio::main]
 async fn main() {
@@ -31,6 +28,7 @@ async fn main() {
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
                     )
+                    .await
                 }
                 2 => {
                     doh2::http2(
@@ -51,12 +49,15 @@ async fn main() {
     });
 
     match conf.http_version {
-        1 => http1(
-            conf.server_name,
-            &conf.socket_addrs,
-            &conf.udp_socket_addrs,
-            &conf.fragmenting,
-        ),
+        1 => {
+            http1(
+                conf.server_name,
+                &conf.socket_addrs,
+                &conf.udp_socket_addrs,
+                &conf.fragmenting,
+            )
+            .await
+        }
         2 => {
             doh2::http2(
                 conf.server_name,
@@ -86,7 +87,7 @@ fn catch_in_buff(find: &[u8], buff: &[u8]) -> (usize, usize) {
     (0, 0)
 }
 
-fn http1(
+async fn http1(
     server_name: String,
     socket_addrs: &str,
     udp_socket_addrs: &str,
@@ -94,7 +95,7 @@ fn http1(
 ) {
     // Main loop
     let mut tls_handshake_retry = 0u8;
-    'main: loop {
+    loop {
         if tls_handshake_retry == 5 {
             println!("Cannot perform TLS handshake");
             panic!();
@@ -102,45 +103,43 @@ fn http1(
         println!("New HTTP/1.1 connection");
 
         // TLS Client
-        let mut c = tls::client(server_name.clone(), vec![b"http/1.1".to_vec()]).unwrap();
+        let ctls = tls::tls();
 
         // TCP socket for TLS
-        let mut tcp = std::net::TcpStream::connect(socket_addrs).unwrap();
-        // Set writing timeout to tcp connection
-        tcp.set_write_timeout(Some(std::time::Duration::from_secs(5)))
-            .unwrap();
-        tcp.set_read_timeout(Some(std::time::Duration::from_secs(5)))
-            .unwrap();
+        let tcp = tokio::net::TcpStream::connect(socket_addrs).await.unwrap();
 
+        let example_com = (server_name.clone())
+            .try_into()
+            .expect("Invalid server name");
         // Perform TLS Client Hello fragmenting
-        if fragmenting.enable {
-            let fraged = match fragmenting.method.as_str() {
-                "linear" => fragment::fragment_client_hello(&mut c, &mut tcp),
-                "random" => fragment::fragment_client_hello_rand(&mut c, &mut tcp),
-                "single" => fragment::fragment_client_hello_pack(&mut c, &mut tcp),
-                _ => panic!("Invalid fragment method"),
-            };
-            if fraged.is_err() {
-                tls_handshake_retry = tls_handshake_retry + 1;
-                continue 'main;
-            }
+        let tls_conn = ctls
+            .connect_with_stream(example_com, tcp, |tls, tcp| {
+                // Do fragmenting
+                if fragmenting.enable {
+                    tokio::task::block_in_place(|| {
+                        tokio::runtime::Handle::current().block_on(async {
+                            match fragmenting.method.as_str() {
+                                "linear" => fragment::fragment_client_hello(tls, tcp).await,
+                                "random" => fragment::fragment_client_hello_rand(tls, tcp).await,
+                                "single" => fragment::fragment_client_hello_pack(tls, tcp).await,
+                                _ => panic!("Invalid fragment method"),
+                            }
+                        });
+                    });
+                }
+            })
+            .await;
+        if tls_conn.is_err() {
+            println!("TLS handshake failed. Retry {}", tls_handshake_retry);
+            tls_handshake_retry = tls_handshake_retry + 1;
+            continue;
         }
 
-        // Complete TLS handshake
-        match c.complete_io(&mut tcp) {
-            Err(e) => {
-                // If TLS handshake failed
-                println!("{}", e);
-                tls_handshake_retry = tls_handshake_retry + 1;
-                continue 'main;
-            }
-            Ok(_) => {
-                println!("HTTP/1.1 Connection Established");
-            }
-        }
+        println!("HTTP/1.1 Connection Established");
 
+        let mut c = tls_conn.unwrap();
         // UDP socket to listen for DNS query
-        let udp = UdpSocket::bind(udp_socket_addrs).unwrap();
+        let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
 
         let mut dead_conn = false;
         loop {
@@ -149,81 +148,31 @@ fn http1(
                 break;
             }
             let mut dns_query: [u8; 8196] = [0u8; 8196];
-            let udp_ok = udp.recv_from(&mut dns_query);
+            let udp_ok = udp.recv_from(&mut dns_query).await;
             if udp_ok.is_err() {
                 continue;
             }
             let (query_size, addr) = udp_ok.unwrap();
+            let query_base64url = base64_url::encode(&dns_query[..query_size]);
 
             let http_req = [
-                b"POST /dns-query HTTP/1.1\r\nHost: ",
+                b"GET /dns-query?dns=",
+                query_base64url.as_bytes(),
+                b" HTTP/1.1\r\nHost: ",
                 server_name.as_bytes(),
-                b"\r\nAccept: application/dns-message\r\nContent-type: application/dns-message\r\nContent-length: ",
-                dns_query[..query_size].len().to_string().as_bytes(),
-                b"\r\n\r\n",
-                &dns_query[..query_size]
-            ].concat();
+                b"\r\nAccept: application/dns-message\r\n\r\n"
+            ]
+            .concat();
 
-            // Write http request as plaintext to tls container
-            c.writer().write(&http_req).unwrap();
-
-            // Handle sending request
-            loop {
-                if c.wants_write() {
-                    match c.write_tls(&mut tcp) {
-                        Ok(_) => break,
-                        Err(e) => {
-                            if e.kind() == ErrorKind::TimedOut
-                                || e.kind() == ErrorKind::ConnectionAborted
-                                || e.kind() == ErrorKind::ConnectionRefused
-                                || e.kind() == ErrorKind::ConnectionReset
-                            {
-                                // Connection is dead
-                                // dbg!("Connection dead while write tls");
-                                c.send_close_notify();
-                                continue 'main;
-                            }
-                        }
-                    }
-                }
-                sleep(Duration::from_millis(50));
+            // Write http request
+            if c.write(&http_req).await.is_err() {
+                dead_conn = true;
+                continue;
             }
+
             // Handle Reciving Data
             let mut http_resp = [0u8; 8196];
-            let http_resp_size;
-            'rt: loop {
-                if c.wants_read() {
-                    let rtls_e = c.read_tls(&mut tcp);
-                    if rtls_e.is_err() {
-                        let e = rtls_e.unwrap_err();
-                        if e.kind() == ErrorKind::TimedOut
-                            || e.kind() == ErrorKind::ConnectionAborted
-                            || e.kind() == ErrorKind::ConnectionRefused
-                            || e.kind() == ErrorKind::ConnectionReset
-                        {
-                            // Connection is dead
-                            // dbg!("Connection dead while read_tls");
-                            c.send_close_notify();
-                            continue 'main;
-                        }
-                    }
-                    let stat = c.process_new_packets();
-                    if stat.is_err() {
-                        c.send_close_notify();
-                        continue 'main;
-                    }
-                    if stat.unwrap().peer_has_closed() {
-                        dead_conn = true;
-                    }
-
-                    let wp = c.reader().read(&mut http_resp);
-                    if wp.is_ok() {
-                        http_resp_size = wp.unwrap();
-                        break 'rt;
-                    }
-                }
-                sleep(Duration::from_millis(50));
-            }
+            let http_resp_size = c.read(&mut http_resp).await.unwrap_or(0);
 
             let body =
                 &http_resp[catch_in_buff("\r\n\r\n".as_bytes(), &http_resp).1..http_resp_size];
@@ -231,7 +180,7 @@ fn http1(
             if body.is_empty() {
                 continue;
             }
-            udp.send_to(body, addr).unwrap_or(0);
+            udp.send_to(body, addr).await.unwrap_or(0);
         }
     }
 }

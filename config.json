@@ -1,14 +1,14 @@
 {
-	"http_version":2,
-	"server_name": "cloudflare-dns.com",
-	"socket_addrs": "1.1.1.1:443",
+	"http_version":1,
+	"server_name": "dns.403.online",
+	"socket_addrs": "10.202.10.202:443",
 	"udp_socket_addrs": "127.0.0.1:53",
 	"fragmenting": {
-		"enable": true,
+		"enable": false,
 		"method": "single"
 	},
 	"ipv6": {
-		"enable": true,
+		"enable": false,
 		"http_version":2,
 		"server_name": "cloudflare-dns.com",
 		"socket_addrs": "[2606:4700:4700::1111]:443",

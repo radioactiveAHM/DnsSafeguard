@@ -1,6 +1,6 @@
 [package]
 name = "DnsSafeguard"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 
 [dependencies]
@@ -16,7 +16,7 @@ http = "1.1"
 bytes = "1.6.0"
 base64-url = "3.0.0"
 h2 = "0.4.5"
-tokio-rustls = "0.26.0"
+tokio-rustls = { git = "https://github.com/radioactiveAHM/tokio-rustls-self.git" }
 
 [profile.release]
 panic = "abort"

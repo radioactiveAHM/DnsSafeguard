@@ -8,8 +8,8 @@
 		"method": "single"
 	},
 	"ipv6": {
-		"enable": false,
-		"http_version":2,
+		"enable": true,
+		"http_version":3,
 		"server_name": "cloudflare-dns.com",
 		"socket_addrs": "[2606:4700:4700::1111]:443",
 		"udp_socket_addrs": "[::1]:53",

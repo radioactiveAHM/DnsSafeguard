@@ -10,6 +10,7 @@ use std::{
     time::Duration,
 };
 
+use rand::Rng;
 use tokio::sync::Mutex;
 
 use bytes::Buf;
@@ -17,10 +18,12 @@ use h3::client::SendRequest;
 
 pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &str) {
     let qaddress = {
+        let mut mr_randy = rand::rngs::OsRng::default();
+        let port = mr_randy.gen_range(4000..5000);
         if SocketAddr::from_str(socket_addrs).unwrap().is_ipv4() {
-            SocketAddr::from_str("0.0.0.0:5432").unwrap()
+            SocketAddr::from_str(format!("0.0.0.0:{port}").as_str()).unwrap()
         }else if SocketAddr::from_str(socket_addrs).unwrap().is_ipv6() {
-            SocketAddr::from_str("[::]:5432").unwrap()
+            SocketAddr::from_str(format!("[::]:{port}").as_str()).unwrap()
         } else {
             panic!()
         }

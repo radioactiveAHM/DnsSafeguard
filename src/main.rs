@@ -6,6 +6,8 @@ mod doh3;
 mod fragment;
 mod tls;
 
+use std::sync::Arc;
+
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[tokio::main]
@@ -93,7 +95,9 @@ async fn http1(
     udp_socket_addrs: &str,
     fragmenting: &config::Fragmenting,
 ) {
-    // Main loop
+    // TLS Client
+    let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()]);
+
     let mut tls_handshake_retry = 0u8;
     loop {
         if tls_handshake_retry == 5 {
@@ -102,8 +106,6 @@ async fn http1(
         }
         println!("New HTTP/1.1 connection");
 
-        // TLS Client
-        let ctls = tls::tls();
 
         // TCP socket for TLS
         let tcp = tokio::net::TcpStream::connect(socket_addrs).await.unwrap();
@@ -112,7 +114,7 @@ async fn http1(
             .try_into()
             .expect("Invalid server name");
         // Perform TLS Client Hello fragmenting
-        let tls_conn = ctls
+        let tls_conn = tokio_rustls::TlsConnector::from(Arc::clone(&ctls))
             .connect_with_stream(example_com, tcp, |tls, tcp| {
                 // Do fragmenting
                 if fragmenting.enable {

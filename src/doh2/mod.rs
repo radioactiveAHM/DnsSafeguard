@@ -1,13 +1,14 @@
-mod h2tls;
-mod fragment;
-
 use h2::client::SendRequest;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio:: sync::Mutex;
+use crate::fragment;
 
 use crate::config;
+use crate::tls;
 
 pub async fn http2(server_name: String, socket_addrs: &str, udp_socket_addrs: &str, fragmenting: &config::Fragmenting) {
+    // TLS Conf
+    let h2tls = tls::tlsconf(vec![b"h2".to_vec()]);
     let mut tls_retry = 0u8;
     loop {
         if tls_retry == 5 {
@@ -18,13 +19,12 @@ pub async fn http2(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
         // Panic if socket_addrs invalid
         let tcp = tokio::net::TcpStream::connect(socket_addrs).await.unwrap();
         println!("New H2 connection");
-        // TLS Client
-        let h2tls_connector = h2tls::h2tls();
-        // TODO: Set fragmenting if possible
+        
         let example_com = (server_name.clone())
-            .try_into()
-            .expect("Invalid server name");
-        let tls_conn = h2tls_connector.connect_with_stream(example_com, tcp, |tls, tcp| {
+        .try_into()
+        .expect("Invalid server name");
+        // TLS Client
+        let tls_conn = tokio_rustls::TlsConnector::from(Arc::clone(&h2tls)).connect_with_stream(example_com, tcp, |tls, tcp| {
             // Do fragmenting
             if fragmenting.enable{
                 tokio::task::block_in_place(|| {

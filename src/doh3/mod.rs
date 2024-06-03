@@ -28,12 +28,13 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
             panic!()
         }
     };
+    let qtls_conf = qtls::qtls();
     // UDP socket as endpoint for quic
     let mut endpoint = quinn::Endpoint::client(qaddress).unwrap();
     loop {
         println!("New QUIC connection");
-
-        endpoint.set_default_client_config(qtls::qtls());
+        let conf = qtls_conf.clone();
+        endpoint.set_default_client_config(quinn::ClientConfig::new(conf));
         // Connect to dns server
         let conn = endpoint
             .connect(

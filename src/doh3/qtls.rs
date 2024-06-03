@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use quinn::crypto::rustls::QuicClientConfig;
 
-pub fn qtls() -> quinn::ClientConfig {
+pub fn qtls() -> Arc<QuicClientConfig> {
     const ALPN_H3: &[&[u8]] = &[b"h3"];
 
     let root_store = tokio_rustls::rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
@@ -13,5 +13,6 @@ pub fn qtls() -> quinn::ClientConfig {
 
     client_crypto.alpn_protocols = ALPN_H3.iter().map(|&x| x.into()).collect();
 
-    quinn::ClientConfig::new(Arc::new(QuicClientConfig::try_from(client_crypto).unwrap()))
+    // quinn::ClientConfig::new(Arc::new(QuicClientConfig::try_from(client_crypto).unwrap()))
+    Arc::new(QuicClientConfig::try_from(client_crypto).unwrap())
 }

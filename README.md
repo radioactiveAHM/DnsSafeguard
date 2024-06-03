@@ -14,6 +14,7 @@
 * [x] **IPv6 Support**
 * [x] **HTTP/3**
 * [x] **HTTP/2**
+* [x] **HTTP/2 TLS Fragmenting**
 
 ## Building the Project
 
@@ -27,7 +28,7 @@ The `config.json` file is a crucial part of the DnsSafeguard application. It con
 
 The configuration file is structured in JSON format and includes the following settings:
 
-* `HTTP Version`: Specifies the HTTP protocol version used for DNS queries (HTTP version 2 and 3 does not support Fragmenting).
+* `HTTP Version`: Specifies the HTTP protocol version used for DNS queries (HTTP version 3 does not support Fragmenting).
 * `Server Name`: The domain name of the DNS server.
 * `Socket Addresses`: The IP address and port for the DNS server connection.
 * `UDP Socket Addresses`: Local UDP address and port for DNS queries.

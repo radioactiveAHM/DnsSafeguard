@@ -1,10 +1,13 @@
 mod h2tls;
+mod fragment;
 
 use h2::client::SendRequest;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
-use tokio::sync::Mutex;
+use tokio:: sync::Mutex;
 
-pub async fn http2(server_name: String, socket_addrs: &str, udp_socket_addrs: &str) {
+use crate::config;
+
+pub async fn http2(server_name: String, socket_addrs: &str, udp_socket_addrs: &str, fragmenting: &config::Fragmenting) {
     let mut tls_retry = 0u8;
     loop {
         if tls_retry == 5 {
@@ -21,7 +24,21 @@ pub async fn http2(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
         let example_com = (server_name.clone())
             .try_into()
             .expect("Invalid server name");
-        let tls_conn = h2tls_connector.connect(example_com, tcp).await;
+        let tls_conn = h2tls_connector.connect_with_stream(example_com, tcp, |tls, tcp| {
+            // Do fragmenting
+            if fragmenting.enable{
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(async {
+                        match fragmenting.method.as_str(){
+                            "linear" => fragment::fragment_client_hello(tls, tcp).await,
+                            "random" => fragment::fragment_client_hello_rand(tls, tcp).await,
+                            "single" => fragment::fragment_client_hello_pack(tls, tcp).await,
+                            _ => panic!("Invalid fragment method"),
+                        }
+                    });
+                });
+            }
+        }).await;
         if tls_conn.is_err() {
             println!("TLS handshake failed. Retry {}", tls_retry);
             tls_retry = tls_retry + 1;

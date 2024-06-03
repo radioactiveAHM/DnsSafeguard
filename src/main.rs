@@ -32,7 +32,7 @@ async fn main() {
                     )
                 });
             }
-            2 => doh2::http2(conf.ipv6.server_name, &conf.ipv6.socket_addrs, &conf.ipv6.udp_socket_addrs).await,
+            2 => doh2::http2(conf.ipv6.server_name, &conf.ipv6.socket_addrs, &conf.ipv6.udp_socket_addrs, &conf.ipv6.fragmenting).await,
             3 => {
                 doh3::http3(
                     conf.ipv6.server_name,
@@ -55,7 +55,7 @@ async fn main() {
             &conf.udp_socket_addrs,
             &conf.fragmenting,
         ),
-        2 => doh2::http2(conf.server_name, &conf.socket_addrs, &conf.udp_socket_addrs).await,
+        2 => doh2::http2(conf.server_name, &conf.socket_addrs, &conf.udp_socket_addrs, &conf.fragmenting).await,
         3 => doh3::http3(conf.server_name, &conf.socket_addrs, &conf.udp_socket_addrs).await,
         _ => {
             println!("Invalid http version");

@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
 mod config;
-mod doh3;
 mod doh2;
+mod doh3;
 mod fragment;
 mod tls;
 
@@ -20,33 +20,37 @@ async fn main() {
     // If config file does not exist or malformed, panic occurs.
     let conf = config::load_config();
 
-    if conf.ipv6.enable {
-        match conf.ipv6.http_version {
-            1 => {
-                std::thread::spawn(move || {
-                    http1(
-                        conf.ipv6.server_name,
-                        &conf.ipv6.socket_addrs,
-                        &conf.ipv6.udp_socket_addrs,
-                        &conf.ipv6.fragmenting,
+    let v6 = conf.ipv6;
+    tokio::spawn(async move {
+        if v6.enable {
+            match v6.http_version {
+                1 => {
+                    std::thread::spawn(move || {
+                        http1(
+                            v6.server_name,
+                            &v6.socket_addrs,
+                            &v6.udp_socket_addrs,
+                            &v6.fragmenting,
+                        )
+                    });
+                }
+                2 => {
+                    doh2::http2(
+                        v6.server_name,
+                        &v6.socket_addrs,
+                        &v6.udp_socket_addrs,
+                        &v6.fragmenting,
                     )
-                });
+                    .await
+                }
+                3 => doh3::http3(v6.server_name, &v6.socket_addrs, &v6.udp_socket_addrs).await,
+                _ => {
+                    println!("Invalid http version");
+                    panic!();
+                }
             }
-            2 => doh2::http2(conf.ipv6.server_name, &conf.ipv6.socket_addrs, &conf.ipv6.udp_socket_addrs, &conf.ipv6.fragmenting).await,
-            3 => {
-                doh3::http3(
-                    conf.ipv6.server_name,
-                    &conf.ipv6.socket_addrs,
-                    &conf.ipv6.udp_socket_addrs,
-                )
-                .await
-            }
-            _ => {
-                println!("Invalid http version");
-                panic!();
-            },
         }
-    }
+    });
 
     match conf.http_version {
         1 => http1(
@@ -55,12 +59,20 @@ async fn main() {
             &conf.udp_socket_addrs,
             &conf.fragmenting,
         ),
-        2 => doh2::http2(conf.server_name, &conf.socket_addrs, &conf.udp_socket_addrs, &conf.fragmenting).await,
+        2 => {
+            doh2::http2(
+                conf.server_name,
+                &conf.socket_addrs,
+                &conf.udp_socket_addrs,
+                &conf.fragmenting,
+            )
+            .await
+        }
         3 => doh3::http3(conf.server_name, &conf.socket_addrs, &conf.udp_socket_addrs).await,
         _ => {
             println!("Invalid http version");
             panic!();
-        },
+        }
     }
 }
 
@@ -89,7 +101,7 @@ fn http1(
             println!("Cannot perform TLS handshake");
             panic!();
         }
-        println!("New TLS connection");
+        println!("New HTTP/1.1 connection");
 
         // TLS Client
         let mut c = tls::client(server_name.clone(), vec![b"http/1.1".to_vec()]).unwrap();
@@ -125,7 +137,7 @@ fn http1(
                 continue 'main;
             }
             Ok(_) => {
-                println!("Connection Established");
+                println!("HTTP/1.1 Connection Established");
             }
         }
 

@@ -4,7 +4,7 @@ use std::{
     borrow::BorrowMut,
     future,
     io::Read,
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+    net::SocketAddr,
     str::FromStr,
     sync::Arc,
     time::Duration,
@@ -16,12 +16,17 @@ use bytes::Buf;
 use h3::client::SendRequest;
 
 pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &str) {
+    let qaddress = {
+        if SocketAddr::from_str(socket_addrs).unwrap().is_ipv4() {
+            SocketAddr::from_str("0.0.0.0:5432").unwrap()
+        }else if SocketAddr::from_str(socket_addrs).unwrap().is_ipv6() {
+            SocketAddr::from_str("[::]:5432").unwrap()
+        } else {
+            panic!()
+        }
+    };
     // UDP socket as endpoint for quic
-    let mut endpoint = quinn::Endpoint::client(std::net::SocketAddr::V4(SocketAddrV4::new(
-        Ipv4Addr::from_str("0.0.0.0").unwrap(),
-        5432,
-    )))
-    .unwrap();
+    let mut endpoint = quinn::Endpoint::client(qaddress).unwrap();
     loop {
         println!("New QUIC connection");
 
@@ -29,7 +34,7 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
         // Connect to dns server
         let conn = endpoint
             .connect(
-                std::net::SocketAddr::V4(SocketAddrV4::from_str(socket_addrs).unwrap()),
+                std::net::SocketAddr::from_str(socket_addrs).unwrap(),
                 server_name.as_str(),
             )
             .unwrap()

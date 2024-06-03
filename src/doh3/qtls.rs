@@ -5,9 +5,9 @@ use quinn::crypto::rustls::QuicClientConfig;
 pub fn qtls() -> quinn::ClientConfig {
     const ALPN_H3: &[&[u8]] = &[b"h3"];
 
-    let root_store = rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let root_store = tokio_rustls::rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     
-    let mut client_crypto = rustls::ClientConfig::builder()
+    let mut client_crypto = tokio_rustls::rustls::ClientConfig::builder()
         .with_root_certificates(root_store)
         .with_no_client_auth();
 

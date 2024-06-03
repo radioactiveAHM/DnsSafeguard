@@ -10,7 +10,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[tokio::main]
 async fn main() {
-    rustls::crypto::aws_lc_rs::default_provider()
+    tokio_rustls::rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
         .unwrap();
     // Load config

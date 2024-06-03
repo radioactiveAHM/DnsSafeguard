@@ -1,7 +1,7 @@
 {
 	"http_version":2,
-	"server_name": "dns.google",
-	"socket_addrs": "8.8.8.8:443",
+	"server_name": "cloudflare-dns.com",
+	"socket_addrs": "1.1.1.1:443",
 	"udp_socket_addrs": "127.0.0.1:53",
 	"fragmenting": {
 		"enable": true,

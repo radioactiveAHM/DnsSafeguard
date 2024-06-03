@@ -25,14 +25,12 @@ async fn main() {
         if v6.enable {
             match v6.http_version {
                 1 => {
-                    std::thread::spawn(move || {
-                        http1(
-                            v6.server_name,
-                            &v6.socket_addrs,
-                            &v6.udp_socket_addrs,
-                            &v6.fragmenting,
-                        )
-                    });
+                    http1(
+                        v6.server_name,
+                        &v6.socket_addrs,
+                        &v6.udp_socket_addrs,
+                        &v6.fragmenting,
+                    )
                 }
                 2 => {
                     doh2::http2(

@@ -19,7 +19,7 @@
 		}
 	},
 	"quic":{
-		"congestion_controller": "meow",
+		"congestion_controller": "bbr",
 		"keep_alive_interval": 5,
 		"datagram_receive_buffer_size": 16777216,
 		"datagram_send_buffer_size": 8388608

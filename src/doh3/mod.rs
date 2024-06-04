@@ -28,29 +28,33 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
             panic!()
         }
     };
-    let qtls_conf = qtls::qtls();
     // UDP socket as endpoint for quic
     let mut endpoint = quinn::Endpoint::client(qaddress).unwrap();
+    // Setup QUIC connection
+    endpoint.set_default_client_config(quinn::ClientConfig::new(qtls::qtls()));
     loop {
         println!("New QUIC connection");
-        let conf = qtls_conf.clone();
-        endpoint.set_default_client_config(quinn::ClientConfig::new(conf));
         // Connect to dns server
-        let conn = endpoint
-            .connect(
-                std::net::SocketAddr::from_str(socket_addrs).unwrap(),
-                server_name.as_str(),
-            )
-            .unwrap()
-            .await
-            .expect("Failed to connect to server");
+        let connecting = endpoint.connect(SocketAddr::from_str(socket_addrs).unwrap(), server_name.as_str()).unwrap();
 
-        println!("Connection Established");
+        let conn = {
+            let connecting = connecting.into_0rtt();
+            if let Ok((conn, rtt)) = connecting {
+                rtt.await;
+                println!("QUIC 0RTT Connection Established");
+                Ok(conn)
+            }else {
+                println!("QUIC Connection Established");
+                endpoint.connect(SocketAddr::from_str(socket_addrs).unwrap(), server_name.as_str()).unwrap().await
+            }
+        };
 
-        let quic = h3_quinn::Connection::new(conn);
+        if conn.is_err(){
+            continue;
+        }
 
         // HTTP/3 Client
-        let (mut driver, h3) = h3::client::new(quic).await.unwrap();
+        let (mut driver, h3) = h3::client::new(h3_quinn::Connection::new(conn.unwrap())).await.unwrap();
         let drive = async move {
             future::poll_fn(|cx| driver.poll_close(cx)).await?;
             Ok::<(), Box<dyn std::error::Error + Send>>(())

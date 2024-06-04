@@ -15,6 +15,15 @@ pub struct Ipv6 {
 }
 
 #[derive(serde::Deserialize)]
+#[derive(Clone)]
+pub struct Quic {
+    pub congestion_controller: String,
+    pub keep_alive_interval: u64,
+    pub datagram_receive_buffer_size: usize,
+    pub datagram_send_buffer_size: usize
+}
+
+#[derive(serde::Deserialize)]
 pub struct Config {
     pub http_version: u8,
     pub server_name: String,
@@ -22,6 +31,7 @@ pub struct Config {
     pub udp_socket_addrs: String,
     pub fragmenting: Fragmenting,
     pub ipv6: Ipv6,
+    pub quic: Quic
 }
 
 pub fn load_config() -> Config {

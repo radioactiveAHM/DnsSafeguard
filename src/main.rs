@@ -20,6 +20,7 @@ async fn main() {
     let conf = config::load_config();
 
     let v6 = conf.ipv6;
+    let quic_conf_file_v6 = conf.quic.clone();
     tokio::spawn(async move {
         if v6.enable {
             match v6.http_version {
@@ -41,7 +42,7 @@ async fn main() {
                     )
                     .await
                 }
-                3 => doh3::http3(v6.server_name, &v6.socket_addrs, &v6.udp_socket_addrs).await,
+                3 => doh3::http3(v6.server_name, &v6.socket_addrs, &v6.udp_socket_addrs, quic_conf_file_v6).await,
                 _ => {
                     println!("Invalid http version");
                     panic!();
@@ -69,7 +70,7 @@ async fn main() {
             )
             .await
         }
-        3 => doh3::http3(conf.server_name, &conf.socket_addrs, &conf.udp_socket_addrs).await,
+        3 => doh3::http3(conf.server_name, &conf.socket_addrs, &conf.udp_socket_addrs, conf.quic).await,
         _ => {
             println!("Invalid http version");
             panic!();

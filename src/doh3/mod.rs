@@ -1,4 +1,5 @@
 mod qtls;
+mod transporter;
 
 use std::{
     borrow::BorrowMut,
@@ -16,7 +17,7 @@ use tokio::sync::Mutex;
 use bytes::Buf;
 use h3::client::SendRequest;
 
-pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &str) {
+pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &str, quic_conf_file: crate::config::Quic) {
     let qaddress = {
         let mut mr_randy = rand::rngs::OsRng::default();
         let port = mr_randy.gen_range(4000..5000);
@@ -30,8 +31,8 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
     };
     // UDP socket as endpoint for quic
     let mut endpoint = quinn::Endpoint::client(qaddress).unwrap();
-    // Setup QUIC connection
-    endpoint.set_default_client_config(quinn::ClientConfig::new(qtls::qtls()));
+    // Setup QUIC connection (QUIC Config)
+    endpoint.set_default_client_config(quinn::ClientConfig::new(qtls::qtls()).transport_config(transporter::tc(quic_conf_file)).to_owned());
     loop {
         println!("New QUIC connection");
         // Connect to dns server

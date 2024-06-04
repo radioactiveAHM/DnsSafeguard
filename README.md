@@ -15,6 +15,7 @@
 * [x] **HTTP/3**
 * [x] **HTTP/2**
 * [x] **HTTP/2 TLS Fragmenting**
+* [ ] **ECH**
 
 ## Building the Project
 
@@ -41,7 +42,7 @@ The configuration file is structured in JSON format and includes the following s
 ## Notes
 
 > [!WARNING]
-> Using modified verion of tokio-rustls
+> Using self-modified verion of tokio-rustls.
 
 ## License
 

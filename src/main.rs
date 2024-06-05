@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 mod config;
 mod doh2;
 mod doh3;

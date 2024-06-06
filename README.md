@@ -43,6 +43,12 @@ The configuration file is structured in JSON format and includes the following s
 
 > [!WARNING]
 > Using self-modified verion of tokio-rustls.
+> Only TLS 1.3 supported for better performance.
+
+## TLS Features
+
+* Brotli certificate compression
+* Tls client hello Fragmenting
 
 ## License
 

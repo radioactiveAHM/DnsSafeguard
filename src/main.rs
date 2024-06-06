@@ -40,7 +40,15 @@ async fn main() {
                     )
                     .await
                 }
-                3 => doh3::http3(v6.server_name, &v6.socket_addrs, &v6.udp_socket_addrs, quic_conf_file_v6).await,
+                3 => {
+                    doh3::http3(
+                        v6.server_name,
+                        &v6.socket_addrs,
+                        &v6.udp_socket_addrs,
+                        quic_conf_file_v6,
+                    )
+                    .await
+                }
                 _ => {
                     println!("Invalid http version");
                     panic!();
@@ -68,24 +76,20 @@ async fn main() {
             )
             .await
         }
-        3 => doh3::http3(conf.server_name, &conf.socket_addrs, &conf.udp_socket_addrs, conf.quic).await,
+        3 => {
+            doh3::http3(
+                conf.server_name,
+                &conf.socket_addrs,
+                &conf.udp_socket_addrs,
+                conf.quic,
+            )
+            .await
+        }
         _ => {
             println!("Invalid http version");
             panic!();
         }
     }
-}
-
-fn catch_in_buff(find: &[u8], buff: &[u8]) -> (usize, usize) {
-    let size = find.len();
-    let mut index = size;
-    for _ in &buff[size..] {
-        if find == &buff[index - size..index] {
-            return (index - size, index);
-        }
-        index = index + 1
-    }
-    (0, 0)
 }
 
 async fn http1(
@@ -104,7 +108,6 @@ async fn http1(
             panic!();
         }
         println!("New HTTP/1.1 connection");
-
 
         // TCP socket for TLS
         let tcp = tokio::net::TcpStream::connect(socket_addrs).await.unwrap();
@@ -137,17 +140,13 @@ async fn http1(
         }
 
         println!("HTTP/1.1 Connection Established");
+        tls_handshake_retry = 0;
 
         let mut c = tls_conn.unwrap();
         // UDP socket to listen for DNS query
         let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
 
-        let mut dead_conn = false;
         loop {
-            if dead_conn {
-                println!("connection closed by peer");
-                break;
-            }
             let mut dns_query: [u8; 8196] = [0u8; 8196];
             let udp_ok = udp.recv_from(&mut dns_query).await;
             if udp_ok.is_err() {
@@ -161,27 +160,70 @@ async fn http1(
                 query_base64url.as_bytes(),
                 b" HTTP/1.1\r\nHost: ",
                 server_name.as_bytes(),
-                b"\r\nAccept: application/dns-message\r\n\r\n"
+                b"\r\nConnection: keep-alive\r\nAccept: application/dns-message\r\n\r\n",
             ]
             .concat();
 
             // Write http request
             if c.write(&http_req).await.is_err() {
-                dead_conn = true;
-                continue;
+                println!("connection closed by peer");
+                break;
             }
 
             // Handle Reciving Data
-            let mut http_resp = [0u8; 8196];
+            let mut http_resp = [0; 2048];
             let http_resp_size = c.read(&mut http_resp).await.unwrap_or(0);
 
-            let body =
-                &http_resp[catch_in_buff("\r\n\r\n".as_bytes(), &http_resp).1..http_resp_size];
-
-            if body.is_empty() {
-                continue;
+            // Break if failed to recv response
+            if http_resp_size == 0 {
+                break;
             }
-            udp.send_to(body, addr).await.unwrap_or(0);
+
+            if let Some((x1, x2)) = catch_in_buff("\r\n\r\n".as_bytes(), &http_resp) {
+                let body = &http_resp[x2..http_resp_size];
+
+                let content_length = c_len(&http_resp[..x1]);
+                if content_length != 0 && content_length == body.len() {
+                    // Full body recved
+                    udp.send_to(body, addr).await.unwrap_or(0);
+                } else if content_length != 0 && content_length > body.len() {
+                    // There is another chunk of body
+                    // We know it's not bigger than 512 bytes
+                    let mut b2 = [0; 512];
+                    let b2_len = c.read(&mut b2).await.unwrap_or(0);
+
+                    udp.send_to(&[body, &b2[..b2_len]].concat(), addr)
+                        .await
+                        .unwrap_or(0);
+                }
+            }
         }
     }
+}
+
+fn c_len(http_head: &[u8]) -> usize {
+    for head in String::from_utf8_lossy(http_head).split("\r\n") {
+        let lower_head = head.to_lowercase();
+        if lower_head.contains("content-length") {
+            return lower_head
+                .split("content-length: ")
+                .last()
+                .unwrap_or("0")
+                .parse::<usize>()
+                .unwrap_or(0);
+        }
+    }
+    0
+}
+
+fn catch_in_buff(find: &[u8], buff: &[u8]) -> Option<(usize, usize)> {
+    let size = find.len();
+    let mut index = size;
+    for _ in &buff[size..] {
+        if find == &buff[index - size..index] {
+            return Some((index - size, index));
+        }
+        index = index + 1
+    }
+    None
 }

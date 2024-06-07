@@ -77,12 +77,9 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
             // Check if Connection is dead
             // quic_conn_dead will be passed to task if connection alive
             let quic_conn_dead = dead_conn.clone();
-            let quic_conn_dead_locked = quic_conn_dead.lock().await;
-            if *quic_conn_dead_locked {
+            if *quic_conn_dead.lock().await {
                 break;
             }
-            // Unlock
-            drop(quic_conn_dead_locked);
 
             // Recive dns query
             let mut dns_query = [0u8; 768];

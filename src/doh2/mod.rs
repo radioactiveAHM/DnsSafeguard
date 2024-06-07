@@ -64,12 +64,9 @@ pub async fn http2(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
 
         loop {
             // Check if Connection is dead
-            // quic_conn_dead will be passed to task if connection alive
-            {
-                let h2_conn_dead = dead_conn.clone();
-                if *h2_conn_dead.lock().await {
-                    break;
-                }
+            let h2_conn_dead = dead_conn.clone();
+            if *h2_conn_dead.lock().await {
+                break;
             }
 
             // Recive dns query
@@ -81,7 +78,6 @@ pub async fn http2(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
                 let query_base64url = base64_url::encode(&dns_query[..query_size]);
                 let h2_client = client.clone();
                 let sn = server_name.clone();
-                let dead_conn_arc = dead_conn.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
                     if let Err(e) = send_req(sn, query_base64url, h2_client, addr, udp_arc).await {
@@ -91,7 +87,7 @@ pub async fn http2(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
                         // for some weird reason if i try to lock dead_conn_arc here error occur
                     }
                     if temp {
-                        *(dead_conn_arc.lock().await) = true;
+                        *(h2_conn_dead.lock().await) = true;
                     }
                 });
             }else {

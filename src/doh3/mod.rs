@@ -67,10 +67,8 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
         tokio::spawn(drive);
 
         // UDP socket to listen for DNS query
-        let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
-
         // prepare for atomic
-        let arc_udp = Arc::new(udp);
+        let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
         let dead_conn = Arc::new(Mutex::new(false));
 
         loop {

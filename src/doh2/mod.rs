@@ -56,10 +56,8 @@ pub async fn http2(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
         });
 
         // UDP socket to listen for DNS query
-        let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
-
         // prepare atomic
-        let arc_udp = Arc::new(udp);
+        let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
         let dead_conn = Arc::new(Mutex::new(false));
 
         loop {

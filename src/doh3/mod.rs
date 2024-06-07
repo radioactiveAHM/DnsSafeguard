@@ -7,8 +7,7 @@ use std::{
     io::Read,
     net::SocketAddr,
     str::FromStr,
-    sync::Arc,
-    time::Duration,
+    sync::Arc
 };
 
 use rand::Rng;
@@ -71,7 +70,7 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
         let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
 
         // prepare for atomic
-        let am_udp = Arc::new(Mutex::new(udp));
+        let arc_udp = Arc::new(udp);
         let dead_conn = Arc::new(Mutex::new(false));
 
         loop {
@@ -85,27 +84,11 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
             // Unlock
             drop(quic_conn_dead_locked);
 
-            let mut timeout = Duration::from_millis(30);
-            // if only one udp bing used means no h3 task running so go for longer timeout
-            if Arc::strong_count(&am_udp) == 1 {
-                timeout = Duration::from_secs(5);
-            }
             // Recive dns query
             let mut dns_query = [0u8; 768];
-            let udp = am_udp.clone();
-            let locked_udp = udp.lock().await;
+            let udp = arc_udp.clone();
 
-            let udp_ok = tokio::time::timeout(timeout, async {
-                locked_udp.recv_from(&mut dns_query).await
-            })
-            .await;
-            // Drop udp to unlock
-            drop(locked_udp);
-            if udp_ok.is_err() {
-                continue;
-            }
-
-            if let Ok((query_size, addr)) = udp_ok.unwrap() {
+            if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
                 let dq = dns_query[..query_size].to_owned();
                 let h3 = h3.clone();
                 let sn = server_name.clone();
@@ -118,6 +101,8 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
                         }
                     }
                 });
+            }else {
+                println!("Failed to recv DNS Query");
             }
         }
     }
@@ -128,7 +113,7 @@ async fn send_request(
     mut h3: SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
     dns_query: Vec<u8>,
     addr: SocketAddr,
-    udp: Arc<Mutex<tokio::net::UdpSocket>>,
+    udp: Arc<tokio::net::UdpSocket>,
 ) -> Result<(), Box<dyn std::error::Error + Send>> {
     let query_base64url = base64_url::encode(&dns_query);
 
@@ -157,8 +142,6 @@ async fn send_request(
                 return Ok(());
             }
             if udp
-                .lock()
-                .await
                 .send_to(&buff[..body_len], addr)
                 .await
                 .is_err()

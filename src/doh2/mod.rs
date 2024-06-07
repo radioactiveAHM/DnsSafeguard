@@ -75,31 +75,28 @@ pub async fn http2(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
             // Recive dns query
             let mut dns_query = [0u8; 768];
             let udp_arc = arc_udp.clone();
-            let udp_ok: Result<(usize, SocketAddr), std::io::Error> = udp_arc.recv_from(&mut dns_query).await;
 
-            if udp_ok.is_err() {
+            if let Ok((query_size, addr)) = udp_arc.recv_from(&mut dns_query).await{
+                // Base64url dns query
+                let query_base64url = base64_url::encode(&dns_query[..query_size]);
+                let h2_client = client.clone();
+                let sn = server_name.clone();
+                let dead_conn_arc = dead_conn.clone();
+                tokio::spawn(async move {
+                    let mut temp = false;
+                    if let Err(e) = send_req(sn, query_base64url, h2_client, addr, udp_arc).await {
+                        let error = e.to_string();
+                        println!("{}", error);
+                        temp = true;
+                        // for some weird reason if i try to lock dead_conn_arc here error occur
+                    }
+                    if temp {
+                        *(dead_conn_arc.lock().await) = true;
+                    }
+                });
+            }else {
                 println!("Failed to recv DNS Query");
-                continue;
             }
-            
-            // Base64url dns query
-            let (query_size, addr) = udp_ok.unwrap();
-            let query_base64url = base64_url::encode(&dns_query[..query_size]);
-            let h2_client = client.clone();
-            let sn = server_name.clone();
-            let dead_conn_arc = dead_conn.clone();
-            tokio::spawn(async move {
-                let mut temp = false;
-                if let Err(e) = send_req(sn, query_base64url, h2_client, addr, udp_arc).await {
-                    let error = e.to_string();
-                    println!("{}", error);
-                    temp = true;
-                    // for some weird reason if i try to lock dead_conn_arc here error occur
-                }
-                if temp {
-                    *(dead_conn_arc.lock().await) = true;
-                }
-            });
         }
     }
 }

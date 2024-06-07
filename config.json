@@ -1,5 +1,5 @@
 {
-	"http_version":2,
+	"http_version":"1 multi",
 	"server_name": "dns.google",
 	"socket_addrs": "8.8.8.8:443",
 	"udp_socket_addrs": "127.0.0.1:53",
@@ -9,7 +9,7 @@
 	},
 	"ipv6": {
 		"enable": false,
-		"http_version":2,
+		"http_version":"1 multi",
 		"server_name": "dns.google",
 		"socket_addrs": "8.8.8.8:443",
 		"udp_socket_addrs": "[::1]:53",
@@ -23,5 +23,6 @@
 		"keep_alive_interval": 5,
 		"datagram_receive_buffer_size": 16777216,
 		"datagram_send_buffer_size": 8388608
-	}
+	},
+	"connections": 4
 }

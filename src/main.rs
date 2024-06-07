@@ -3,9 +3,11 @@ mod doh2;
 mod doh3;
 mod fragment;
 mod tls;
+mod multi;
 
 use std::sync::Arc;
 
+use multi::h1_multi;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[tokio::main]
@@ -21,8 +23,17 @@ async fn main() {
     let quic_conf_file_v6 = conf.quic.clone();
     tokio::spawn(async move {
         if v6.enable {
-            match v6.http_version {
-                1 => {
+            match v6.http_version.as_str() {
+                "1 multi" => {
+                    h1_multi(
+                        v6.server_name,
+                        &v6.socket_addrs,
+                        &v6.udp_socket_addrs,
+                        &v6.fragmenting,
+                        conf.connections
+                    ).await
+                }
+                "1" => {
                     http1(
                         v6.server_name,
                         &v6.socket_addrs,
@@ -31,7 +42,7 @@ async fn main() {
                     )
                     .await
                 }
-                2 => {
+                "2" => {
                     doh2::http2(
                         v6.server_name,
                         &v6.socket_addrs,
@@ -40,7 +51,7 @@ async fn main() {
                     )
                     .await
                 }
-                3 => {
+                "3" => {
                     doh3::http3(
                         v6.server_name,
                         &v6.socket_addrs,
@@ -57,8 +68,17 @@ async fn main() {
         }
     });
 
-    match conf.http_version {
-        1 => {
+    match conf.http_version.as_str() {
+        "1 multi" => {
+            h1_multi(
+                conf.server_name,
+                &conf.socket_addrs,
+                &conf.udp_socket_addrs,
+                &conf.fragmenting,
+                conf.connections
+            ).await
+        }
+        "1" => {
             http1(
                 conf.server_name,
                 &conf.socket_addrs,
@@ -67,7 +87,7 @@ async fn main() {
             )
             .await
         }
-        2 => {
+        "2" => {
             doh2::http2(
                 conf.server_name,
                 &conf.socket_addrs,
@@ -76,7 +96,7 @@ async fn main() {
             )
             .await
         }
-        3 => {
+        "3" => {
             doh3::http3(
                 conf.server_name,
                 &conf.socket_addrs,

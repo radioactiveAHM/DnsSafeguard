@@ -17,6 +17,7 @@ bytes = "1.6.0"
 base64-url = "3.0.0"
 h2 = "0.4.5"
 tokio-rustls = { git = "https://github.com/radioactiveAHM/tokio-rustls-self.git", default-features = false, features = ["aws_lc_rs"] }
+crossbeam-channel = "0.5.13"
 
 [profile.release]
 panic = "abort"

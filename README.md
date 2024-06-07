@@ -17,8 +17,8 @@ Thank to [Rustls](https://github.com/rustls/rustls) developers for such a good T
 * [x] **HTTP/3**
 * [x] **HTTP/2**
 * [x] **HTTP/2 TLS Fragmenting**
+* [x] **HTTP/1.1 Multi-Connection**
 * [ ] **ECH**
-* [ ] **HTTP/1.1 Multi-Connection**
 * [ ] **Better Commenting 😅**
 
 ## Building the Project

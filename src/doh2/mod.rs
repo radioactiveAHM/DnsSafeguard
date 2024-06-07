@@ -80,7 +80,7 @@ pub async fn http2(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
             }
 
             // Recive dns query
-            let mut dns_query: [u8; 8196] = [0u8; 8196];
+            let mut dns_query = [0u8; 768];
             let udp = arc_udp.clone();
             let locked_udp = udp.lock().await;
 

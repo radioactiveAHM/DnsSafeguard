@@ -45,12 +45,16 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
                 println!("QUIC 0RTT Connection Established");
                 Ok(conn)
             }else {
-                println!("QUIC Connection Established");
-                endpoint.connect(SocketAddr::from_str(socket_addrs).unwrap(), server_name.as_str()).unwrap().await
+                let conn = endpoint.connect(SocketAddr::from_str(socket_addrs).unwrap(), server_name.as_str()).unwrap().await;
+                if conn.is_ok(){
+                    println!("QUIC Connection Established");
+                }
+                conn
             }
         };
 
         if conn.is_err(){
+            println!("Failed to Established QUIC Connection");
             continue;
         }
 
@@ -87,7 +91,7 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
                 timeout = Duration::from_secs(5);
             }
             // Recive dns query
-            let mut dns_query: [u8; 8196] = [0u8; 8196];
+            let mut dns_query = [0u8; 768];
             let udp = am_udp.clone();
             let locked_udp = udp.lock().await;
 
@@ -141,12 +145,12 @@ async fn send_request(
     reqs.finish().await?;
 
     // HTTP respones
-    let resp = reqs.recv_response().await?;
+    let resp: http::Response<()> = reqs.recv_response().await?;
 
     if resp.status() == http::status::StatusCode::OK {
         // get body
         if let Some(body) = reqs.recv_data().await? {
-            let mut buff = [0; 8196];
+            let mut buff = [0; 768];
             let body_len = body.reader().read(&mut buff).unwrap_or(0);
             // early drop
             if body_len == 0 {

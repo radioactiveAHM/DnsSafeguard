@@ -147,7 +147,7 @@ async fn http1(
         let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
 
         loop {
-            let mut dns_query: [u8; 8196] = [0u8; 8196];
+            let mut dns_query = [0u8; 768];
             let udp_ok = udp.recv_from(&mut dns_query).await;
             if udp_ok.is_err() {
                 continue;

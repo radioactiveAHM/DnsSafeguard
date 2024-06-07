@@ -2,6 +2,8 @@
 
 **DnsSafeguard** is a secure DNS client built in Rust, designed to intercept DNS queries over a UDP socket and securely transmit them to a DNS server using the DNS over HTTPS (DOH) protocol. It also features TLS client hello fragmenting to circumvent Great Firewall (GFW) censorship.
 
+Thank to [Rustls](https://github.com/rustls/rustls) developers for such a good TLS framework.
+
 ## Features
 
 * **Secure Communication**: Leverages Rustls for encrypted communication with DNS servers.
@@ -16,6 +18,8 @@
 * [x] **HTTP/2**
 * [x] **HTTP/2 TLS Fragmenting**
 * [ ] **ECH**
+* [ ] **HTTP/1.1 Multi-Connection**
+* [ ] **Better Commenting 😅**
 
 ## Building the Project
 
@@ -38,6 +42,11 @@ The configuration file is structured in JSON format and includes the following s
   * Random Method: In this approach, random TCP segments are used, each containing one TLS client hello packet.
   * Single Method: With the single method, a single TCP segment carries two TLS client hello packets.
 * `IPv6`: Contains IPv6 specific settings, similar to the IPv4 configuration.
+* `Quic`: Configuration for QUIC protocol.
+  * `congestion_controller`: The congestion controller algorithm, default is `bbr`.
+  * `keep_alive_interval`: The interval in seconds to keep the connection alive, default is `5`.
+  * `datagram_receive_buffer_size`: Size of the receive buffer for datagrams, default is `16777216`.
+  * `datagram_send_buffer_size`: Size of the send buffer for datagrams, default is `8388608`.
 
 ## Notes
 

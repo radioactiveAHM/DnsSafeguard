@@ -18,6 +18,8 @@ Thank to [Rustls](https://github.com/rustls/rustls) developers for such a good T
 * [x] **HTTP/2**
 * [x] **HTTP/2 TLS Fragmenting**
 * [x] **HTTP/1.1 Multi-Connection**
+* [x] **DNS over TLS (DOT)**
+* [ ] **DNS over TLS (DOT) Multi-Connection**
 * [ ] **ECH**
 * [ ] **Better Commenting 😅**
 
@@ -57,6 +59,7 @@ The configuration file is structured in JSON format and includes the following s
   * `1 multi`: Multiple HTTP/1.1 Connection.
   * `2`: HTTP/2 Connection.
   * `3`: HTTP/3 Connection.
+  * `dot`: DOT Connection (DNS over TLS).
 * `Server Name`: The domain name of the DNS server.
 * `Socket Addresses`: The IP address and port for the DNS server connection.
 * `UDP Socket Addresses`: Local UDP address and port for DNS queries.

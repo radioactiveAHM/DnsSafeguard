@@ -1,10 +1,5 @@
-#![allow(dead_code, unused)]
-use std::{sync::Arc, time::Duration};
-
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    time::sleep,
-};
+use std::sync::Arc;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::{c_len, catch_in_buff, config, fragment, tls};
 
@@ -128,7 +123,7 @@ pub async fn h1_multi(
     }
 }
 
-async fn tls_conn_gen(
+pub async fn tls_conn_gen(
     server_name: String,
     socket_addrs: String,
     fragmenting: config::Fragmenting,

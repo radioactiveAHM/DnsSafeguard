@@ -1,9 +1,10 @@
 mod config;
 mod doh2;
 mod doh3;
+mod dot;
 mod fragment;
-mod tls;
 mod multi;
+mod tls;
 
 use std::sync::Arc;
 
@@ -30,8 +31,9 @@ async fn main() {
                         &v6.socket_addrs,
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
-                        conf.connections
-                    ).await
+                        conf.connections,
+                    )
+                    .await
                 }
                 "1" => {
                     http1(
@@ -60,6 +62,15 @@ async fn main() {
                     )
                     .await
                 }
+                "dot" => {
+                    dot::dot(
+                        v6.server_name,
+                        &v6.socket_addrs,
+                        &v6.udp_socket_addrs,
+                        &v6.fragmenting,
+                    )
+                    .await;
+                }
                 _ => {
                     println!("Invalid http version");
                     panic!();
@@ -75,8 +86,9 @@ async fn main() {
                 &conf.socket_addrs,
                 &conf.udp_socket_addrs,
                 &conf.fragmenting,
-                conf.connections
-            ).await
+                conf.connections,
+            )
+            .await
         }
         "1" => {
             http1(
@@ -104,6 +116,15 @@ async fn main() {
                 conf.quic,
             )
             .await
+        }
+        "dot" => {
+            dot::dot(
+                conf.server_name,
+                &conf.socket_addrs,
+                &conf.udp_socket_addrs,
+                &conf.fragmenting,
+            )
+            .await;
         }
         _ => {
             println!("Invalid http version");

@@ -1,7 +1,7 @@
 {
-	"http_version":"1 multi",
+	"http_version":"dot",
 	"server_name": "dns.google",
-	"socket_addrs": "8.8.8.8:443",
+	"socket_addrs": "8.8.8.8:853",
 	"udp_socket_addrs": "127.0.0.1:53",
 	"fragmenting": {
 		"enable": true,
@@ -9,7 +9,7 @@
 	},
 	"ipv6": {
 		"enable": false,
-		"http_version":"1 multi",
+		"http_version":"h2",
 		"server_name": "dns.google",
 		"socket_addrs": "[2001:4860:4860::8888]:443",
 		"udp_socket_addrs": "[::1]:53",

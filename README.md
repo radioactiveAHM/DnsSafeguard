@@ -19,7 +19,6 @@ Thank to [Rustls](https://github.com/rustls/rustls) developers for such a good T
 * [x] **HTTP/2 TLS Fragmenting**
 * [x] **HTTP/1.1 Multi-Connection**
 * [ ] **DNS over TLS (DOT)**
-* [ ] **DNS over TLS (DOT) Multi-Connection**
 * [ ] **ECH**
 * [ ] **Better Commenting 😅**
 

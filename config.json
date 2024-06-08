@@ -11,7 +11,7 @@
 		"enable": false,
 		"http_version":"1 multi",
 		"server_name": "dns.google",
-		"socket_addrs": "8.8.8.8:443",
+		"socket_addrs": "[2001:4860:4860::8888]:443",
 		"udp_socket_addrs": "[::1]:53",
 		"fragmenting": {
 			"enable": true,
@@ -24,5 +24,5 @@
 		"datagram_receive_buffer_size": 16777216,
 		"datagram_send_buffer_size": 8388608
 	},
-	"connections": 4
+	"connections": 3
 }

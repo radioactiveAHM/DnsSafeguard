@@ -2,6 +2,11 @@
 name = "DnsSafeguard"
 version = "1.2.0"
 edition = "2021"
+license = "Apache-2.0"
+description = "DnsSafeguard is dedicated to providing a secure DNS client solution, ensuring your DNS queries remain private and uncensored."
+homepage = "https://github.com/radioactiveAHM/DnsSafeguard"
+repository = "https://github.com/radioactiveAHM/DnsSafeguard"
+categories = ["network-programming"]
 
 [dependencies]
 webpki-roots = "0.26"

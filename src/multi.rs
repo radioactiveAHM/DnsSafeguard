@@ -22,7 +22,7 @@ pub async fn h1_multi(
     let udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
 
     // Channels to send DNS query to one of task with http/1.1 connection
-    let (sender, recver) = crossbeam_channel::bounded(1);
+    let (sender, recver) = crossbeam_channel::bounded(connections as usize);
 
     // Spawn Task for multiple connections
     for conn_i in 0u8..connections {
@@ -119,9 +119,11 @@ pub async fn h1_multi(
 
         if let Ok((query_size, addr)) = udp_arc.recv_from(&mut dns_query).await {
             let qb4: String = base64_url::encode(&dns_query[..query_size]);
-            if sender.try_send((qb4, addr, udp_arc)).is_err() {
-                println!("Tasks are dead")
-            }
+            tokio::task::block_in_place(|| {
+                if sender.send((qb4, addr, udp_arc)).is_err() {
+                    println!("Tasks are dead")
+                }
+            });
         }
     }
 }

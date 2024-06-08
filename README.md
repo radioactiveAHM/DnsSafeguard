@@ -25,6 +25,25 @@ Thank to [Rustls](https://github.com/rustls/rustls) developers for such a good T
 
 To build the project, execute the following command in the project directory: `cargo build --release`
 
+## How to use
+
+* **Windows**
+  1. Download the Latest Release:
+      1. Visit the releases page and download the latest version of your DNS client.
+      2. Extract the downloaded archive to a folder of your choice.
+  2. Configure the `config.json` File:
+      1. Locate the `config.json` file in the extracted folder.
+      2. Open it using a text editor.
+      3. Modify the necessary settings based on the instructions in the “Configuration File” section.
+  3. Run the DNS Client:
+      1. Execute the DNS client application (e.g., DnsSafeguard.exe).
+      2. You should see log messages indicating that the client is attempting to establish a connection.
+  4. Verify Connection Establishment:
+      * Keep an eye on the logs. When you see the message “Connection established,” it means the DNS client has successfully connected to the DNS server.
+  5. Set Up Windows DNS:
+      1. Go to your Windows network settings.
+      2. Configure the DNS server address to match the IP address specified in the config.json file for the `UDP Socket Addresses` section.
+
 ## Configuration File - `config.json`
 
 The `config.json` file is a crucial part of the DnsSafeguard application. It contains the necessary settings to control the behavior of the DNS client.

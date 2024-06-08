@@ -34,6 +34,10 @@ The `config.json` file is a crucial part of the DnsSafeguard application. It con
 The configuration file is structured in JSON format and includes the following settings:
 
 * `HTTP Version`: Specifies the HTTP protocol version used for DNS queries (HTTP version 3 does not support Fragmenting).
+  * `1`: Single HTTP/1.1 Connection.
+  * `1 multi`: Multiple HTTP/1.1 Connection.
+  * `2`: HTTP/2 Connection.
+  * `3`: HTTP/3 Connection.
 * `Server Name`: The domain name of the DNS server.
 * `Socket Addresses`: The IP address and port for the DNS server connection.
 * `UDP Socket Addresses`: Local UDP address and port for DNS queries.
@@ -47,6 +51,7 @@ The configuration file is structured in JSON format and includes the following s
   * `keep_alive_interval`: The interval in seconds to keep the connection alive, default is `5`.
   * `datagram_receive_buffer_size`: Size of the receive buffer for datagrams, default is `16777216`.
   * `datagram_send_buffer_size`: Size of the send buffer for datagrams, default is `8388608`.
+* `Connections`: Number of connections for `1 multi`.
 
 ## Notes
 

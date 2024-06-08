@@ -1,7 +1,10 @@
-#![allow(dead_code,unused)]
+#![allow(dead_code, unused)]
 use std::{sync::Arc, time::Duration};
 
-use tokio::{io::{AsyncReadExt, AsyncWriteExt}, time::sleep};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    time::sleep,
+};
 
 use crate::{c_len, catch_in_buff, config, fragment, tls};
 
@@ -10,7 +13,7 @@ pub async fn h1_multi(
     socket_addrs: &str,
     udp_socket_addrs: &str,
     fragmenting: &config::Fragmenting,
-    connections: u8
+    connections: u8,
 ) {
     // TLS Client Config
     let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()]);
@@ -23,7 +26,11 @@ pub async fn h1_multi(
 
     // Spawn Task for multiple connections
     for conn_i in 0u8..connections {
-        let recver_cln: crossbeam_channel::Receiver<(String, std::net::SocketAddr, Arc<tokio::net::UdpSocket>)> = recver.clone();
+        let recver_cln: crossbeam_channel::Receiver<(
+            String,
+            std::net::SocketAddr,
+            Arc<tokio::net::UdpSocket>,
+        )> = recver.clone();
         let tls_config = ctls.clone();
         let frag = (*fragmenting).clone();
         let sn = server_name.clone();
@@ -31,20 +38,32 @@ pub async fn h1_multi(
         tokio::spawn(async move {
             let server_addr = sa;
             let task_rcv = recver_cln;
+            let mut connection_retry = 0u8;
             loop {
-                let tls_conn = tls_conn_gen(sn.clone(), server_addr.clone(), frag.clone(), tls_config.clone()).await;
-                if tls_conn.is_err(){
+                if connection_retry == 5 {
+                    panic!()
+                }
+                let tls_conn = tls_conn_gen(
+                    sn.clone(),
+                    server_addr.clone(),
+                    frag.clone(),
+                    tls_config.clone(),
+                )
+                .await;
+                if tls_conn.is_err() {
                     println!("Connection {} TLS handshake failed. Retry", conn_i);
+                    connection_retry += 1;
                     continue;
                 }
                 println!("HTTP/1.1 Connection {} Established", conn_i);
+                connection_retry = 0;
                 let mut c = tls_conn.unwrap();
                 loop {
                     let mut package = Result::Err(crossbeam_channel::RecvError);
                     tokio::task::block_in_place(|| {
                         package = task_rcv.recv();
                     });
-                    if let Ok((query_base64url, addr, udp)) = package{
+                    if let Ok((query_base64url, addr, udp)) = package {
                         // HTTP Req
                         let http_req = [
                             b"GET /dns-query?dns=",
@@ -53,25 +72,25 @@ pub async fn h1_multi(
                             sn.as_str().as_bytes(),
                             b"\r\nConnection: keep-alive\r\nAccept: application/dns-message\r\n\r\n",
                         ].concat();
-                        
+
                         // Send HTTP Req
                         if c.write(&http_req).await.is_err() {
                             println!("connection closed by peer");
                             break;
                         }
-    
+
                         // Handle Reciving Data
                         let mut http_resp = [0; 2048];
                         let http_resp_size = c.read(&mut http_resp).await.unwrap_or(0);
-    
+
                         // Break if failed to recv response
                         if http_resp_size == 0 {
                             break;
                         }
-    
+
                         if let Some((x1, x2)) = catch_in_buff("\r\n\r\n".as_bytes(), &http_resp) {
                             let body = &http_resp[x2..http_resp_size];
-            
+
                             let content_length = c_len(&http_resp[..x1]);
                             if content_length != 0 && content_length == body.len() {
                                 // Full body recved
@@ -81,7 +100,7 @@ pub async fn h1_multi(
                                 // We know it's not bigger than 512 bytes
                                 let mut b2 = [0; 512];
                                 let b2_len = c.read(&mut b2).await.unwrap_or(0);
-            
+
                                 udp.send_to(&[body, &b2[..b2_len]].concat(), addr)
                                     .await
                                     .unwrap_or(0);
@@ -98,9 +117,9 @@ pub async fn h1_multi(
         let mut dns_query = [0u8; 768];
         let udp_arc = udp.clone();
 
-        if let Ok((query_size, addr)) = udp_arc.recv_from(&mut dns_query).await{
-            let qb4:String = base64_url::encode(&dns_query[..query_size]);
-            if sender.try_send((qb4, addr, udp_arc)).is_err(){
+        if let Ok((query_size, addr)) = udp_arc.recv_from(&mut dns_query).await {
+            let qb4: String = base64_url::encode(&dns_query[..query_size]);
+            if sender.try_send((qb4, addr, udp_arc)).is_err() {
                 println!("Tasks are dead")
             }
         }

@@ -53,11 +53,11 @@ The `config.json` file is a crucial part of the DnsSafeguard application. It con
 
 The configuration file is structured in JSON format and includes the following settings:
 
-* `HTTP Version`: Specifies the HTTP protocol version used for DNS queries (HTTP version 3 does not support Fragmenting).
+* `Protocol`: Specifies the protocol used for DNS queries.
   * `h1`: Single HTTP/1.1 Connection.
   * `h1 multi`: Multiple HTTP/1.1 Connection.
   * `h2`: HTTP/2 Connection.
-  * `h3`: HTTP/3 Connection.
+  * `h3`: HTTP/3 Connection (does not support fragmenting).
   * `dot`: DOT Connection (DNS over TLS).
   * `dot nonblocking`: DOT Non-Blocking Connection (DNS over TLS).
 * `Server Name`: The domain name of the DNS server.
@@ -69,7 +69,7 @@ The configuration file is structured in JSON format and includes the following s
   * Single Method: With the single method, a single TCP segment carries two TLS client hello packets.
 * `IPv6`: Contains IPv6 specific settings, similar to the IPv4 configuration.
 * `Quic`: Configuration for QUIC protocol.
-  * `congestion_controller`: The congestion controller algorithm, default is `bbr`.
+  * `congestion_controller`: The congestion controller algorithm, options are `bbr`, `cubic` and `newreno`.
   * `keep_alive_interval`: The interval in seconds to keep the connection alive, default is `5`.
   * `datagram_receive_buffer_size`: Size of the receive buffer for datagrams, default is `16777216`.
   * `datagram_send_buffer_size`: Size of the send buffer for datagrams, default is `8388608`.

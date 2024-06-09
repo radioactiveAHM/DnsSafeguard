@@ -5,6 +5,7 @@ mod dot;
 mod fragment;
 mod multi;
 mod tls;
+mod utils;
 
 use std::sync::Arc;
 
@@ -24,8 +25,8 @@ async fn main() {
     let quic_conf_file_v6 = conf.quic.clone();
     tokio::spawn(async move {
         if v6.enable {
-            match v6.http_version.as_str() {
-                "1 multi" => {
+            match v6.protocol.as_str() {
+                "h1 multi" => {
                     h1_multi(
                         v6.server_name,
                         &v6.socket_addrs,
@@ -35,7 +36,7 @@ async fn main() {
                     )
                     .await
                 }
-                "1" => {
+                "h1" => {
                     http1(
                         v6.server_name,
                         &v6.socket_addrs,
@@ -44,7 +45,7 @@ async fn main() {
                     )
                     .await
                 }
-                "2" => {
+                "h2" => {
                     doh2::http2(
                         v6.server_name,
                         &v6.socket_addrs,
@@ -53,7 +54,7 @@ async fn main() {
                     )
                     .await
                 }
-                "3" => {
+                "h3" => {
                     doh3::http3(
                         v6.server_name,
                         &v6.socket_addrs,
@@ -71,6 +72,15 @@ async fn main() {
                     )
                     .await;
                 }
+                "dot nonblocking" => {
+                    dot::dot_nonblocking(
+                        v6.server_name,
+                        &v6.socket_addrs,
+                        &v6.udp_socket_addrs,
+                        &v6.fragmenting,
+                    )
+                    .await;
+                }
                 _ => {
                     println!("Invalid http version");
                     panic!();
@@ -79,8 +89,8 @@ async fn main() {
         }
     });
 
-    match conf.http_version.as_str() {
-        "1 multi" => {
+    match conf.protocol.as_str() {
+        "h1 multi" => {
             h1_multi(
                 conf.server_name,
                 &conf.socket_addrs,
@@ -90,7 +100,7 @@ async fn main() {
             )
             .await
         }
-        "1" => {
+        "h1" => {
             http1(
                 conf.server_name,
                 &conf.socket_addrs,
@@ -99,7 +109,7 @@ async fn main() {
             )
             .await
         }
-        "2" => {
+        "h2" => {
             doh2::http2(
                 conf.server_name,
                 &conf.socket_addrs,
@@ -108,7 +118,7 @@ async fn main() {
             )
             .await
         }
-        "3" => {
+        "h3" => {
             doh3::http3(
                 conf.server_name,
                 &conf.socket_addrs,
@@ -119,6 +129,15 @@ async fn main() {
         }
         "dot" => {
             dot::dot(
+                conf.server_name,
+                &conf.socket_addrs,
+                &conf.udp_socket_addrs,
+                &conf.fragmenting,
+            )
+            .await;
+        }
+        "dot nonblocking" => {
+            dot::dot_nonblocking(
                 conf.server_name,
                 &conf.socket_addrs,
                 &conf.udp_socket_addrs,

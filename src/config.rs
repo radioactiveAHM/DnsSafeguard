@@ -7,7 +7,7 @@ pub struct Fragmenting {
 #[derive(serde::Deserialize)]
 pub struct Ipv6 {
     pub enable: bool,
-    pub http_version: String,
+    pub protocol: String,
     pub server_name: String,
     pub socket_addrs: String,
     pub udp_socket_addrs: String,
@@ -25,7 +25,7 @@ pub struct Quic {
 
 #[derive(serde::Deserialize)]
 pub struct Config {
-    pub http_version: String,
+    pub protocol: String,
     pub server_name: String,
     pub socket_addrs: String,
     pub udp_socket_addrs: String,

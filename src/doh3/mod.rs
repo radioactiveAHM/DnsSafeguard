@@ -18,7 +18,7 @@ use h3::client::SendRequest;
 
 pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &str, quic_conf_file: crate::config::Quic) {
     let qaddress = {
-        let mut mr_randy = rand::rngs::OsRng::default();
+        let mut mr_randy = rand::rngs::OsRng;
         let port = mr_randy.gen_range(4000..5000);
         if SocketAddr::from_str(socket_addrs).unwrap().is_ipv4() {
             SocketAddr::from_str(format!("0.0.0.0:{port}").as_str()).unwrap()

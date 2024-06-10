@@ -41,7 +41,7 @@ pub async fn http2(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
         }).await;
         if tls_conn.is_err() {
             println!("TLS handshake failed. Retry {}", tls_retry);
-            tls_retry = tls_retry + 1;
+            tls_retry += 1;
             continue;
         }
 

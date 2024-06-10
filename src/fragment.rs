@@ -55,7 +55,7 @@ pub async fn fragment_client_hello_rand<IO: AsyncWriteExt + std::marker::Unpin>(
     c.write_tls(&mut cur).unwrap();
 
     // Split TLS Client Hello into chunks
-    let mut mr_randy = rand::rngs::OsRng::default();
+    let mut mr_randy = rand::rngs::OsRng;
     let mut written = 5;
 
     // Send TLS Client Hello with random chunks
@@ -84,7 +84,7 @@ pub async fn fragment_client_hello_rand<IO: AsyncWriteExt + std::marker::Unpin>(
             let xtls = xbuf.concat();
             tcp.write(&xtls).await.unwrap_or_default();
             tcp.flush().await.unwrap_or_default();
-            written = written + chunck_size;
+            written += chunck_size;
             sleep(Duration::from_millis(mr_randy.gen_range(10..21))).await;
         }
     }

@@ -64,7 +64,7 @@ pub async fn h1_multi(
                             b"GET /dns-query?dns=",
                             query_base64url.as_bytes(),
                             b" HTTP/1.1\r\nHost: ",
-                            sn.as_str().as_bytes(),
+                            sn.as_bytes(),
                             b"\r\nConnection: keep-alive\r\nAccept: application/dns-message\r\n\r\n",
                         ].concat();
 

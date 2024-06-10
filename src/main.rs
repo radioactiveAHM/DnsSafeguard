@@ -195,7 +195,7 @@ async fn http1(
             .await;
         if tls_conn.is_err() {
             println!("TLS handshake failed. Retry {}", tls_handshake_retry);
-            tls_handshake_retry = tls_handshake_retry + 1;
+            tls_handshake_retry += 1;
             continue;
         }
 
@@ -283,7 +283,7 @@ fn catch_in_buff(find: &[u8], buff: &[u8]) -> Option<(usize, usize)> {
         if find == &buff[index - size..index] {
             return Some((index - size, index));
         }
-        index = index + 1
+        index += 1
     }
     None
 }

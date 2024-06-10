@@ -11,3 +11,7 @@ dns.google
 
 dns.403.online
 10.202.10.202
+
+dns.adguard.com
+94.140.14.14
+[2a10:50c0::ad2:ff]

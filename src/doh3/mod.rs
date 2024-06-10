@@ -1,5 +1,5 @@
-mod qtls;
-mod transporter;
+pub mod qtls;
+pub mod transporter;
 
 use std::{
     borrow::BorrowMut,
@@ -31,7 +31,7 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
     // UDP socket as endpoint for quic
     let mut endpoint = quinn::Endpoint::client(qaddress).unwrap();
     // Setup QUIC connection (QUIC Config)
-    endpoint.set_default_client_config(quinn::ClientConfig::new(qtls::qtls()).transport_config(transporter::tc(quic_conf_file)).to_owned());
+    endpoint.set_default_client_config(quinn::ClientConfig::new(qtls::qtls("h3")).transport_config(transporter::tc(quic_conf_file)).to_owned());
     loop {
         println!("New QUIC connection");
         // Connect to dns server

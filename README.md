@@ -1,3 +1,5 @@
+<img src="./sample-256.png" width="256">
+
 # DnsSafeguard
 
 **DnsSafeguard** is a secure DNS client built in Rust, designed to intercept DNS queries over a UDP socket and securely transmit them to a DNS server using the DNS over HTTPS (DOH) protocol. It also features TLS client hello fragmenting to circumvent Great Firewall (GFW) censorship.

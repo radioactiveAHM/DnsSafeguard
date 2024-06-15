@@ -2,16 +2,17 @@
 
 # DnsSafeguard
 
-**DnsSafeguard** is a secure DNS client built in Rust, designed to intercept DNS queries over a UDP socket and securely transmit them to a DNS server using the DNS over HTTPS (DOH) protocol. It also features TLS client hello fragmenting to circumvent Great Firewall (GFW) censorship.
+DnsSafeguard is a fast and secure DNS client written in Rust. It is designed to intercept DNS queries over a UDP socket and securely transmit them to a DNS server using DNS over HTTPS/TLS (DoH/DoT) protocols. Additionally, it employs TLS client hello fragmentation to bypass Great Firewall (GFW) censorship.
 
-Thank to [Rustls](https://github.com/rustls/rustls) developers for such a good TLS framework.
+Special thanks to the developers of [Rustls](https://github.com/rustls/rustls) for providing an excellent TLS framework.
 
 ## Features
 
-* **Secure Communication**: Leverages Rustls for encrypted communication with DNS servers.
-* **UDP Socket**: Captures DNS queries on a UDP socket.
-* **DoH Protocol**: Sends DNS queries using the DoH protocol for enhanced privacy.
-* **Censorship Bypass**: Utilizes TLS client hello fragmenting to evade GFW censorship.
+* **Secure Communication:** Utilizes Rustls to ensure encrypted communication (TLS) with DNS servers
+* **UDP Socket:** Captures DNS queries on a UDP socket.
+* **DoH Protocol:** Transmits DNS queries using the DoH protocol, supporting all HTTP versions (HTTP/1.1, H2, H3) for enhanced privacy.
+* **DoT Protocol:** Transmits DNS queries using the DoT protocol, featuring support for both blocking and non-blocking algorithms.
+* **Censorship Bypass:** Implements TLS client hello fragmentation with three possible methods to evade GFW censorship.
 
 ## Roadmap
 

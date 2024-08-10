@@ -186,6 +186,7 @@ async fn http1(
                                 "linear" => fragment::fragment_client_hello(tls, tcp).await,
                                 "random" => fragment::fragment_client_hello_rand(tls, tcp).await,
                                 "single" => fragment::fragment_client_hello_pack(tls, tcp).await,
+                                "jump" => fragment::fragment_client_hello_jump(tls, tcp).await,
                                 _ => panic!("Invalid fragment method"),
                             }
                         });

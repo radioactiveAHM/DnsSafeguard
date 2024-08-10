@@ -109,3 +109,35 @@ pub async fn fragment_client_hello_pack<IO: AsyncWriteExt + std::marker::Unpin>(
     tcp.write(&xtls).await.unwrap_or_default();
     tcp.flush().await.unwrap_or_default();
 }
+
+pub async fn fragment_client_hello_jump<IO: AsyncWriteExt + std::marker::Unpin>(
+    c: &mut ClientConnection,
+    tcp: &mut IO,
+) {
+    let mut mr_randy = rand::rngs::OsRng;
+    // Buffer to store TLS Client Hello
+    let mut tlshello = Vec::with_capacity(1024 * 4);
+    let mut cur = std::io::Cursor::new(&mut tlshello);
+    let l = c.write_tls(&mut cur).unwrap();
+
+    let psize = (l - 5) / 2;
+    let p1 = [&[22, 3, 1, 0, tlshello[5..psize].len() as u8], &tlshello[5..(psize/2)]].concat();
+    tcp.write(&p1).await.unwrap_or_default();
+    tcp.flush().await.unwrap_or_default();
+    sleep(Duration::from_millis(mr_randy.gen_range(30..60))).await;
+
+    let p2 = &tlshello[(psize/2)..psize];
+    tcp.write(&p2).await.unwrap_or_default();
+    tcp.flush().await.unwrap_or_default();
+    sleep(Duration::from_millis(mr_randy.gen_range(30..60))).await;
+
+    let p3 = [&[22, 3, 1, 0, tlshello[psize..].len() as u8], &tlshello[psize..(psize+(psize/2))]].concat();
+    tcp.write(&p3).await.unwrap_or_default();
+    tcp.flush().await.unwrap_or_default();
+    sleep(Duration::from_millis(mr_randy.gen_range(30..60))).await;
+
+    let p4 = &tlshello[(psize+(psize/2))..];
+    tcp.write(&p4).await.unwrap_or_default();
+    tcp.flush().await.unwrap_or_default();
+    sleep(Duration::from_millis(mr_randy.gen_range(30..60))).await;
+}

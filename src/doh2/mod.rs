@@ -33,6 +33,7 @@ pub async fn http2(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
                             "linear" => fragment::fragment_client_hello(tls, tcp).await,
                             "random" => fragment::fragment_client_hello_rand(tls, tcp).await,
                             "single" => fragment::fragment_client_hello_pack(tls, tcp).await,
+                            "jump" => fragment::fragment_client_hello_jump(tls, tcp).await,
                             _ => panic!("Invalid fragment method"),
                         }
                     });

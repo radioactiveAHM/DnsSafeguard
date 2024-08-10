@@ -66,10 +66,7 @@ The configuration file is structured in JSON format and includes the following s
 * `Server Name`: The domain name of the DNS server.
 * `Socket Addresses`: The IP address and port for the DNS server connection.
 * `UDP Socket Addresses`: Local UDP address and port for DNS queries.
-* `Fragmenting`: The fragmentation method to use during the TLS handshake has three valid values: `linear`, `random`, `single` and `jump`. Here’s what each method entails:
-  * Linear Method: This method sends three TLS client hello packets in three separate TCP segments.
-  * Random Method: In this approach, random TCP segments are used, each containing one TLS client hello packet.
-  * Single Method: With the single method, a single TCP segment carries two TLS client hello packets.
+* `Fragmenting`: The fragmentation method to use during the TLS handshake has three valid values: `linear`, `random`, `single` and `jump`.
 * `IPv6`: Contains IPv6 specific settings, similar to the IPv4 configuration.
 * `Quic`: Configuration for QUIC protocol.
   * `congestion_controller`: The congestion controller algorithm, options are `bbr`, `cubic` and `newreno`.
@@ -81,7 +78,6 @@ The configuration file is structured in JSON format and includes the following s
 ## Notes
 
 > [!WARNING]
-> Using self-modified verion of tokio-rustls.
 > Only TLS 1.3 supported for better performance.
 
 ## TLS Features

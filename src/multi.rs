@@ -1,7 +1,7 @@
 use std::sync::Arc;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::{io::{AsyncReadExt, AsyncWriteExt}, time::sleep};
 
-use crate::{c_len, catch_in_buff, config, fragment, tls};
+use crate::{c_len, catch_in_buff, config, fragment, tls, utils::tcp_connect_handle};
 
 pub async fn h1_multi(
     server_name: String,
@@ -33,11 +33,8 @@ pub async fn h1_multi(
         tokio::spawn(async move {
             let server_addr = sa;
             let task_rcv = recver_cln;
-            let mut connection_retry = 0u8;
+            let mut retry = 0u8;
             loop {
-                if connection_retry == 5 {
-                    panic!()
-                }
                 let tls_conn = tls_conn_gen(
                     sn.clone(),
                     server_addr.clone(),
@@ -46,12 +43,19 @@ pub async fn h1_multi(
                 )
                 .await;
                 if tls_conn.is_err() {
-                    println!("Connection {} TLS handshake failed. Retry", conn_i);
-                    connection_retry += 1;
+                    if retry==5{
+                        println!("Max retry reached. Sleeping for 1Min");
+                        sleep(std::time::Duration::from_secs(60)).await;
+                        retry=0;
+                        continue;
+                    }
+                    println!("{}",tls_conn.unwrap_err());
+                    retry+=1;
+                    sleep(std::time::Duration::from_secs(1)).await;
                     continue;
                 }
                 println!("HTTP/1.1 Connection {} Established", conn_i);
-                connection_retry = 0;
+                retry = 0;
                 let mut c = tls_conn.unwrap();
                 loop {
                     let mut package = Result::Err(crossbeam_channel::RecvError);
@@ -136,7 +140,7 @@ pub async fn tls_conn_gen(
     tokio_rustls::TlsConnector::from(ctls)
         .connect_with_stream(
             example_com,
-            tokio::net::TcpStream::connect(socket_addrs).await.unwrap(),
+            tcp_connect_handle(&socket_addrs).await,
             |tls, tcp| {
                 // Do fragmenting
                 if fragmenting.enable {

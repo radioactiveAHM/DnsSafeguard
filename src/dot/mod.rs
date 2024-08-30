@@ -1,6 +1,4 @@
 use std::sync::Arc;
-use std::time::Duration;
-
 use tokio::sync::Mutex;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::time::sleep;
@@ -17,9 +15,6 @@ pub async fn dot(
     let ctls = tls::tlsconf(vec![b"dot".to_vec()]);
     let mut retry = 0u8;
     loop {
-        if retry == 5 {
-            break;
-        }
         let tls_conn = tls_conn_gen(
             server_name.clone(),
             socket_addrs.to_string(),
@@ -28,13 +23,18 @@ pub async fn dot(
         )
         .await;
         if tls_conn.is_err() {
-            // If tls handshake failed retry
-            println!("TLS handshake failed");
-            retry += 1;
-            sleep(Duration::from_secs(1)).await;
+            if retry==5{
+                println!("Max retry reached. Sleeping for 1Min");
+                sleep(std::time::Duration::from_secs(60)).await;
+                retry=0;
+                continue;
+            }
+            println!("{}",tls_conn.unwrap_err());
+            retry+=1;
+            sleep(std::time::Duration::from_secs(1)).await;
             continue;
         }
-        println!("TLS Connection Established");
+        println!("DOT Connection Established");
         retry = 0;
 
         // Tls Client
@@ -94,14 +94,19 @@ pub async fn dot_nonblocking(
         )
         .await;
         if tls_conn.is_err() {
-            // If tls handshake failed retry
-            println!("TLS handshake failed");
-            retry += 1;
-            sleep(Duration::from_secs(1)).await;
+            if retry==5{
+                println!("Max retry reached. Sleeping for 1Min");
+                sleep(std::time::Duration::from_secs(60)).await;
+                retry=0;
+                continue;
+            }
+            println!("{}",tls_conn.unwrap_err());
+            retry+=1;
+            sleep(std::time::Duration::from_secs(1)).await;
             continue;
         }
+        println!("DOT Non-Blocking Connection Established");
         retry = 0;
-        println!("TLS Non-Blocking Connection Established");
 
         // Tls Client
         let (mut conn_r, mut conn_w) = tokio::io::split(tls_conn.unwrap());

@@ -1,23 +1,21 @@
 use h2::client::SendRequest;
+use tokio::time::sleep;
 use std::{net::SocketAddr, sync::Arc};
 use tokio:: sync::Mutex;
 use crate::fragment;
 
 use crate::config;
 use crate::tls;
+use crate::utils::tcp_connect_handle;
 
 pub async fn http2(server_name: String, socket_addrs: &str, udp_socket_addrs: &str, fragmenting: &config::Fragmenting) {
     // TLS Conf
     let h2tls = tls::tlsconf(vec![b"h2".to_vec()]);
-    let mut tls_retry = 0u8;
+    let mut retry = 0u8;
     loop {
-        if tls_retry == 5 {
-            println!("Cannot establish tls connection");
-            panic!();
-        }
         // TCP Connection
         // Panic if socket_addrs invalid
-        let tcp = tokio::net::TcpStream::connect(socket_addrs).await.unwrap();
+        let tcp = tcp_connect_handle(socket_addrs).await;
         println!("New H2 connection");
         
         let example_com = (server_name.clone())
@@ -41,13 +39,21 @@ pub async fn http2(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
             }
         }).await;
         if tls_conn.is_err() {
-            println!("TLS handshake failed. Retry {}", tls_retry);
-            tls_retry += 1;
+            if retry == 5{
+                println!("Max retry reached. Sleeping for 1Min");
+                sleep(std::time::Duration::from_secs(60)).await;
+                retry=0;
+                continue;
+            }
+            println!("TLS handshake failed. Retry {}", retry);
+            retry += 1;
+            sleep(std::time::Duration::from_secs(1)).await;
             continue;
         }
 
         let (client, h2_) = h2::client::handshake(tls_conn.unwrap()).await.unwrap();
         println!("H2 Connection Established");
+        retry = 0;
 
         // handle h2 low level connection
         tokio::spawn(async move {

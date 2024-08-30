@@ -5,7 +5,7 @@
 	"udp_socket_addrs": "127.0.0.1:53",
 	"fragmenting": {
 		"enable": true,
-		"method": "jump"
+		"method": "single"
 	},
 	"ipv6": {
 		"enable": true,
@@ -15,7 +15,7 @@
 		"udp_socket_addrs": "[::1]:53",
 		"fragmenting": {
 			"enable": true,
-			"method": "jump"
+			"method": "single"
 		}
 	},
 	"quic":{

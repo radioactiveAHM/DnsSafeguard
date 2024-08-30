@@ -1,6 +1,6 @@
 [package]
 name = "DnsSafeguard"
-version = "1.4.0"
+version = "1.4.1"
 edition = "2021"
 license = "Apache-2.0"
 description = "DnsSafeguard is dedicated to providing a secure DNS client solution, ensuring your DNS queries remain private and uncensored."
@@ -20,12 +20,12 @@ h3 = "0.0.6"
 http = "1.1"
 bytes = "1.7"
 base64-url = "3.0.0"
-h2 = "0.4.5"
+h2 = "0.4.6"
 tokio-rustls = { git = "https://github.com/radioactiveAHM/tokio-rustls.git", default-features = false, features = ["aws_lc_rs"] }
 crossbeam-channel = "0.5.13"
 
 [profile.release]
-panic = "unwind"
+panic = "abort"
 codegen-units = 1
 lto = true
 opt-level = "s"

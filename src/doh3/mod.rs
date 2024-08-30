@@ -10,20 +10,17 @@ use std::{
     sync::Arc
 };
 
-use rand::Rng;
-use tokio::sync::Mutex;
+use tokio::{sync::Mutex, time::sleep};
 
 use bytes::Buf;
 use h3::client::SendRequest;
 
 pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &str, quic_conf_file: crate::config::Quic) {
     let qaddress = {
-        let mut mr_randy = rand::rngs::OsRng;
-        let port = mr_randy.gen_range(4000..5000);
         if SocketAddr::from_str(socket_addrs).unwrap().is_ipv4() {
-            SocketAddr::from_str(format!("0.0.0.0:{port}").as_str()).unwrap()
+            SocketAddr::from_str("0.0.0.0:0").unwrap()
         }else if SocketAddr::from_str(socket_addrs).unwrap().is_ipv6() {
-            SocketAddr::from_str(format!("[::]:{port}").as_str()).unwrap()
+            SocketAddr::from_str("[::]:0").unwrap()
         } else {
             panic!()
         }
@@ -32,8 +29,10 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
     let mut endpoint = quinn::Endpoint::client(qaddress).unwrap();
     // Setup QUIC connection (QUIC Config)
     endpoint.set_default_client_config(quinn::ClientConfig::new(qtls::qtls("h3")).transport_config(transporter::tc(quic_conf_file)).to_owned());
+
+    let mut retry = 0u8;
     loop {
-        println!("New QUIC connection");
+        println!("QUIC Connecting");
         // Connect to dns server
         let connecting = endpoint.connect(SocketAddr::from_str(socket_addrs).unwrap(), server_name.as_str()).unwrap();
 
@@ -53,9 +52,20 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
         };
 
         if conn.is_err(){
-            println!("Failed to Established QUIC Connection");
+            if retry==5{
+                println!("Max retry reached. Sleeping for 1Min");
+                sleep(std::time::Duration::from_secs(60)).await;
+                retry=0;
+                continue;
+            }
+            println!("{}",conn.unwrap_err());
+            retry+=1;
+            sleep(std::time::Duration::from_secs(1)).await;
             continue;
         }
+
+        // QUIC Connection Established
+        retry=0;
 
         // HTTP/3 Client
         let (mut driver, h3) = h3::client::new(h3_quinn::Connection::new(conn.unwrap())).await.unwrap();

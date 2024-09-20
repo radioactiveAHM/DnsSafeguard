@@ -46,10 +46,12 @@ async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise)->quinn
 }
 
 pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &str, quic_conf_file: crate::config::Quic, noise: Noise) {
+    let socketddrs = SocketAddr::from_str(socket_addrs).unwrap();
+
     let qaddress = {
-        if SocketAddr::from_str(socket_addrs).unwrap().is_ipv4() {
+        if socketddrs.is_ipv4() {
             SocketAddr::from_str("0.0.0.0:0").unwrap()
-        }else if SocketAddr::from_str(socket_addrs).unwrap().is_ipv6() {
+        }else if socketddrs.is_ipv6() {
             SocketAddr::from_str("[::]:0").unwrap()
         } else {
             panic!()
@@ -58,7 +60,7 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
     // UDP socket as endpoint for quic
     let mut endpoint = {
         if noise.enable {
-            client_noise(qaddress, SocketAddr::from_str(socket_addrs).unwrap(), noise).await
+            client_noise(qaddress, socketddrs, noise).await
         }else {
             quinn::Endpoint::client(qaddress).unwrap()
         }
@@ -70,7 +72,7 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
     loop {
         println!("QUIC Connecting");
         // Connect to dns server
-        let connecting = endpoint.connect(SocketAddr::from_str(socket_addrs).unwrap(), server_name.as_str()).unwrap();
+        let connecting = endpoint.connect(socketddrs, server_name.as_str()).unwrap();
 
         let conn = {
             let connecting = connecting.into_0rtt();

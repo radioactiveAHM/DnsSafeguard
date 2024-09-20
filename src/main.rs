@@ -61,6 +61,7 @@ async fn main() {
                         &v6.socket_addrs,
                         &v6.udp_socket_addrs,
                         quic_conf_file_v6,
+                        v6.noise
                     )
                     .await
                 }
@@ -125,6 +126,7 @@ async fn main() {
                 &conf.socket_addrs,
                 &conf.udp_socket_addrs,
                 conf.quic,
+                conf.noise
             )
             .await
         }

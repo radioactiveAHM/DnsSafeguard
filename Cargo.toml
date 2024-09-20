@@ -1,6 +1,6 @@
 [package]
 name = "DnsSafeguard"
-version = "1.4.2"
+version = "1.5.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "DnsSafeguard is dedicated to providing a secure DNS client solution, ensuring your DNS queries remain private and uncensored."
@@ -9,7 +9,7 @@ repository = "https://github.com/radioactiveAHM/DnsSafeguard"
 categories = ["network-programming"]
 
 [dependencies]
-webpki-roots = "0.26.5"
+webpki-roots = "0.26.6"
 serde = { version = "1.0.210", features = ["derive"] }
 serde_json = "1.0.128"
 rand = "0.8.5"
@@ -18,11 +18,12 @@ tokio = { version = "1.40.0", features = ["rt-multi-thread", "net", "macros"] }
 h3-quinn = "0.0.7"
 h3 = "0.0.6"
 http = "1.1.0"
-bytes = "1.7.1"
+bytes = "1.7.2"
 base64-url = "3.0.0"
 h2 = "0.4.6"
 tokio-rustls = { git = "https://github.com/radioactiveAHM/tokio-rustls.git", default-features = false, features = ["aws_lc_rs"] }
 crossbeam-channel = "0.5.13"
+socket2 = "0.5.7"
 
 [profile.release]
 panic = "abort"

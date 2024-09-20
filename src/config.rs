@@ -4,6 +4,14 @@ pub struct Fragmenting {
     pub method: String,
 }
 
+#[derive(serde::Deserialize, Clone)]
+pub struct Noise {
+    pub enable: bool,
+    pub packet_length: usize,
+    pub packets: u8,
+    pub sleep: u64,
+}
+
 #[derive(serde::Deserialize)]
 pub struct Ipv6 {
     pub enable: bool,
@@ -12,15 +20,15 @@ pub struct Ipv6 {
     pub socket_addrs: String,
     pub udp_socket_addrs: String,
     pub fragmenting: Fragmenting,
+    pub noise: Noise,
 }
 
-#[derive(serde::Deserialize)]
-#[derive(Clone)]
+#[derive(serde::Deserialize, Clone)]
 pub struct Quic {
     pub congestion_controller: String,
     pub keep_alive_interval: u64,
     pub datagram_receive_buffer_size: usize,
-    pub datagram_send_buffer_size: usize
+    pub datagram_send_buffer_size: usize,
 }
 
 #[derive(serde::Deserialize)]
@@ -30,9 +38,10 @@ pub struct Config {
     pub socket_addrs: String,
     pub udp_socket_addrs: String,
     pub fragmenting: Fragmenting,
+    pub noise: Noise,
     pub ipv6: Ipv6,
     pub quic: Quic,
-    pub connections: u8
+    pub connections: u8,
 }
 
 pub fn load_config() -> Config {

@@ -10,12 +10,42 @@ use std::{
     sync::Arc
 };
 
+use rand::Rng;
 use tokio::{sync::Mutex, time::sleep};
 
 use bytes::Buf;
 use h3::client::SendRequest;
 
-pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &str, quic_conf_file: crate::config::Quic) {
+use crate::config::Noise;
+
+async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise)->quinn::Endpoint{
+    let socket = socket2::Socket::new(socket2::Domain::for_address(addr), socket2::Type::DGRAM, Some(socket2::Protocol::UDP)).unwrap();
+    socket.bind(&addr.into()).unwrap();
+
+    // send noises
+    println!("Sending noises...");
+    for _ in 0..noise.packets{
+        // generate random packet
+        let mut packet = [0u8;1024];
+        rand::thread_rng().fill(&mut packet);
+        // send packet
+        if socket.send_to(&packet[..noise.packet_length], &target.into()).unwrap_or(0)==0{
+            println!("Noise failed");
+        }
+        sleep(std::time::Duration::from_millis(noise.sleep)).await;
+    }
+
+    let runtime = quinn::default_runtime()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "no async runtime found")).unwrap();
+    quinn::Endpoint::new_with_abstract_socket(
+        quinn::EndpointConfig::default(),
+        None,
+        runtime.wrap_udp_socket(socket.into()).unwrap(),
+        runtime,
+    ).unwrap()
+}
+
+pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &str, quic_conf_file: crate::config::Quic, noise: Noise) {
     let qaddress = {
         if SocketAddr::from_str(socket_addrs).unwrap().is_ipv4() {
             SocketAddr::from_str("0.0.0.0:0").unwrap()
@@ -26,7 +56,13 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
         }
     };
     // UDP socket as endpoint for quic
-    let mut endpoint = quinn::Endpoint::client(qaddress).unwrap();
+    let mut endpoint = {
+        if noise.enable {
+            client_noise(qaddress, SocketAddr::from_str(socket_addrs).unwrap(), noise).await
+        }else {
+            quinn::Endpoint::client(qaddress).unwrap()
+        }
+    };
     // Setup QUIC connection (QUIC Config)
     endpoint.set_default_client_config(quinn::ClientConfig::new(qtls::qtls("h3")).transport_config(transporter::tc(quic_conf_file)).to_owned());
 

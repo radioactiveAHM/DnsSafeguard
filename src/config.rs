@@ -10,6 +10,8 @@ pub struct Noise {
     pub packet_length: usize,
     pub packets: u8,
     pub sleep: u64,
+    pub ntype: String,
+    pub content: String
 }
 
 #[derive(serde::Deserialize)]

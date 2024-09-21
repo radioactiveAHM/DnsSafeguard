@@ -9,9 +9,11 @@
 	},
 	"noise": {
 		"enable": true,
+		"ntype": "rand",
+		"content": "google.com",
 		"packet_length": 1,
 		"packets": 3,
-		"sleep": 50
+		"sleep": 500
 	},
 	"ipv6": {
 		"enable": false,
@@ -25,9 +27,11 @@
 		},
 		"noise": {
 			"enable": false,
+			"ntype": "rand",
+			"content": "google.com",
 			"packet_length": 1,
 			"packets": 3,
-			"sleep": 1000
+			"sleep": 500
 		}
 	},
 	"quic":{

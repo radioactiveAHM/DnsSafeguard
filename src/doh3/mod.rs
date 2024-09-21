@@ -1,5 +1,6 @@
 pub mod qtls;
 pub mod transporter;
+mod noise;
 
 use std::{
     borrow::BorrowMut,
@@ -10,7 +11,6 @@ use std::{
     sync::Arc
 };
 
-use rand::Rng;
 use tokio::{sync::Mutex, time::sleep};
 
 use bytes::Buf;
@@ -23,17 +23,7 @@ async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise)->quinn
     socket.bind(&addr.into()).unwrap();
 
     // send noises
-    println!("Sending noises...");
-    for _ in 0..noise.packets{
-        // generate random packet
-        let mut packet = [0u8;1024];
-        rand::thread_rng().fill(&mut packet);
-        // send packet
-        if socket.send_to(&packet[..noise.packet_length], &target.into()).unwrap_or(0)==0{
-            println!("Noise failed");
-        }
-        sleep(std::time::Duration::from_millis(noise.sleep)).await;
-    }
+    noise::noiser(noise, target, &socket).await;
 
     let runtime = quinn::default_runtime()
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "no async runtime found")).unwrap();

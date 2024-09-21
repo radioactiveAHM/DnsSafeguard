@@ -65,6 +65,10 @@ The configuration file is structured in JSON format and includes the following s
 * `Socket Addresses`: The IP address and port for the DNS server connection.
 * `UDP Socket Addresses`: Local UDP address and port for DNS queries.
 * `Fragmenting`: The fragmentation method to use during the TLS handshake has three valid values: `linear`, `random`, `single` and `jump`.
+* `Noise`: UDP noise setting.
+  * `packet_length`: Specifies the length of each noise packet in bytes.
+  * `packets`: Indicates the total number of UDP noise packets to send.
+  * `sleep`: Defines the sleep time (in milliseconds) after each UDP noise packet is sent.
 * `IPv6`: Contains IPv6 specific settings, similar to the IPv4 configuration.
 * `Quic`: Configuration for QUIC protocol.
   * `congestion_controller`: The congestion controller algorithm, options are `bbr`, `cubic` and `newreno`.

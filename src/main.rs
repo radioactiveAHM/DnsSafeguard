@@ -56,12 +56,14 @@ async fn main() {
                     .await
                 }
                 "h3" => {
+                    let connecting_timeout_sec = quic_conf_file_v6.connecting_timeout_sec;
                     doh3::http3(
                         v6.server_name,
                         &v6.socket_addrs,
                         &v6.udp_socket_addrs,
                         quic_conf_file_v6,
-                        v6.noise
+                        v6.noise,
+                        connecting_timeout_sec
                     )
                     .await
                 }
@@ -121,12 +123,14 @@ async fn main() {
             .await
         }
         "h3" => {
+            let connecting_timeout_sec = conf.quic.connecting_timeout_sec;
             doh3::http3(
                 conf.server_name,
                 &conf.socket_addrs,
                 &conf.udp_socket_addrs,
                 conf.quic,
-                conf.noise
+                conf.noise,
+                connecting_timeout_sec
             )
             .await
         }

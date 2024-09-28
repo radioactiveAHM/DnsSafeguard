@@ -11,7 +11,7 @@ use std::{
     sync::Arc
 };
 
-use tokio::{sync::Mutex, time::sleep};
+use tokio::{sync::Mutex, time::{sleep, timeout}};
 
 use bytes::Buf;
 use h3::client::SendRequest;
@@ -35,7 +35,7 @@ async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise)->quinn
     ).unwrap()
 }
 
-pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &str, quic_conf_file: crate::config::Quic, noise: Noise) {
+pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &str, quic_conf_file: crate::config::Quic, noise: Noise, connecting_timeout_sec: u64) {
     let socketddrs = SocketAddr::from_str(socket_addrs).unwrap();
 
     let qaddress = {
@@ -65,17 +65,25 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
         let connecting = endpoint.connect(socketddrs, server_name.as_str()).unwrap();
 
         let conn = {
-            let connecting = connecting.into_0rtt();
-            if let Ok((conn, rtt)) = connecting {
-                rtt.await;
-                println!("QUIC 0RTT Connection Established");
-                Ok(conn)
-            }else {
-                let conn = endpoint.connect(SocketAddr::from_str(socket_addrs).unwrap(), server_name.as_str()).unwrap().await;
-                if conn.is_ok(){
-                    println!("QUIC Connection Established");
+            let timing = timeout(std::time::Duration::from_secs(connecting_timeout_sec), async{
+                let connecting = connecting.into_0rtt();
+                if let Ok((conn, rtt)) = connecting {
+                    rtt.await;
+                    println!("QUIC 0RTT Connection Established");
+                    Ok(conn)
+                }else {
+                    let conn = endpoint.connect(SocketAddr::from_str(socket_addrs).unwrap(), server_name.as_str()).unwrap().await;
+                    if conn.is_ok(){
+                        println!("QUIC Connection Established");
+                    }
+                    conn
                 }
-                conn
+            }).await;
+
+            if let Ok(pending) = timing {
+                pending
+            } else {
+                continue;
             }
         };
 

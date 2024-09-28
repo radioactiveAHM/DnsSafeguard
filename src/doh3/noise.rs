@@ -128,6 +128,18 @@ pub mod lsd {
 }
 
 pub async fn noiser(noise: Noise, target: SocketAddr, socket: &socket2::Socket){
+
+    if noise.continues{
+        if let Ok(s) = socket.try_clone() {
+            let noise = noise.clone();
+            tokio::spawn(async move{
+                continues_noise(noise, target, s).await;
+            });
+        }else {
+            println!("continues unavailable");
+        }
+    }
+
     match noise.ntype.as_str() {
         "rand"=>{
             for _ in 0..noise.packets{
@@ -161,6 +173,46 @@ pub async fn noiser(noise: Noise, target: SocketAddr, socket: &socket2::Socket){
         },
         _=>{
             panic!("Invalid noise type");
+        }
+    }
+}
+
+async fn continues_noise(noise: Noise, target: SocketAddr, socket: socket2::Socket){
+    loop {        
+        match noise.ntype.as_str() {
+            "rand"=>{
+                for _ in 0..noise.packets{
+                    // generate random packet
+                    let mut packet = [0u8;1024];
+                    rand::thread_rng().fill(&mut packet);
+                    // send packet
+                    if socket.send_to(&packet[..noise.packet_length], &target.into()).unwrap_or(0)==0{
+                        println!("Noise failed");
+                    }
+                    sleep(std::time::Duration::from_millis(noise.sleep)).await;
+                }
+            },
+            "dns"=>{
+                if socket.send_to(&dns::DnsRcord::with_domain(&noise.content), &target.into()).unwrap_or(0)==0{
+                    println!("Noise failed");
+                }
+                sleep(std::time::Duration::from_millis(noise.sleep)).await;
+            },
+            "str"=>{
+                if socket.send_to(noise.content.as_bytes(), &target.into()).unwrap_or(0)==0{
+                    println!("Noise failed");
+                }
+                sleep(std::time::Duration::from_millis(noise.sleep)).await;
+            },
+            "lsd"=>{
+                if socket.send_to(&lsd::LSD::new(target).into_buffer(), &target.into()).unwrap_or(0)==0{
+                    println!("Noise failed");
+                }
+                sleep(std::time::Duration::from_millis(noise.sleep)).await;
+            },
+            _=>{
+                panic!("Invalid noise type");
+            }
         }
     }
 }

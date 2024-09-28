@@ -11,7 +11,8 @@ pub struct Noise {
     pub packets: u8,
     pub sleep: u64,
     pub ntype: String,
-    pub content: String
+    pub content: String,
+    pub continues: bool
 }
 
 #[derive(serde::Deserialize)]
@@ -31,6 +32,7 @@ pub struct Quic {
     pub keep_alive_interval: u64,
     pub datagram_receive_buffer_size: usize,
     pub datagram_send_buffer_size: usize,
+    pub connecting_timeout_sec: u64
 }
 
 #[derive(serde::Deserialize)]

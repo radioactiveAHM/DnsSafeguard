@@ -9,11 +9,12 @@
 	},
 	"noise": {
 		"enable": true,
-		"ntype": "lsd",
+		"ntype": "rand",
 		"content": "google.com",
 		"packet_length": 1,
-		"packets": 3,
-		"sleep": 5000
+		"packets": 1,
+		"sleep": 1000,
+		"continues": false
 	},
 	"ipv6": {
 		"enable": false,
@@ -31,14 +32,16 @@
 			"content": "google.com",
 			"packet_length": 1,
 			"packets": 3,
-			"sleep": 500
+			"sleep": 500,
+			"continues": false
 		}
 	},
 	"quic":{
 		"congestion_controller": "bbr",
 		"keep_alive_interval": 5,
 		"datagram_receive_buffer_size": 16777216,
-		"datagram_send_buffer_size": 8388608
+		"datagram_send_buffer_size": 8388608,
+		"connecting_timeout_sec": 2
 	},
 	"connections": 3
 }

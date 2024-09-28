@@ -82,6 +82,51 @@ pub mod dns {
     }
 }
 
+pub mod lsd {
+    use std::net::SocketAddr;
+
+    use rand::{distributions::{Alphanumeric, DistString}, thread_rng, Rng};
+
+    pub struct LSD<'a> {
+        // [13u8, 10] after each part
+        header: &'a str,
+        host: String,
+        port: String,
+        infohash:String,
+        cookie: String
+        // [13u8, 10, 13u8, 10, 13u8, 10]
+    }
+
+    impl<'a> LSD<'a> {
+        pub fn new(target: SocketAddr)->Self{
+            let mut rng = thread_rng();
+            LSD {
+                header: "BT-SEARCH * HTTP/1.1",
+                host: format!("Host: {}", target),
+                port: format!("Port: {}", rng.gen::<u16>()),
+                infohash: format!("Infohash: {}", Alphanumeric.sample_string(&mut rng, 40)),
+                cookie: format!("Cookie: {}", Alphanumeric.sample_string(&mut rng, 8))
+            }
+        }
+
+        pub fn into_buffer(&self)->Vec<u8>{
+            // I know &[13, 10] is same is \r\n but i liked this way :)
+            [
+                self.header.as_bytes(),
+                &[13, 10],
+                self.host.as_bytes(),
+                &[13, 10],
+                self.port.as_bytes(),
+                &[13, 10],
+                self.infohash.as_bytes(),
+                &[13, 10],
+                self.cookie.as_bytes(),
+                &[13, 10, 13, 10, 13, 10]
+            ].concat()
+        }
+    }
+}
+
 pub async fn noiser(noise: Noise, target: SocketAddr, socket: &socket2::Socket){
     match noise.ntype.as_str() {
         "rand"=>{
@@ -107,7 +152,13 @@ pub async fn noiser(noise: Noise, target: SocketAddr, socket: &socket2::Socket){
                 println!("Noise failed");
             }
             sleep(std::time::Duration::from_millis(noise.sleep)).await;
-        }
+        },
+        "lsd"=>{
+            if socket.send_to(&lsd::LSD::new(target).into_buffer(), &target.into()).unwrap_or(0)==0{
+                println!("Noise failed");
+            }
+            sleep(std::time::Duration::from_millis(noise.sleep)).await;
+        },
         _=>{
             panic!("Invalid noise type");
         }

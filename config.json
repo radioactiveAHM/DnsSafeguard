@@ -1,5 +1,5 @@
 {
-	"protocol":"h2",
+	"protocol":"h3",
 	"server_name": "cloudflare-dns.com",
 	"socket_addrs": "1.1.1.1:443",
 	"udp_socket_addrs": "127.0.0.1:53",
@@ -9,11 +9,11 @@
 	},
 	"noise": {
 		"enable": true,
-		"ntype": "rand",
+		"ntype": "lsd",
 		"content": "google.com",
 		"packet_length": 1,
 		"packets": 3,
-		"sleep": 500
+		"sleep": 5000
 	},
 	"ipv6": {
 		"enable": false,

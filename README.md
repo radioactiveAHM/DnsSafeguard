@@ -2,7 +2,7 @@
 
 # DnsSafeguard
 
-DnsSafeguard is a fast and secure DNS client written in Rust. It is designed to intercept DNS queries over a UDP socket and securely transmit them to a DNS server using DNS over HTTPS/TLS (DoH/DoT) protocols. Additionally, it employs TLS client hello fragmentation to bypass Great Firewall (GFW) censorship.
+DnsSafeguard is a fast and secure DNS client written in Rust. It is designed to intercept DNS queries over a UDP socket and securely transmit them to a DNS server using DNS over HTTPS/TLS (DoH/DoT) protocols. Additionally, it employs TLS client hello fragmentation and UDP Noise to bypass Great Firewall (GFW) censorship.
 
 Special thanks to the developers of [Rustls](https://github.com/rustls/rustls) for providing an excellent TLS framework.
 
@@ -12,7 +12,8 @@ Special thanks to the developers of [Rustls](https://github.com/rustls/rustls) f
 * **UDP Socket:** Captures DNS queries on a UDP socket.
 * **DoH Protocol:** Transmits DNS queries using the DoH protocol, supporting all HTTP versions (HTTP/1.1, H2, H3) for enhanced privacy.
 * **DoT Protocol:** Transmits DNS queries using the DoT protocol, featuring support for both blocking and non-blocking algorithms.
-* **Censorship Bypass:** Implements TLS client hello fragmentation with three possible methods to evade GFW censorship.
+* **Censorship Bypass:** Implements TLS client hello fragmentation with 4 possible methods to evade GFW TLS censorship.
+* **Customizable UDP Noise** Implements UDP Noise with four different types to bypass QUIC blocking.
 
 ## Roadmap
 
@@ -22,6 +23,7 @@ Special thanks to the developers of [Rustls](https://github.com/rustls/rustls) f
 * [x] **HTTP/2 TLS Fragmenting**
 * [x] **HTTP/1.1 Multi-Connection**
 * [x] **DNS over TLS (DOT) (Blocking & Non-Blocking)**
+* [x] **UDP Noise**
 
 ## Building the Project
 
@@ -66,15 +68,19 @@ The configuration file is structured in JSON format and includes the following s
 * `UDP Socket Addresses`: Local UDP address and port for DNS queries.
 * `Fragmenting`: The fragmentation method to use during the TLS handshake has three valid values: `linear`, `random`, `single` and `jump`.
 * `Noise`: UDP noise setting.
-  * `packet_length`: Specifies the length of each noise packet in bytes.
-  * `packets`: Indicates the total number of UDP noise packets to send.
+  * `ntype`: Noise type. Variants include `dns`, `str`, `lsd`, and `rand`.
+  * `content`: Domain for `dns` ntype. Text for `str` ntype.
+  * `packet_length`: Specifies the length of each noise packet in bytes for `rand` ntype.
+  * `packets`: Indicates the total number of UDP noise packets to send for `rand` ntype.
   * `sleep`: Defines the sleep time (in milliseconds) after each UDP noise packet is sent.
+  * `continues`: Enables continuous noise sending.
 * `IPv6`: Contains IPv6 specific settings, similar to the IPv4 configuration.
 * `Quic`: Configuration for QUIC protocol.
   * `congestion_controller`: The congestion controller algorithm, options are `bbr`, `cubic` and `newreno`.
   * `keep_alive_interval`: The interval in seconds to keep the connection alive, default is `5`.
   * `datagram_receive_buffer_size`: Size of the receive buffer for datagrams, default is `16777216`.
   * `datagram_send_buffer_size`: Size of the send buffer for datagrams, default is `8388608`.
+  * `connecting_timeout_sec`: Specifies the maximum connection timeout duration in seconds.
 * `Connections`: Number of connections for `h1 multi`.
 
 ## Notes
@@ -82,11 +88,6 @@ The configuration file is structured in JSON format and includes the following s
 > [!WARNING]
 > Only TLS 1.3 supported for better performance.
 
-## TLS Features
-
-* Brotli certificate compression
-* Tls client hello Fragmenting
-
 ## License
 
-This project is licensed under the Apache-2.0 License - see the LICENSE file for details.
+This project is licensed under the Apache *2.0 License - see the LICENSE file for details.

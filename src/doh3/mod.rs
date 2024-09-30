@@ -60,6 +60,13 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
 
     let mut retry = 0u8;
     loop {
+        if retry==5{
+            println!("Max retry reached. Sleeping for 1Min");
+            sleep(std::time::Duration::from_secs(60)).await;
+            retry=0;
+            continue;
+        }
+
         println!("QUIC Connecting");
         // Connect to dns server
         let connecting = endpoint.connect(socketddrs, server_name.as_str()).unwrap();
@@ -83,17 +90,13 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
             if let Ok(pending) = timing {
                 pending
             } else {
+                println!("Connecting timeout");
+                retry += 1;
                 continue;
             }
         };
 
         if conn.is_err(){
-            if retry==5{
-                println!("Max retry reached. Sleeping for 1Min");
-                sleep(std::time::Duration::from_secs(60)).await;
-                retry=0;
-                continue;
-            }
             println!("{}",conn.unwrap_err());
             retry+=1;
             sleep(std::time::Duration::from_secs(1)).await;
@@ -126,7 +129,7 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
             }
 
             // Recive dns query
-            let mut dns_query = [0u8; 768];
+            let mut dns_query = [0u8; 512];
             let udp = arc_udp.clone();
 
             if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
@@ -137,7 +140,8 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
                     let h3_stat = send_request(sn, h3, dq, addr, udp).await;
                     if let Err(e) = h3_stat {
                         // Handle what to do if diffrent errors
-                        if e.to_string() == "timeout" {
+                        let e_str = e.to_string();
+                        if &e_str == "timeout" || &e_str == "read zero" {
                             *(quic_conn_dead.lock().await) = true;
                         }
                     }
@@ -176,19 +180,14 @@ async fn send_request(
     if resp.status() == http::status::StatusCode::OK {
         // get body
         if let Some(body) = reqs.recv_data().await? {
-            let mut buff = [0; 768];
+            let mut buff = [0; 512];
             let body_len = body.reader().read(&mut buff).unwrap_or(0);
             // early drop
             if body_len == 0 {
-                return Ok(());
+                return Err(Box::new(tokio::io::Error::new(tokio::io::ErrorKind::ConnectionAborted, "read zero")));
             }
-            if udp
-                .send_to(&buff[..body_len], addr)
-                .await
-                .is_err()
-            {
-                return Ok(());
-            };
+
+            let _ = udp.send_to(&buff[..body_len], addr).await;
         }
     }
     Ok(())

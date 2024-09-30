@@ -8,7 +8,7 @@ use crate::config;
 use crate::tls;
 use crate::utils::tcp_connect_handle;
 
-pub async fn http2(server_name: String, socket_addrs: &str, udp_socket_addrs: &str, fragmenting: &config::Fragmenting) {
+pub async fn http2(server_name: String, socket_addrs: &str, udp_socket_addrs: &str, fragmenting: &config::Fragmenting, connection: config::Connection) {
     // TLS Conf
     let h2tls = tls::tlsconf(vec![b"h2".to_vec()]);
     let mut retry = 0u8;
@@ -39,15 +39,15 @@ pub async fn http2(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
             }
         }).await;
         if tls_conn.is_err() {
-            if retry == 5{
+            if retry==connection.max_reconnect{
                 println!("Max retry reached. Sleeping for 1Min");
-                sleep(std::time::Duration::from_secs(60)).await;
+                sleep(std::time::Duration::from_secs(connection.max_reconnect_sleep)).await;
                 retry=0;
                 continue;
             }
-            println!("TLS handshake failed. Retry {}", retry);
-            retry += 1;
-            sleep(std::time::Duration::from_secs(1)).await;
+            println!("{}",tls_conn.unwrap_err());
+            retry+=1;
+            sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
             continue;
         }
 

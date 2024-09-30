@@ -1,14 +1,14 @@
 use std::sync::Arc;
 use tokio::{io::{AsyncReadExt, AsyncWriteExt}, time::sleep};
 
-use crate::{c_len, catch_in_buff, config, fragment, tls, utils::tcp_connect_handle};
+use crate::{c_len, catch_in_buff, config::{self, Connection}, fragment, tls, utils::tcp_connect_handle};
 
 pub async fn h1_multi(
     server_name: String,
     socket_addrs: &str,
     udp_socket_addrs: &str,
     fragmenting: &config::Fragmenting,
-    connections: u8,
+    connection: Connection,
 ) {
     // TLS Client Config
     let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()]);
@@ -17,10 +17,10 @@ pub async fn h1_multi(
     let udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
 
     // Channels to send DNS query to one of task with http/1.1 connection
-    let (sender, recver) = crossbeam_channel::bounded(connections as usize);
+    let (sender, recver) = crossbeam_channel::bounded(connection.h1_multi_connections as usize);
 
     // Spawn Task for multiple connections
-    for conn_i in 0u8..connections {
+    for conn_i in 0u8..connection.h1_multi_connections {
         let recver_cln: crossbeam_channel::Receiver<(
             String,
             std::net::SocketAddr,
@@ -43,15 +43,15 @@ pub async fn h1_multi(
                 )
                 .await;
                 if tls_conn.is_err() {
-                    if retry==5{
+                    if retry==connection.max_reconnect{
                         println!("Max retry reached. Sleeping for 1Min");
-                        sleep(std::time::Duration::from_secs(60)).await;
+                        sleep(std::time::Duration::from_secs(connection.max_reconnect_sleep)).await;
                         retry=0;
                         continue;
                     }
                     println!("{}",tls_conn.unwrap_err());
                     retry+=1;
-                    sleep(std::time::Duration::from_secs(1)).await;
+                    sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
                     continue;
                 }
                 println!("HTTP/1.1 Connection {} Established", conn_i);

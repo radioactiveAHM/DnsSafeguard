@@ -43,5 +43,10 @@
 		"datagram_send_buffer_size": 8388608,
 		"connecting_timeout_sec": 2
 	},
-	"connections": 3
+	"connection": {
+		"h1_multi_connections": 3,
+		"reconnect_sleep": 1,
+		"max_reconnect": 5,
+		"max_reconnect_sleep": 30
+	}
 }

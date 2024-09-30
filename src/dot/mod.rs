@@ -11,6 +11,7 @@ pub async fn dot(
     socket_addrs: &str,
     udp_socket_addrs: &str,
     fragmenting: &config::Fragmenting,
+    connection: config::Connection
 ) {
     let ctls = tls::tlsconf(vec![b"dot".to_vec()]);
     let mut retry = 0u8;
@@ -23,15 +24,15 @@ pub async fn dot(
         )
         .await;
         if tls_conn.is_err() {
-            if retry==5{
+            if retry==connection.max_reconnect{
                 println!("Max retry reached. Sleeping for 1Min");
-                sleep(std::time::Duration::from_secs(60)).await;
+                sleep(std::time::Duration::from_secs(connection.max_reconnect_sleep)).await;
                 retry=0;
                 continue;
             }
             println!("{}",tls_conn.unwrap_err());
             retry+=1;
-            sleep(std::time::Duration::from_secs(1)).await;
+            sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
             continue;
         }
         println!("DOT Connection Established");
@@ -79,6 +80,7 @@ pub async fn dot_nonblocking(
     socket_addrs: &str,
     udp_socket_addrs: &str,
     fragmenting: &config::Fragmenting,
+    connection: config::Connection
 ) {
     let ctls = tls::tlsconf(vec![b"dot".to_vec()]);
     let mut retry = 0u8;
@@ -94,15 +96,15 @@ pub async fn dot_nonblocking(
         )
         .await;
         if tls_conn.is_err() {
-            if retry==5{
+            if retry==connection.max_reconnect{
                 println!("Max retry reached. Sleeping for 1Min");
-                sleep(std::time::Duration::from_secs(60)).await;
+                sleep(std::time::Duration::from_secs(connection.max_reconnect_sleep)).await;
                 retry=0;
                 continue;
             }
             println!("{}",tls_conn.unwrap_err());
             retry+=1;
-            sleep(std::time::Duration::from_secs(1)).await;
+            sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
             continue;
         }
         println!("DOT Non-Blocking Connection Established");

@@ -33,7 +33,7 @@ async fn main() {
                         &v6.socket_addrs,
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
-                        conf.connections,
+                        conf.connection,
                     )
                     .await
                 }
@@ -43,6 +43,7 @@ async fn main() {
                         &v6.socket_addrs,
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
+                        conf.connection,
                     )
                     .await
                 }
@@ -52,6 +53,7 @@ async fn main() {
                         &v6.socket_addrs,
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
+                        conf.connection,
                     )
                     .await
                 }
@@ -63,7 +65,8 @@ async fn main() {
                         &v6.udp_socket_addrs,
                         quic_conf_file_v6,
                         v6.noise,
-                        connecting_timeout_sec
+                        connecting_timeout_sec,
+                        conf.connection,
                     )
                     .await
                 }
@@ -73,6 +76,7 @@ async fn main() {
                         &v6.socket_addrs,
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
+                        conf.connection,
                     )
                     .await;
                 }
@@ -82,6 +86,7 @@ async fn main() {
                         &v6.socket_addrs,
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
+                        conf.connection,
                     )
                     .await;
                 }
@@ -100,7 +105,7 @@ async fn main() {
                 &conf.socket_addrs,
                 &conf.udp_socket_addrs,
                 &conf.fragmenting,
-                conf.connections,
+                conf.connection,
             )
             .await
         }
@@ -110,6 +115,7 @@ async fn main() {
                 &conf.socket_addrs,
                 &conf.udp_socket_addrs,
                 &conf.fragmenting,
+                conf.connection,
             )
             .await
         }
@@ -119,6 +125,7 @@ async fn main() {
                 &conf.socket_addrs,
                 &conf.udp_socket_addrs,
                 &conf.fragmenting,
+                conf.connection,
             )
             .await
         }
@@ -130,7 +137,8 @@ async fn main() {
                 &conf.udp_socket_addrs,
                 conf.quic,
                 conf.noise,
-                connecting_timeout_sec
+                connecting_timeout_sec,
+                conf.connection,
             )
             .await
         }
@@ -140,6 +148,7 @@ async fn main() {
                 &conf.socket_addrs,
                 &conf.udp_socket_addrs,
                 &conf.fragmenting,
+                conf.connection,
             )
             .await;
         }
@@ -149,6 +158,7 @@ async fn main() {
                 &conf.socket_addrs,
                 &conf.udp_socket_addrs,
                 &conf.fragmenting,
+                conf.connection,
             )
             .await;
         }
@@ -164,6 +174,7 @@ async fn http1(
     socket_addrs: &str,
     udp_socket_addrs: &str,
     fragmenting: &config::Fragmenting,
+    connection: config::Connection
 ) {
     // TLS Client
     let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()]);
@@ -197,15 +208,15 @@ async fn http1(
             })
             .await;
         if tls_conn.is_err() {
-            if retry==5{
+            if retry==connection.max_reconnect{
                 println!("Max retry reached. Sleeping for 1Min");
-                sleep(std::time::Duration::from_secs(60)).await;
+                sleep(std::time::Duration::from_secs(connection.max_reconnect_sleep)).await;
                 retry=0;
                 continue;
             }
             println!("{}",tls_conn.unwrap_err());
             retry+=1;
-            sleep(std::time::Duration::from_secs(1)).await;
+            sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
             continue;
         }
 

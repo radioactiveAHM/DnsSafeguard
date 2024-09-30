@@ -35,6 +35,14 @@ pub struct Quic {
     pub connecting_timeout_sec: u64
 }
 
+#[derive(serde::Deserialize, Clone, Copy)]
+pub struct Connection {
+    pub h1_multi_connections: u8,
+    pub reconnect_sleep: u64,
+    pub max_reconnect: u8,
+    pub max_reconnect_sleep: u64
+}
+
 #[derive(serde::Deserialize)]
 pub struct Config {
     pub protocol: String,
@@ -45,7 +53,7 @@ pub struct Config {
     pub noise: Noise,
     pub ipv6: Ipv6,
     pub quic: Quic,
-    pub connections: u8,
+    pub connection: Connection,
 }
 
 pub fn load_config() -> Config {

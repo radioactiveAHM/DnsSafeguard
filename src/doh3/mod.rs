@@ -16,7 +16,7 @@ use tokio::{sync::Mutex, time::{sleep, timeout}};
 use bytes::Buf;
 use h3::client::SendRequest;
 
-use crate::config::Noise;
+use crate::config::{self, Noise};
 
 async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise)->quinn::Endpoint{
     let socket = socket2::Socket::new(socket2::Domain::for_address(addr), socket2::Type::DGRAM, Some(socket2::Protocol::UDP)).unwrap();
@@ -35,13 +35,11 @@ async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise)->quinn
     ).unwrap()
 }
 
-pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &str, quic_conf_file: crate::config::Quic, noise: Noise, connecting_timeout_sec: u64) {
-    let socketddrs = SocketAddr::from_str(socket_addrs).unwrap();
-
+async fn udp_setup(socketadrs: SocketAddr, noise: Noise, quic_conf_file: crate::config::Quic) -> quinn::Endpoint{
     let qaddress = {
-        if socketddrs.is_ipv4() {
+        if socketadrs.is_ipv4() {
             SocketAddr::from_str("0.0.0.0:0").unwrap()
-        }else if socketddrs.is_ipv6() {
+        }else if socketadrs.is_ipv6() {
             SocketAddr::from_str("[::]:0").unwrap()
         } else {
             panic!()
@@ -50,7 +48,7 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
     // UDP socket as endpoint for quic
     let mut endpoint = {
         if noise.enable {
-            client_noise(qaddress, socketddrs, noise).await
+            client_noise(qaddress, socketadrs, noise).await
         }else {
             quinn::Endpoint::client(qaddress).unwrap()
         }
@@ -58,18 +56,27 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
     // Setup QUIC connection (QUIC Config)
     endpoint.set_default_client_config(quinn::ClientConfig::new(qtls::qtls("h3")).transport_config(transporter::tc(quic_conf_file)).to_owned());
 
+    return endpoint;
+}
+
+pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &str, quic_conf_file: config::Quic, noise: Noise, connecting_timeout_sec: u64, connection: config::Connection) {
+    let socketadrs = SocketAddr::from_str(socket_addrs).unwrap();
+    let mut endpoint = udp_setup(socketadrs, noise.clone(), quic_conf_file.clone()).await;
+
     let mut retry = 0u8;
     loop {
-        if retry==5{
-            println!("Max retry reached. Sleeping for 1Min");
-            sleep(std::time::Duration::from_secs(60)).await;
+        if retry==connection.max_reconnect{
+            println!("Max retry reached. Sleeping for 30 seconds");
+            sleep(std::time::Duration::from_secs(connection.max_reconnect_sleep)).await;
             retry=0;
+            // on windows when pc goes sleep the endpoint config is fucked up
+            endpoint = udp_setup(socketadrs, noise.clone(), quic_conf_file.clone()).await;
             continue;
         }
 
         println!("QUIC Connecting");
         // Connect to dns server
-        let connecting = endpoint.connect(socketddrs, server_name.as_str()).unwrap();
+        let connecting = endpoint.connect(socketadrs, server_name.as_str()).unwrap();
 
         let conn = {
             let timing = timeout(std::time::Duration::from_secs(connecting_timeout_sec), async{
@@ -99,7 +106,7 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
         if conn.is_err(){
             println!("{}",conn.unwrap_err());
             retry+=1;
-            sleep(std::time::Duration::from_secs(1)).await;
+            sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
             continue;
         }
 

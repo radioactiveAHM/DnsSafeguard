@@ -126,6 +126,7 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
         // prepare for atomic
         let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
         let dead_conn = Arc::new(Mutex::new(false));
+        let arc_sn = Arc::new(server_name.clone());
 
         loop {
             // Check if Connection is dead
@@ -140,9 +141,9 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
             let udp = arc_udp.clone();
 
             if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
-                let dq = dns_query[..query_size].to_owned();
+                let dq = (dns_query, query_size);
                 let h3 = h3.clone();
-                let sn = server_name.clone();
+                let sn = arc_sn.clone();
                 tokio::spawn(async move {
                     let h3_stat = send_request(sn, h3, dq, addr, udp).await;
                     if let Err(e) = h3_stat {
@@ -161,17 +162,16 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
 }
 
 async fn send_request(
-    server_name: String,
+    server_name: Arc<String>,
     mut h3: SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
-    dns_query: Vec<u8>,
+    dns_query: ([u8;512],usize),
     addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
 ) -> Result<(), Box<dyn std::error::Error + Send>> {
-    let query_base64url = base64_url::encode(&dns_query);
 
     let req = http::Request::get(format!(
         "https://{}/dns-query?dns={}",
-        server_name, query_base64url
+        server_name, base64_url::encode(&dns_query.0[..dns_query.1])
     ))
     .header("Accept", "application/dns-message")
     .body(())

@@ -113,7 +113,7 @@ pub async fn h1_multi(
 
     // Recv DNS queries and send to tasks using channel
     loop {
-        let mut dns_query = [0u8; 768];
+        let mut dns_query = [0u8; 512];
         let udp_arc = udp.clone();
 
         if let Ok((query_size, addr)) = udp_arc.recv_from(&mut dns_query).await {

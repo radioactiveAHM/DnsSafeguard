@@ -66,6 +66,7 @@ pub async fn http2(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
         // prepare atomic
         let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
         let dead_conn = Arc::new(Mutex::new(false));
+        let arc_sn = Arc::new(server_name.clone());
 
         loop {
             // Check if Connection is dead
@@ -75,17 +76,17 @@ pub async fn http2(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
             }
 
             // Recive dns query
-            let mut dns_query = [0u8; 768];
+            let mut dns_query = [0u8; 512];
             let udp_arc = arc_udp.clone();
 
             if let Ok((query_size, addr)) = udp_arc.recv_from(&mut dns_query).await{
                 // Base64url dns query
-                let query_base64url = base64_url::encode(&dns_query[..query_size]);
+                let dq = (dns_query, query_size);
                 let h2_client = client.clone();
-                let sn = server_name.clone();
+                let sn = arc_sn.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
-                    if let Err(e) = send_req(sn, query_base64url, h2_client, addr, udp_arc).await {
+                    if let Err(e) = send_req(sn, dq, h2_client, addr, udp_arc).await {
                         let error = e.to_string();
                         println!("{}", error);
                         temp = true;
@@ -103,8 +104,8 @@ pub async fn http2(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
 }
 
 async fn send_req(
-    server_name: String,
-    query_base64url: String,
+    server_name: Arc<String>,
+    dns_query: ([u8;512],usize),
     mut h2_client: SendRequest<bytes::Bytes>,
     addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
@@ -112,7 +113,7 @@ async fn send_req(
     // HTTP Request
     let req = http::Request::get(format!(
         "https://{}/dns-query?dns={}",
-        server_name, query_base64url
+        server_name, base64_url::encode(&dns_query.0[..dns_query.1])
     ))
     .header("Accept", "application/dns-message")
     .body(())?;

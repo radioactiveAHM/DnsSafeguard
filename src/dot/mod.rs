@@ -45,7 +45,7 @@ pub async fn dot(
 
         loop {
             // Recv dns query
-            let mut query = [0; 768];
+            let mut query = [0; 512];
             if let Ok((query_size, addr)) = udp.recv_from(&mut query).await {
                 // DNS query with two u8 size which is required by DOT
                 // Size of dns Query as two u8
@@ -60,7 +60,7 @@ pub async fn dot(
                 }
 
                 // Recv DOT query
-                let mut resp_dot_query = [0; 768];
+                let mut resp_dot_query = [0; 512];
                 if let Ok(resp_dot_query_size) = conn.read(&mut resp_dot_query).await {
                     udp.send_to(&resp_dot_query[2..(resp_dot_query_size)], addr)
                         .await
@@ -126,7 +126,7 @@ pub async fn dot_nonblocking(
             let udp = arc_udp;
             loop {
                 // Recv DOT query
-                let mut resp_dot_query = [0; 768];
+                let mut resp_dot_query = [0; 512];
                 if let Ok(resp_dot_query_size) = conn_r.read(&mut resp_dot_query).await {
                     let query = &resp_dot_query[2..(resp_dot_query_size)];
                     let query_id = convert_two_u8s_to_u16_be([query[0], query[1]]);
@@ -149,7 +149,7 @@ pub async fn dot_nonblocking(
                 break;
             }
             // Recv dns query
-            let mut query = [0; 768];
+            let mut query = [0; 512];
             if let Ok((query_size, addr)) = udp.recv_from(&mut query).await {
                 // DNS query with two u8 size which is required by DOT
                 // Size of dns Query as two u8

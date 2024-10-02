@@ -12,7 +12,7 @@ pub struct Noise {
     pub sleep: u64,
     pub ntype: String,
     pub content: String,
-    pub continues: bool
+    pub continues: bool,
 }
 
 #[derive(serde::Deserialize)]
@@ -32,7 +32,7 @@ pub struct Quic {
     pub keep_alive_interval: u64,
     pub datagram_receive_buffer_size: usize,
     pub datagram_send_buffer_size: usize,
-    pub connecting_timeout_sec: u64
+    pub connecting_timeout_sec: u64,
 }
 
 #[derive(serde::Deserialize, Clone, Copy)]
@@ -40,7 +40,7 @@ pub struct Connection {
     pub h1_multi_connections: u8,
     pub reconnect_sleep: u64,
     pub max_reconnect: u8,
-    pub max_reconnect_sleep: u64
+    pub max_reconnect_sleep: u64,
 }
 
 #[derive(serde::Deserialize)]

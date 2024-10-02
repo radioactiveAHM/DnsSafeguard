@@ -10,7 +10,10 @@ mod utils;
 use std::sync::Arc;
 
 use multi::h1_multi;
-use tokio::{io::{AsyncReadExt, AsyncWriteExt}, time::sleep};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    time::sleep,
+};
 use utils::tcp_connect_handle;
 
 #[tokio::main]
@@ -174,7 +177,7 @@ async fn http1(
     socket_addrs: &str,
     udp_socket_addrs: &str,
     fragmenting: &config::Fragmenting,
-    connection: config::Connection
+    connection: config::Connection,
 ) {
     // TLS Client
     let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()]);
@@ -208,14 +211,17 @@ async fn http1(
             })
             .await;
         if tls_conn.is_err() {
-            if retry==connection.max_reconnect{
+            if retry == connection.max_reconnect {
                 println!("Max retry reached. Sleeping for 1Min");
-                sleep(std::time::Duration::from_secs(connection.max_reconnect_sleep)).await;
-                retry=0;
+                sleep(std::time::Duration::from_secs(
+                    connection.max_reconnect_sleep,
+                ))
+                .await;
+                retry = 0;
                 continue;
             }
-            println!("{}",tls_conn.unwrap_err());
-            retry+=1;
+            println!("{}", tls_conn.unwrap_err());
+            retry += 1;
             sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
             continue;
         }

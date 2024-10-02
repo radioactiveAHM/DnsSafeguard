@@ -13,14 +13,14 @@ pub async fn tcp_connect_handle(socket_addrs: &str) -> TcpStream {
     let mut retry = 0u8;
     loop {
         match tokio::net::TcpStream::connect(socket_addrs).await {
-            Ok(stream)=>{
+            Ok(stream) => {
                 return stream;
             }
-            Err(e)=>{
-                if retry == 5{
+            Err(e) => {
+                if retry == 5 {
                     println!("Max retry reached. Sleeping for 1Min");
                     sleep(std::time::Duration::from_secs(60)).await;
-                    retry=0;
+                    retry = 0;
                     continue;
                 }
                 println!("{}", e);

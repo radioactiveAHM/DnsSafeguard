@@ -1,45 +1,52 @@
+mod noise;
 pub mod qtls;
 pub mod transporter;
-mod noise;
 
-use std::{
-    borrow::BorrowMut,
-    future,
-    io::Read,
-    net::SocketAddr,
-    str::FromStr,
-    sync::Arc
+use std::{borrow::BorrowMut, future, io::Read, net::SocketAddr, str::FromStr, sync::Arc};
+
+use tokio::{
+    sync::Mutex,
+    time::{sleep, timeout},
 };
-
-use tokio::{sync::Mutex, time::{sleep, timeout}};
 
 use bytes::Buf;
 use h3::client::SendRequest;
 
 use crate::config::{self, Noise};
 
-async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise)->quinn::Endpoint{
-    let socket = socket2::Socket::new(socket2::Domain::for_address(addr), socket2::Type::DGRAM, Some(socket2::Protocol::UDP)).unwrap();
+async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise) -> quinn::Endpoint {
+    let socket = socket2::Socket::new(
+        socket2::Domain::for_address(addr),
+        socket2::Type::DGRAM,
+        Some(socket2::Protocol::UDP),
+    )
+    .unwrap();
     socket.bind(&addr.into()).unwrap();
 
     // send noises
     noise::noiser(noise, target, &socket).await;
 
     let runtime = quinn::default_runtime()
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "no async runtime found")).unwrap();
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "no async runtime found"))
+        .unwrap();
     quinn::Endpoint::new_with_abstract_socket(
         quinn::EndpointConfig::default(),
         None,
         runtime.wrap_udp_socket(socket.into()).unwrap(),
         runtime,
-    ).unwrap()
+    )
+    .unwrap()
 }
 
-async fn udp_setup(socketadrs: SocketAddr, noise: Noise, quic_conf_file: crate::config::Quic) -> quinn::Endpoint{
+async fn udp_setup(
+    socketadrs: SocketAddr,
+    noise: Noise,
+    quic_conf_file: crate::config::Quic,
+) -> quinn::Endpoint {
     let qaddress = {
         if socketadrs.is_ipv4() {
             SocketAddr::from_str("0.0.0.0:0").unwrap()
-        }else if socketadrs.is_ipv6() {
+        } else if socketadrs.is_ipv6() {
             SocketAddr::from_str("[::]:0").unwrap()
         } else {
             panic!()
@@ -49,26 +56,41 @@ async fn udp_setup(socketadrs: SocketAddr, noise: Noise, quic_conf_file: crate::
     let mut endpoint = {
         if noise.enable {
             client_noise(qaddress, socketadrs, noise).await
-        }else {
+        } else {
             quinn::Endpoint::client(qaddress).unwrap()
         }
     };
     // Setup QUIC connection (QUIC Config)
-    endpoint.set_default_client_config(quinn::ClientConfig::new(qtls::qtls("h3")).transport_config(transporter::tc(quic_conf_file)).to_owned());
+    endpoint.set_default_client_config(
+        quinn::ClientConfig::new(qtls::qtls("h3"))
+            .transport_config(transporter::tc(quic_conf_file))
+            .to_owned(),
+    );
 
-    return endpoint;
+    endpoint
 }
 
-pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &str, quic_conf_file: config::Quic, noise: Noise, connecting_timeout_sec: u64, connection: config::Connection) {
+pub async fn http3(
+    server_name: String,
+    socket_addrs: &str,
+    udp_socket_addrs: &str,
+    quic_conf_file: config::Quic,
+    noise: Noise,
+    connecting_timeout_sec: u64,
+    connection: config::Connection,
+) {
     let socketadrs = SocketAddr::from_str(socket_addrs).unwrap();
     let mut endpoint = udp_setup(socketadrs, noise.clone(), quic_conf_file.clone()).await;
 
     let mut retry = 0u8;
     loop {
-        if retry==connection.max_reconnect{
+        if retry == connection.max_reconnect {
             println!("Max retry reached. Sleeping for 30 seconds");
-            sleep(std::time::Duration::from_secs(connection.max_reconnect_sleep)).await;
-            retry=0;
+            sleep(std::time::Duration::from_secs(
+                connection.max_reconnect_sleep,
+            ))
+            .await;
+            retry = 0;
             // on windows when pc goes sleep the endpoint config is fucked up
             endpoint = udp_setup(socketadrs, noise.clone(), quic_conf_file.clone()).await;
             continue;
@@ -79,20 +101,30 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
         let connecting = endpoint.connect(socketadrs, server_name.as_str()).unwrap();
 
         let conn = {
-            let timing = timeout(std::time::Duration::from_secs(connecting_timeout_sec), async{
-                let connecting = connecting.into_0rtt();
-                if let Ok((conn, rtt)) = connecting {
-                    rtt.await;
-                    println!("QUIC 0RTT Connection Established");
-                    Ok(conn)
-                }else {
-                    let conn = endpoint.connect(SocketAddr::from_str(socket_addrs).unwrap(), server_name.as_str()).unwrap().await;
-                    if conn.is_ok(){
-                        println!("QUIC Connection Established");
+            let timing = timeout(
+                std::time::Duration::from_secs(connecting_timeout_sec),
+                async {
+                    let connecting = connecting.into_0rtt();
+                    if let Ok((conn, rtt)) = connecting {
+                        rtt.await;
+                        println!("QUIC 0RTT Connection Established");
+                        Ok(conn)
+                    } else {
+                        let conn = endpoint
+                            .connect(
+                                SocketAddr::from_str(socket_addrs).unwrap(),
+                                server_name.as_str(),
+                            )
+                            .unwrap()
+                            .await;
+                        if conn.is_ok() {
+                            println!("QUIC Connection Established");
+                        }
+                        conn
                     }
-                    conn
-                }
-            }).await;
+                },
+            )
+            .await;
 
             if let Ok(pending) = timing {
                 pending
@@ -103,18 +135,20 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
             }
         };
 
-        if conn.is_err(){
-            println!("{}",conn.unwrap_err());
-            retry+=1;
+        if conn.is_err() {
+            println!("{}", conn.unwrap_err());
+            retry += 1;
             sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
             continue;
         }
 
         // QUIC Connection Established
-        retry=0;
+        retry = 0;
 
         // HTTP/3 Client
-        let (mut driver, h3) = h3::client::new(h3_quinn::Connection::new(conn.unwrap())).await.unwrap();
+        let (mut driver, h3) = h3::client::new(h3_quinn::Connection::new(conn.unwrap()))
+            .await
+            .unwrap();
         let drive = async move {
             future::poll_fn(|cx| driver.poll_close(cx)).await?;
             Ok::<(), Box<dyn std::error::Error + Send>>(())
@@ -154,7 +188,7 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
                         }
                     }
                 });
-            }else {
+            } else {
                 println!("Failed to recv DNS Query");
             }
         }
@@ -164,14 +198,14 @@ pub async fn http3(server_name: String, socket_addrs: &str, udp_socket_addrs: &s
 async fn send_request(
     server_name: Arc<String>,
     mut h3: SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
-    dns_query: ([u8;512],usize),
+    dns_query: ([u8; 512], usize),
     addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
 ) -> Result<(), Box<dyn std::error::Error + Send>> {
-
     let req = http::Request::get(format!(
         "https://{}/dns-query?dns={}",
-        server_name, base64_url::encode(&dns_query.0[..dns_query.1])
+        server_name,
+        base64_url::encode(&dns_query.0[..dns_query.1])
     ))
     .header("Accept", "application/dns-message")
     .body(())
@@ -191,7 +225,10 @@ async fn send_request(
             let body_len = body.reader().read(&mut buff).unwrap_or(0);
             // early drop
             if body_len == 0 {
-                return Err(Box::new(tokio::io::Error::new(tokio::io::ErrorKind::ConnectionAborted, "read zero")));
+                return Err(Box::new(tokio::io::Error::new(
+                    tokio::io::ErrorKind::ConnectionAborted,
+                    "read zero",
+                )));
             }
 
             let _ = udp.send_to(&buff[..body_len], addr).await;

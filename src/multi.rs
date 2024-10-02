@@ -1,7 +1,15 @@
 use std::sync::Arc;
-use tokio::{io::{AsyncReadExt, AsyncWriteExt}, time::sleep};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    time::sleep,
+};
 
-use crate::{c_len, catch_in_buff, config::{self, Connection}, fragment, tls, utils::tcp_connect_handle};
+use crate::{
+    c_len, catch_in_buff,
+    config::{self, Connection},
+    fragment, tls,
+    utils::tcp_connect_handle,
+};
 
 pub async fn h1_multi(
     server_name: String,
@@ -43,14 +51,17 @@ pub async fn h1_multi(
                 )
                 .await;
                 if tls_conn.is_err() {
-                    if retry==connection.max_reconnect{
+                    if retry == connection.max_reconnect {
                         println!("Max retry reached. Sleeping for 1Min");
-                        sleep(std::time::Duration::from_secs(connection.max_reconnect_sleep)).await;
-                        retry=0;
+                        sleep(std::time::Duration::from_secs(
+                            connection.max_reconnect_sleep,
+                        ))
+                        .await;
+                        retry = 0;
                         continue;
                     }
-                    println!("{}",tls_conn.unwrap_err());
-                    retry+=1;
+                    println!("{}", tls_conn.unwrap_err());
+                    retry += 1;
                     sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
                     continue;
                 }

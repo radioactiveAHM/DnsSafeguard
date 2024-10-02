@@ -1,6 +1,6 @@
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::sync::Mutex;
 use tokio::time::sleep;
 
 use crate::utils::convert_two_u8s_to_u16_be;
@@ -11,7 +11,7 @@ pub async fn dot(
     socket_addrs: &str,
     udp_socket_addrs: &str,
     fragmenting: &config::Fragmenting,
-    connection: config::Connection
+    connection: config::Connection,
 ) {
     let ctls = tls::tlsconf(vec![b"dot".to_vec()]);
     let mut retry = 0u8;
@@ -24,14 +24,17 @@ pub async fn dot(
         )
         .await;
         if tls_conn.is_err() {
-            if retry==connection.max_reconnect{
+            if retry == connection.max_reconnect {
                 println!("Max retry reached. Sleeping for 1Min");
-                sleep(std::time::Duration::from_secs(connection.max_reconnect_sleep)).await;
-                retry=0;
+                sleep(std::time::Duration::from_secs(
+                    connection.max_reconnect_sleep,
+                ))
+                .await;
+                retry = 0;
                 continue;
             }
-            println!("{}",tls_conn.unwrap_err());
-            retry+=1;
+            println!("{}", tls_conn.unwrap_err());
+            retry += 1;
             sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
             continue;
         }
@@ -80,12 +83,12 @@ pub async fn dot_nonblocking(
     socket_addrs: &str,
     udp_socket_addrs: &str,
     fragmenting: &config::Fragmenting,
-    connection: config::Connection
+    connection: config::Connection,
 ) {
     let ctls = tls::tlsconf(vec![b"dot".to_vec()]);
     let mut retry = 0u8;
     loop {
-        if retry==5 {
+        if retry == 5 {
             panic!();
         }
         let tls_conn = tls_conn_gen(
@@ -96,14 +99,17 @@ pub async fn dot_nonblocking(
         )
         .await;
         if tls_conn.is_err() {
-            if retry==connection.max_reconnect{
+            if retry == connection.max_reconnect {
                 println!("Max retry reached. Sleeping for 1Min");
-                sleep(std::time::Duration::from_secs(connection.max_reconnect_sleep)).await;
-                retry=0;
+                sleep(std::time::Duration::from_secs(
+                    connection.max_reconnect_sleep,
+                ))
+                .await;
+                retry = 0;
                 continue;
             }
-            println!("{}",tls_conn.unwrap_err());
-            retry+=1;
+            println!("{}", tls_conn.unwrap_err());
+            retry += 1;
             sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
             continue;
         }
@@ -116,12 +122,13 @@ pub async fn dot_nonblocking(
         let udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
 
         // Hold dns message ID with it's dns resolver Addr to match
-        let waiters: Arc<Mutex<Vec<(u16, std::net::SocketAddr)>>> = Arc::new(Mutex::new(Vec::new()));
+        let waiters: Arc<Mutex<Vec<(u16, std::net::SocketAddr)>>> =
+            Arc::new(Mutex::new(Vec::new()));
 
         // Task to Recv from DOT
         let arc_waiters = Arc::clone(&waiters);
         let arc_udp = udp.clone();
-        let task = tokio::spawn(async move{
+        let task = tokio::spawn(async move {
             let waiters = arc_waiters;
             let udp = arc_udp;
             loop {
@@ -130,11 +137,15 @@ pub async fn dot_nonblocking(
                 if let Ok(resp_dot_query_size) = conn_r.read(&mut resp_dot_query).await {
                     let query = &resp_dot_query[2..(resp_dot_query_size)];
                     let query_id = convert_two_u8s_to_u16_be([query[0], query[1]]);
-                    
+
                     // match the response with DNS message ID
                     let mut waiters_lock = waiters.lock().await;
-                    if let Some(waiter) = waiters_lock.iter().position(|waiter| waiter.0==query_id) {
-                        udp.send_to(query, waiters_lock[waiter].1).await.unwrap_or(0);
+                    if let Some(waiter) =
+                        waiters_lock.iter().position(|waiter| waiter.0 == query_id)
+                    {
+                        udp.send_to(query, waiters_lock[waiter].1)
+                            .await
+                            .unwrap_or(0);
                         waiters_lock.swap_remove(waiter);
                     }
                 } else {
@@ -165,7 +176,10 @@ pub async fn dot_nonblocking(
                 }
 
                 // Push DNS message ID and UDP resolver addr to waiter
-                waiters.lock().await.push((convert_two_u8s_to_u16_be([query[0], query[1]]), addr))
+                waiters
+                    .lock()
+                    .await
+                    .push((convert_two_u8s_to_u16_be([query[0], query[1]]), addr))
             }
         }
     }

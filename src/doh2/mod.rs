@@ -1,4 +1,3 @@
-use crate::config::Rules;
 use crate::fragment;
 use crate::rule::rulecheck;
 use h2::client::SendRequest;
@@ -16,7 +15,7 @@ pub async fn http2(
     udp_socket_addrs: &str,
     fragmenting: &config::Fragmenting,
     connection: config::Connection,
-    rule: Rules,
+    rule: crate::Rules,
 ) {
     let arc_rule = Arc::new(rule);
     // TLS Conf

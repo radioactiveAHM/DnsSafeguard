@@ -12,7 +12,7 @@ use tokio::{
 use bytes::Buf;
 use h3::client::SendRequest;
 
-use crate::{config::{self, Noise, Rules}, rule::rulecheck};
+use crate::{config::{self, Noise}, rule::rulecheck};
 
 async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise) -> quinn::Endpoint {
     let socket = socket2::Socket::new(
@@ -78,7 +78,7 @@ pub async fn http3(
     noise: Noise,
     connecting_timeout_sec: u64,
     connection: config::Connection,
-    rule: Rules,
+    rule: crate::Rules,
 ) {
     let arc_rule = Arc::new(rule);
     let socketadrs = SocketAddr::from_str(socket_addrs).unwrap();

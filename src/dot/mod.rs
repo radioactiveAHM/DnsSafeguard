@@ -3,7 +3,6 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 
-use crate::config::Rules;
 use crate::rule::rulecheck;
 use crate::utils::convert_two_u8s_to_u16_be;
 use crate::{config, multi::tls_conn_gen, tls, utils::convert_u16_to_two_u8s_be};
@@ -14,7 +13,7 @@ pub async fn dot(
     udp_socket_addrs: &str,
     fragmenting: &config::Fragmenting,
     connection: config::Connection,
-    rule: Rules,
+    rule: crate::Rules,
 ) {
     let arc_rule = Arc::new(rule);
     let ctls = tls::tlsconf(vec![b"dot".to_vec()]);
@@ -94,7 +93,7 @@ pub async fn dot_nonblocking(
     udp_socket_addrs: &str,
     fragmenting: &config::Fragmenting,
     connection: config::Connection,
-    rule: Rules,
+    rule: crate::Rules,
 ) {
     let arc_rule = Arc::new(rule);
     let ctls = tls::tlsconf(vec![b"dot".to_vec()]);

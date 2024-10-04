@@ -5,7 +5,7 @@ use tokio::{
 };
 
 use crate::{
-    c_len, catch_in_buff, config::{self, Connection, Rules}, fragment, rule::rulecheck, tls, utils::tcp_connect_handle
+    c_len, catch_in_buff, config::{self, Connection}, fragment, rule::rulecheck, tls, utils::tcp_connect_handle
 };
 
 pub async fn h1_multi(
@@ -14,7 +14,7 @@ pub async fn h1_multi(
     udp_socket_addrs: &str,
     fragmenting: &config::Fragmenting,
     connection: Connection,
-    rule: Rules,
+    rule: crate::Rules,
 ) {
     let arc_rule = Arc::new(rule);
     // TLS Client Config

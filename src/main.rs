@@ -10,7 +10,6 @@ mod rule;
 
 use std::sync::Arc;
 
-use config::Rules;
 use multi::h1_multi;
 use rule::rulecheck;
 use tokio::{
@@ -18,6 +17,45 @@ use tokio::{
     time::sleep,
 };
 use utils::tcp_connect_handle;
+
+#[derive(Clone)]
+pub struct Rule{
+    pub options: Vec<Vec<u8>>,
+    pub target: String
+}
+#[derive(Clone)]
+pub struct Rules{
+    pub enable: bool,
+    pub rule: Vec<Rule>
+}
+fn convert_rules(config_rules: config::Rules)->Rules{
+    let r = config_rules.rule.iter().map(|config_rule|{
+        let options = config_rule.options.iter().map(|option|{
+            if option.contains("."){
+                let mut temp = Vec::new();
+                for p in option.split("."){
+                    let mut ptemp = p.as_bytes().to_vec();
+                    ptemp.insert(0, p.len() as u8);
+                    temp.append(&mut ptemp);
+                }
+
+                temp
+            }else {
+                option.as_bytes().to_vec()
+            }
+        }).collect();
+
+        Rule {
+            options,
+            target: config_rule.target.clone()
+        }
+    }).collect();
+
+    Rules {
+        enable: config_rules.enable,
+        rule: r
+    }
+}
 
 #[tokio::main]
 async fn main() {
@@ -27,10 +65,12 @@ async fn main() {
     // Load config
     // If config file does not exist or malformed, panic occurs.
     let conf = config::load_config();
+    // Convert rules to adjust domains like dns query and improve performance
+    let rules = convert_rules(conf.rules);
 
     let v6 = conf.ipv6;
     let quic_conf_file_v6 = conf.quic.clone();
-    let rules = conf.rules.clone();
+    let v6rules = rules.clone();
     tokio::spawn(async move {
         if v6.enable {
             match v6.protocol.as_str() {
@@ -41,7 +81,7 @@ async fn main() {
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
-                        rules
+                        v6rules
                     )
                     .await
                 }
@@ -52,7 +92,7 @@ async fn main() {
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
-                        rules
+                        v6rules
                     )
                     .await
                 }
@@ -63,7 +103,7 @@ async fn main() {
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
-                        rules
+                        v6rules
                     )
                     .await
                 }
@@ -77,7 +117,7 @@ async fn main() {
                         v6.noise,
                         connecting_timeout_sec,
                         conf.connection,
-                        rules
+                        v6rules
                     )
                     .await
                 }
@@ -88,7 +128,7 @@ async fn main() {
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
-                        rules
+                        v6rules
                     )
                     .await;
                 }
@@ -99,7 +139,7 @@ async fn main() {
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
-                        rules
+                        v6rules
                     )
                     .await;
                 }
@@ -119,7 +159,7 @@ async fn main() {
                 &conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
-                conf.rules
+                rules
             )
             .await
         }
@@ -130,7 +170,7 @@ async fn main() {
                 &conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
-                conf.rules
+                rules
             )
             .await
         }
@@ -141,7 +181,7 @@ async fn main() {
                 &conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
-                conf.rules
+                rules
             )
             .await
         }
@@ -155,7 +195,7 @@ async fn main() {
                 conf.noise,
                 connecting_timeout_sec,
                 conf.connection,
-                conf.rules
+                rules
             )
             .await
         }
@@ -166,7 +206,7 @@ async fn main() {
                 &conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
-                conf.rules
+                rules
             )
             .await;
         }
@@ -177,7 +217,7 @@ async fn main() {
                 &conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
-                conf.rules
+                rules
             )
             .await;
         }

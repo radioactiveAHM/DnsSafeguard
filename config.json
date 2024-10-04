@@ -55,7 +55,6 @@
 			{
 				"options": [
 					"googlesyndication",
-					"analytics",
 					"analytic",
 					"googletagmanager"
 				],

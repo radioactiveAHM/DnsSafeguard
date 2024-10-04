@@ -3,6 +3,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 
+use crate::config::Rules;
+use crate::rule::rulecheck;
 use crate::utils::convert_two_u8s_to_u16_be;
 use crate::{config, multi::tls_conn_gen, tls, utils::convert_u16_to_two_u8s_be};
 
@@ -12,7 +14,9 @@ pub async fn dot(
     udp_socket_addrs: &str,
     fragmenting: &config::Fragmenting,
     connection: config::Connection,
+    rule: Rules,
 ) {
+    let arc_rule = Arc::new(rule);
     let ctls = tls::tlsconf(vec![b"dot".to_vec()]);
     let mut retry = 0u8;
     loop {
@@ -44,12 +48,18 @@ pub async fn dot(
         // Tls Client
         let mut conn = tls_conn.unwrap();
         // UDP Server to recv dns query
-        let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
+        let udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
 
         loop {
             // Recv dns query
             let mut query = [0; 512];
             if let Ok((query_size, addr)) = udp.recv_from(&mut query).await {
+                // rule check
+                if arc_rule.enable {
+                    if rulecheck(arc_rule.clone(), (query,query_size), addr, udp.clone()).await {
+                        continue;
+                    }
+                }
                 // DNS query with two u8 size which is required by DOT
                 // Size of dns Query as two u8
                 let dot_size = convert_u16_to_two_u8s_be(query_size as u16);
@@ -84,7 +94,9 @@ pub async fn dot_nonblocking(
     udp_socket_addrs: &str,
     fragmenting: &config::Fragmenting,
     connection: config::Connection,
+    rule: Rules,
 ) {
+    let arc_rule = Arc::new(rule);
     let ctls = tls::tlsconf(vec![b"dot".to_vec()]);
     let mut retry = 0u8;
     loop {
@@ -162,6 +174,12 @@ pub async fn dot_nonblocking(
             // Recv dns query
             let mut query = [0; 512];
             if let Ok((query_size, addr)) = udp.recv_from(&mut query).await {
+                // rule check
+                if arc_rule.enable {
+                    if rulecheck(arc_rule.clone(), (query,query_size), addr, udp.clone()).await {
+                        continue;
+                    }
+                }
                 // DNS query with two u8 size which is required by DOT
                 // Size of dns Query as two u8
                 let dot_size = convert_u16_to_two_u8s_be(query_size as u16);

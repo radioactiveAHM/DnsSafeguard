@@ -43,6 +43,18 @@ pub struct Connection {
     pub max_reconnect_sleep: u64,
 }
 
+#[derive(serde::Deserialize, Clone)]
+pub struct Rule{
+    pub options: Vec<String>,
+    pub target: String
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub struct Rules{
+    pub enable: bool,
+    pub rule: Vec<Rule>
+}
+
 #[derive(serde::Deserialize)]
 pub struct Config {
     pub protocol: String,
@@ -54,6 +66,7 @@ pub struct Config {
     pub ipv6: Ipv6,
     pub quic: Quic,
     pub connection: Connection,
+    pub rules: Rules
 }
 
 pub fn load_config() -> Config {

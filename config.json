@@ -48,5 +48,18 @@
 		"reconnect_sleep": 1,
 		"max_reconnect": 5,
 		"max_reconnect_sleep": 30
+	},
+	"rules":{
+		"enable":true,
+		"rule":[
+			{
+				"options": ["googlesyndication","analytics"],
+				"target": "block"
+			},
+			{
+				"options": ["chatgpt"],
+				"target": "10.202.10.202:53"
+			}
+		]
 	}
 }

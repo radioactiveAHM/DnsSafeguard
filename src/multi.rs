@@ -5,10 +5,7 @@ use tokio::{
 };
 
 use crate::{
-    c_len, catch_in_buff,
-    config::{self, Connection},
-    fragment, tls,
-    utils::tcp_connect_handle,
+    c_len, catch_in_buff, config::{self, Connection, Rules}, fragment, rule::rulecheck, tls, utils::tcp_connect_handle
 };
 
 pub async fn h1_multi(
@@ -17,7 +14,9 @@ pub async fn h1_multi(
     udp_socket_addrs: &str,
     fragmenting: &config::Fragmenting,
     connection: Connection,
+    rule: Rules,
 ) {
+    let arc_rule = Arc::new(rule);
     // TLS Client Config
     let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()]);
 
@@ -128,6 +127,13 @@ pub async fn h1_multi(
         let udp_arc = udp.clone();
 
         if let Ok((query_size, addr)) = udp_arc.recv_from(&mut dns_query).await {
+            // rule check
+            if arc_rule.enable {
+                if rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp_arc.clone()).await {
+                    continue;
+                }
+            }
+            
             let qb4: String = base64_url::encode(&dns_query[..query_size]);
             tokio::task::block_in_place(|| {
                 if sender.send((qb4, addr, udp_arc)).is_err() {

@@ -6,10 +6,13 @@ mod fragment;
 mod multi;
 mod tls;
 mod utils;
+mod rule;
 
 use std::sync::Arc;
 
+use config::Rules;
 use multi::h1_multi;
+use rule::rulecheck;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     time::sleep,
@@ -27,6 +30,7 @@ async fn main() {
 
     let v6 = conf.ipv6;
     let quic_conf_file_v6 = conf.quic.clone();
+    let rules = conf.rules.clone();
     tokio::spawn(async move {
         if v6.enable {
             match v6.protocol.as_str() {
@@ -37,6 +41,7 @@ async fn main() {
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
+                        rules
                     )
                     .await
                 }
@@ -47,6 +52,7 @@ async fn main() {
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
+                        rules
                     )
                     .await
                 }
@@ -57,6 +63,7 @@ async fn main() {
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
+                        rules
                     )
                     .await
                 }
@@ -70,6 +77,7 @@ async fn main() {
                         v6.noise,
                         connecting_timeout_sec,
                         conf.connection,
+                        rules
                     )
                     .await
                 }
@@ -80,6 +88,7 @@ async fn main() {
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
+                        rules
                     )
                     .await;
                 }
@@ -90,6 +99,7 @@ async fn main() {
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
+                        rules
                     )
                     .await;
                 }
@@ -109,6 +119,7 @@ async fn main() {
                 &conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
+                conf.rules
             )
             .await
         }
@@ -119,6 +130,7 @@ async fn main() {
                 &conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
+                conf.rules
             )
             .await
         }
@@ -129,6 +141,7 @@ async fn main() {
                 &conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
+                conf.rules
             )
             .await
         }
@@ -142,6 +155,7 @@ async fn main() {
                 conf.noise,
                 connecting_timeout_sec,
                 conf.connection,
+                conf.rules
             )
             .await
         }
@@ -152,6 +166,7 @@ async fn main() {
                 &conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
+                conf.rules
             )
             .await;
         }
@@ -162,6 +177,7 @@ async fn main() {
                 &conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
+                conf.rules
             )
             .await;
         }
@@ -178,7 +194,9 @@ async fn http1(
     udp_socket_addrs: &str,
     fragmenting: &config::Fragmenting,
     connection: config::Connection,
+    rule: Rules,
 ) {
+    let arc_rule = Arc::new(rule);
     // TLS Client
     let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()]);
 
@@ -231,15 +249,21 @@ async fn http1(
 
         let mut c = tls_conn.unwrap();
         // UDP socket to listen for DNS query
-        let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
+        let udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
 
         loop {
-            let mut dns_query = [0u8; 768];
+            let mut dns_query = [0u8; 512];
             let udp_ok = udp.recv_from(&mut dns_query).await;
             if udp_ok.is_err() {
                 continue;
             }
             let (query_size, addr) = udp_ok.unwrap();
+            // rule check
+            if arc_rule.enable {
+                if rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp.clone()).await {
+                    continue;
+                }
+            }
             let query_base64url = base64_url::encode(&dns_query[..query_size]);
 
             let http_req = [

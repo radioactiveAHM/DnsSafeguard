@@ -1,4 +1,6 @@
+use crate::config::Rules;
 use crate::fragment;
+use crate::rule::rulecheck;
 use h2::client::SendRequest;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::Mutex;
@@ -14,7 +16,9 @@ pub async fn http2(
     udp_socket_addrs: &str,
     fragmenting: &config::Fragmenting,
     connection: config::Connection,
+    rule: Rules,
 ) {
+    let arc_rule = Arc::new(rule);
     // TLS Conf
     let h2tls = tls::tlsconf(vec![b"h2".to_vec()]);
     let mut retry = 0u8;
@@ -91,6 +95,13 @@ pub async fn http2(
             let udp_arc = arc_udp.clone();
 
             if let Ok((query_size, addr)) = udp_arc.recv_from(&mut dns_query).await {
+                // rule check
+                if arc_rule.enable {
+                    if rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp_arc.clone()).await {
+                        continue;
+                    }
+                }
+
                 // Base64url dns query
                 let dq = (dns_query, query_size);
                 let h2_client = client.clone();

@@ -12,7 +12,7 @@ use tokio::{
 use bytes::Buf;
 use h3::client::SendRequest;
 
-use crate::config::{self, Noise};
+use crate::{config::{self, Noise, Rules}, rule::rulecheck};
 
 async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise) -> quinn::Endpoint {
     let socket = socket2::Socket::new(
@@ -78,7 +78,9 @@ pub async fn http3(
     noise: Noise,
     connecting_timeout_sec: u64,
     connection: config::Connection,
+    rule: Rules,
 ) {
+    let arc_rule = Arc::new(rule);
     let socketadrs = SocketAddr::from_str(socket_addrs).unwrap();
     let mut endpoint = udp_setup(socketadrs, noise.clone(), quic_conf_file.clone()).await;
 
@@ -175,6 +177,13 @@ pub async fn http3(
             let udp = arc_udp.clone();
 
             if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
+                // rule check
+                if arc_rule.enable {
+                    if rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp.clone()).await {
+                        continue;
+                    }
+                }
+                
                 let dq = (dns_query, query_size);
                 let h3 = h3.clone();
                 let sn = arc_sn.clone();

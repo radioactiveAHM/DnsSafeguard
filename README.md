@@ -2,7 +2,7 @@
 
 # DnsSafeguard
 
-DnsSafeguard is a fast and secure DNS client written in Rust. It is designed to intercept DNS queries over a UDP socket and securely transmit them to a DNS server using DNS over HTTPS/TLS (DoH/DoT) protocols. Additionally, it employs TLS client hello fragmentation and UDP Noise to bypass Great Firewall (GFW) censorship.
+DnsSafeguard is a fast and secure DNS client written in Rust. It is designed to intercept DNS queries over a UDP socket and securely transmit them to a DNS server using DNS over HTTPS/TLS/QUIC (DoH/DoT/DoQ) protocols. Additionally, it employs TLS client hello fragmentation and UDP Noise to bypass Great Firewall (GFW) censorship.
 
 Special thanks to the developers of [Rustls](https://github.com/rustls/rustls) for providing an excellent TLS framework.
 
@@ -12,6 +12,7 @@ Special thanks to the developers of [Rustls](https://github.com/rustls/rustls) f
 * **UDP Socket:** Captures DNS queries on a UDP socket.
 * **DoH Protocol:** Transmits DNS queries using the DoH protocol, supporting all HTTP versions (HTTP/1.1, H2, H3) for enhanced privacy.
 * **DoT Protocol:** Transmits DNS queries using the DoT protocol, featuring support for both blocking and non-blocking algorithms.
+* **DoQ Protocol:** Transmits DNS queries using the DoQ protocol, which is highly secure, efficient, and avoids head-of-line blocking.
 * **Censorship Bypass:** Implements TLS client hello fragmentation with 4 possible methods to evade GFW TLS censorship.
 * **Customizable UDP Noise** Implements UDP Noise with four different types to bypass QUIC blocking.
 
@@ -24,6 +25,7 @@ Special thanks to the developers of [Rustls](https://github.com/rustls/rustls) f
 * [x] **HTTP/1.1 Multi-Connection**
 * [x] **DNS over TLS (DOT) (Blocking & Non-Blocking)**
 * [x] **UDP Noise**
+* [x] **DNS over QUIC (DOQ)**
 
 ## Building the Project
 
@@ -63,6 +65,7 @@ The configuration file is structured in JSON format and includes the following s
   * `h3`: HTTP/3 Connection (does not support fragmenting).
   * `dot`: DOT Connection (DNS over TLS).
   * `dot nonblocking`: DOT Non-Blocking Connection (DNS over TLS).
+  * `doq`: DoQ Connection (DNS over QUIC).
 * `Server Name`: The domain name of the DNS server.
 * `Socket Addresses`: The IP address and port for the DNS server connection.
 * `UDP Socket Addresses`: Local UDP address and port for DNS queries.
@@ -77,11 +80,20 @@ The configuration file is structured in JSON format and includes the following s
 * `IPv6`: Contains IPv6 specific settings, similar to the IPv4 configuration.
 * `Quic`: Configuration for QUIC protocol.
   * `congestion_controller`: The congestion controller algorithm, options are `bbr`, `cubic` and `newreno`.
-  * `keep_alive_interval`: The interval in seconds to keep the connection alive, default is `5`.
-  * `datagram_receive_buffer_size`: Size of the receive buffer for datagrams, default is `16777216`.
-  * `datagram_send_buffer_size`: Size of the send buffer for datagrams, default is `8388608`.
+  * `keep_alive_interval`: The interval in seconds to keep the connection alive.
+  * `datagram_receive_buffer_size`: Size of the receive buffer for datagrams.
+  * `datagram_send_buffer_size`: Size of the send buffer for datagrams.
   * `connecting_timeout_sec`: Specifies the maximum connection timeout duration in seconds.
-* `Connections`: Number of connections for `h1 multi`.
+* `Connection`: Connection settings.
+  * `h1_multi_connections`: Number of connections for the `h1 multi` protocol.
+  * `reconnect_sleep`: Duration to sleep before reconnecting (in seconds).
+  * `max_reconnect`: Maximum reconnect attempts before sleeping for a longer duration.
+  * `max_reconnect_sleep`: Duration to sleep when the maximum reconnect attempts are reached.
+* `rules`: Block or bypass DNS queries containing specified domains or keywords.
+  * `enable`: Enable or disable rules.
+  * `rule`: List of defined rules.
+    * `options`: List of domains or keywords.
+    * `target`: Can be `block` or a DNS server providing plaintext UDP protocol (e.g., 1.1.1.1:53).
 
 ## Notes
 

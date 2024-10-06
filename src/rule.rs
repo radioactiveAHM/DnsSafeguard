@@ -10,7 +10,6 @@ pub async fn rulecheck(
     client_addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
 ) -> bool {
-    println!("meow");
     for rule in &rules.rule {
         if rule.target=="block"{
             for option in &rule.options {

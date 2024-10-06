@@ -95,10 +95,8 @@ pub async fn http2(
 
             if let Ok((query_size, addr)) = udp_arc.recv_from(&mut dns_query).await {
                 // rule check
-                if arc_rule.enable {
-                    if rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp_arc.clone()).await {
-                        continue;
-                    }
+                if arc_rule.enable && rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp_arc.clone()).await{
+                    continue;
                 }
 
                 // Base64url dns query

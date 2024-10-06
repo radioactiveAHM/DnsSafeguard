@@ -14,7 +14,7 @@ use h3::client::SendRequest;
 
 use crate::{config::{self, Noise}, rule::rulecheck};
 
-async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise) -> quinn::Endpoint {
+pub async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise) -> quinn::Endpoint {
     let socket = socket2::Socket::new(
         socket2::Domain::for_address(addr),
         socket2::Type::DGRAM,
@@ -38,10 +38,11 @@ async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise) -> qui
     .unwrap()
 }
 
-async fn udp_setup(
+pub async fn udp_setup(
     socketadrs: SocketAddr,
     noise: Noise,
     quic_conf_file: crate::config::Quic,
+    alpn: &str
 ) -> quinn::Endpoint {
     let qaddress = {
         if socketadrs.is_ipv4() {
@@ -62,7 +63,7 @@ async fn udp_setup(
     };
     // Setup QUIC connection (QUIC Config)
     endpoint.set_default_client_config(
-        quinn::ClientConfig::new(qtls::qtls("h3"))
+        quinn::ClientConfig::new(qtls::qtls(alpn))
             .transport_config(transporter::tc(quic_conf_file))
             .to_owned(),
     );
@@ -82,7 +83,7 @@ pub async fn http3(
 ) {
     let arc_rule = Arc::new(rule);
     let socketadrs = SocketAddr::from_str(socket_addrs).unwrap();
-    let mut endpoint = udp_setup(socketadrs, noise.clone(), quic_conf_file.clone()).await;
+    let mut endpoint = udp_setup(socketadrs, noise.clone(), quic_conf_file.clone(), "h3").await;
 
     let mut retry = 0u8;
     loop {
@@ -94,7 +95,7 @@ pub async fn http3(
             .await;
             retry = 0;
             // on windows when pc goes sleep the endpoint config is fucked up
-            endpoint = udp_setup(socketadrs, noise.clone(), quic_conf_file.clone()).await;
+            endpoint = udp_setup(socketadrs, noise.clone(), quic_conf_file.clone(), "h3").await;
             continue;
         }
 
@@ -178,23 +179,21 @@ pub async fn http3(
 
             if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
                 // rule check
-                if arc_rule.enable {
-                    if rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp.clone()).await {
-                        continue;
-                    }
+                if arc_rule.enable && rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp.clone()).await {
+                    continue;
                 }
                 
                 let dq = (dns_query, query_size);
                 let h3 = h3.clone();
                 let sn = arc_sn.clone();
                 tokio::spawn(async move {
-                    let h3_stat = send_request(sn, h3, dq, addr, udp).await;
-                    if let Err(e) = h3_stat {
-                        // Handle what to do if diffrent errors
-                        let e_str = e.to_string();
-                        if &e_str == "timeout" || &e_str == "read zero" {
-                            *(quic_conn_dead.lock().await) = true;
-                        }
+                    let mut temp = false;
+                    if let Err(e) = send_request(sn, h3, dq, addr, udp).await {
+                        println!("{}", e);
+                        temp = true;
+                    }
+                    if temp {
+                        *(quic_conn_dead.lock().await) = true;
                     }
                 });
             } else {
@@ -210,7 +209,7 @@ async fn send_request(
     dns_query: ([u8; 512], usize),
     addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
-) -> Result<(), Box<dyn std::error::Error + Send>> {
+) -> Result<(), Box<dyn std::error::Error>> {
     let req = http::Request::get(format!(
         "https://{}/dns-query?dns={}",
         server_name,
@@ -231,15 +230,7 @@ async fn send_request(
         // get body
         if let Some(body) = reqs.recv_data().await? {
             let mut buff = [0; 512];
-            let body_len = body.reader().read(&mut buff).unwrap_or(0);
-            // early drop
-            if body_len == 0 {
-                return Err(Box::new(tokio::io::Error::new(
-                    tokio::io::ErrorKind::ConnectionAborted,
-                    "read zero",
-                )));
-            }
-
+            let body_len = body.reader().read(&mut buff)?;
             let _ = udp.send_to(&buff[..body_len], addr).await;
         }
     }

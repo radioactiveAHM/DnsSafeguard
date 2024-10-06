@@ -7,6 +7,7 @@ mod multi;
 mod tls;
 mod utils;
 mod rule;
+mod doq;
 
 use std::sync::Arc;
 
@@ -142,6 +143,19 @@ async fn main() {
                         v6rules
                     )
                     .await;
+                },
+                "doq"=>{
+                    let connecting_timeout_sec = quic_conf_file_v6.connecting_timeout_sec;
+                    doq::doq(
+                        v6.server_name,
+                        &v6.socket_addrs,
+                        &v6.udp_socket_addrs,
+                        quic_conf_file_v6,
+                        v6.noise,
+                        connecting_timeout_sec,
+                        conf.connection,
+                        v6rules
+                    ).await;
                 }
                 _ => {
                     println!("Invalid http version");
@@ -221,6 +235,19 @@ async fn main() {
             )
             .await;
         }
+        "doq"=>{
+            let connecting_timeout_sec = conf.quic.connecting_timeout_sec;
+            doq::doq(
+                conf.server_name,
+                &conf.socket_addrs,
+                &conf.udp_socket_addrs,
+                conf.quic,
+                conf.noise,
+                connecting_timeout_sec,
+                conf.connection,
+                rules
+            ).await;
+        }
         _ => {
             println!("Invalid http version");
             panic!();
@@ -299,10 +326,8 @@ async fn http1(
             }
             let (query_size, addr) = udp_ok.unwrap();
             // rule check
-            if arc_rule.enable {
-                if rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp.clone()).await {
-                    continue;
-                }
+            if arc_rule.enable && rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp.clone()).await {
+                continue;
             }
             let query_base64url = base64_url::encode(&dns_query[..query_size]);
 

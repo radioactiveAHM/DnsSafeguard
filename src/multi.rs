@@ -128,10 +128,8 @@ pub async fn h1_multi(
 
         if let Ok((query_size, addr)) = udp_arc.recv_from(&mut dns_query).await {
             // rule check
-            if arc_rule.enable {
-                if rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp_arc.clone()).await {
-                    continue;
-                }
+            if arc_rule.enable && rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp_arc.clone()).await{
+                continue;
             }
             
             let qb4: String = base64_url::encode(&dns_query[..query_size]);

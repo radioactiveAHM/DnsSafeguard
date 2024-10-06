@@ -28,7 +28,7 @@ pub mod dns {
     }
 
     impl DnsRcord {
-        fn into_buffer(&self) -> Vec<u8> {
+        fn into_buffer(self) -> Vec<u8> {
             let a = [
                 self.id,
                 self.flags,
@@ -111,7 +111,7 @@ pub mod lsd {
             }
         }
 
-        pub fn into_buffer(&self) -> Vec<u8> {
+        pub fn into_buffer(self) -> Vec<u8> {
             // I know &[13, 10] is same is \r\n but i liked this way :)
             [
                 self.header.as_bytes(),

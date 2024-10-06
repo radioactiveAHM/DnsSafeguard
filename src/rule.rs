@@ -10,16 +10,17 @@ pub async fn rulecheck(
     client_addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
 ) -> bool {
+    println!("meow");
     for rule in &rules.rule {
         if rule.target=="block"{
             for option in &rule.options {
-                if let Some(_) = catch_in_buff(option, &dq.0[..dq.1]){
+                if catch_in_buff(option, &dq.0[..dq.1]).is_some() {
                     return true;
                 }
             }
         }else {
             for option in &rule.options {
-                if let Some(_) = catch_in_buff(option, &dq.0[..dq.1]) {
+                if catch_in_buff(option, &dq.0[..dq.1]).is_some()  {
                     let bypass_target = SocketAddr::from_str(&rule.target).unwrap();
                     tokio::spawn(async move {
                         if let Err(e) = handle_bypass(dq, client_addr, bypass_target, udp).await{
@@ -32,7 +33,7 @@ pub async fn rulecheck(
         }
     }
 
-    return false;
+    false
 }
 
 async fn handle_bypass(

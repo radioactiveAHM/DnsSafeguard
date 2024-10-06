@@ -54,10 +54,8 @@ pub async fn dot(
             let mut query = [0; 512];
             if let Ok((query_size, addr)) = udp.recv_from(&mut query).await {
                 // rule check
-                if arc_rule.enable {
-                    if rulecheck(arc_rule.clone(), (query,query_size), addr, udp.clone()).await {
-                        continue;
-                    }
+                if arc_rule.enable && rulecheck(arc_rule.clone(), (query,query_size), addr, udp.clone()).await {
+                    continue;
                 }
                 // DNS query with two u8 size which is required by DOT
                 // Size of dns Query as two u8
@@ -174,10 +172,8 @@ pub async fn dot_nonblocking(
             let mut query = [0; 512];
             if let Ok((query_size, addr)) = udp.recv_from(&mut query).await {
                 // rule check
-                if arc_rule.enable {
-                    if rulecheck(arc_rule.clone(), (query,query_size), addr, udp.clone()).await {
-                        continue;
-                    }
+                if arc_rule.enable && rulecheck(arc_rule.clone(), (query,query_size), addr, udp.clone()).await {
+                    continue;
                 }
                 // DNS query with two u8 size which is required by DOT
                 // Size of dns Query as two u8

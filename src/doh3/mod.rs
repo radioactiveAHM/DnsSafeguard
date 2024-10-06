@@ -183,12 +183,11 @@ pub async fn http3(
                     continue;
                 }
                 
-                let dq = (dns_query, query_size);
                 let h3 = h3.clone();
                 let sn = arc_sn.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
-                    if let Err(e) = send_request(sn, h3, dq, addr, udp).await {
+                    if let Err(e) = send_request(sn, h3, (dns_query, query_size), addr, udp).await {
                         println!("{}", e);
                         temp = true;
                     }

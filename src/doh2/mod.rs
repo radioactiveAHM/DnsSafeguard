@@ -100,12 +100,11 @@ pub async fn http2(
                 }
 
                 // Base64url dns query
-                let dq = (dns_query, query_size);
                 let h2_client = client.clone();
                 let sn = arc_sn.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
-                    if let Err(e) = send_req(sn, dq, h2_client, addr, udp_arc).await {
+                    if let Err(e) = send_req(sn, (dns_query, query_size), h2_client, addr, udp_arc).await {
                         let error = e.to_string();
                         println!("{}", error);
                         temp = true;

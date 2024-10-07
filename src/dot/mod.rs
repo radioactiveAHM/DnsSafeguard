@@ -59,18 +59,19 @@ pub async fn dot(
                 }
                 // DNS query with two u8 size which is required by DOT
                 // Size of dns Query as two u8
-                let dot_size = convert_u16_to_two_u8s_be(query_size as u16);
-                let dot_query = [&[dot_size[0], dot_size[1]], &query[..query_size]].concat();
+                let mut dot_query = [0u8;514];
+                [dot_query[0], dot_query[1]] = convert_u16_to_two_u8s_be(query_size as u16);
+                dot_query[2..].copy_from_slice(&mut query);
 
                 // Send DOT query
-                if conn.write(&dot_query).await.is_err() {
+                if conn.write(&dot_query[..query_size+2]).await.is_err() {
                     // Connection is closed
                     println!("connection closed by peer");
                     break;
                 }
 
                 // Recv DOT query
-                let mut resp_dot_query = [0; 512];
+                let mut resp_dot_query = [0; 514];
                 if let Ok(resp_dot_query_size) = conn.read(&mut resp_dot_query).await {
                     udp.send_to(&resp_dot_query[2..(resp_dot_query_size)], addr)
                         .await
@@ -177,11 +178,12 @@ pub async fn dot_nonblocking(
                 }
                 // DNS query with two u8 size which is required by DOT
                 // Size of dns Query as two u8
-                let dot_size = convert_u16_to_two_u8s_be(query_size as u16);
-                let dot_query = [&[dot_size[0], dot_size[1]], &query[..query_size]].concat();
+                let mut dot_query = [0u8;514];
+                [dot_query[0], dot_query[1]] = convert_u16_to_two_u8s_be(query_size as u16);
+                dot_query[2..].copy_from_slice(&mut query);
 
                 // Send DOT query
-                if conn_w.write(&dot_query).await.is_err() {
+                if conn_w.write(&dot_query[..query_size+2]).await.is_err() {
                     // Connection is closed
                     println!("connection closed by peer");
                     task.abort();

@@ -2,6 +2,7 @@ mod noise;
 pub mod qtls;
 pub mod transporter;
 
+use core::str;
 use std::{borrow::BorrowMut, future, io::Read, net::SocketAddr, str::FromStr, sync::Arc};
 
 use tokio::{
@@ -148,12 +149,16 @@ pub async fn http3(
         // QUIC Connection Established
         retry = 0;
 
+        let dead_conn = Arc::new(Mutex::new(false));
+
         // HTTP/3 Client
         let (mut driver, h3) = h3::client::new(h3_quinn::Connection::new(conn.unwrap()))
             .await
             .unwrap();
+        let deriver_dead_conn = dead_conn.clone();
         let drive = async move {
             future::poll_fn(|cx| driver.poll_close(cx)).await?;
+            *(deriver_dead_conn.lock().await) = true;
             Ok::<(), Box<dyn std::error::Error + Send>>(())
         };
 
@@ -162,7 +167,6 @@ pub async fn http3(
         // UDP socket to listen for DNS query
         // prepare for atomic
         let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
-        let dead_conn = Arc::new(Mutex::new(false));
         let arc_sn = Arc::new(server_name.clone());
 
         loop {
@@ -209,10 +213,12 @@ async fn send_request(
     addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let mut temp = [0u8;512];
+    let query_bs4url = base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?;
     let req = http::Request::get(format!(
         "https://{}/dns-query?dns={}",
         server_name,
-        base64_url::encode(&dns_query.0[..dns_query.1])
+        str::from_utf8(query_bs4url)?
     ))
     .header("Accept", "application/dns-message")
     .body(())

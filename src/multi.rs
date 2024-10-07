@@ -29,7 +29,7 @@ pub async fn h1_multi(
     // Spawn Task for multiple connections
     for conn_i in 0u8..connection.h1_multi_connections {
         let recver_cln: crossbeam_channel::Receiver<(
-            String,
+            ([u8;512],usize),
             std::net::SocketAddr,
             Arc<tokio::net::UdpSocket>,
         )> = recver.clone();
@@ -72,11 +72,13 @@ pub async fn h1_multi(
                     tokio::task::block_in_place(|| {
                         package = task_rcv.recv();
                     });
-                    if let Ok((query_base64url, addr, udp)) = package {
+                    if let Ok((query, addr, udp)) = package {
                         // HTTP Req
+                        let mut temp = [0u8;512];
+                        let query_bs4url = base64_url::encode_to_slice(&query.0[..query.1], &mut temp).unwrap();
                         let http_req = [
                             b"GET /dns-query?dns=",
-                            query_base64url.as_bytes(),
+                            query_bs4url,
                             b" HTTP/1.1\r\nHost: ",
                             sn.as_bytes(),
                             b"\r\nConnection: keep-alive\r\nAccept: application/dns-message\r\n\r\n",
@@ -132,9 +134,8 @@ pub async fn h1_multi(
                 continue;
             }
             
-            let qb4: String = base64_url::encode(&dns_query[..query_size]);
             tokio::task::block_in_place(|| {
-                if sender.send((qb4, addr, udp_arc)).is_err() {
+                if sender.send(((dns_query,query_size), addr, udp_arc)).is_err() {
                     println!("Tasks are dead")
                 }
             });

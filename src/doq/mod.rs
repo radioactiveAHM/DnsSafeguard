@@ -100,7 +100,8 @@ pub async fn doq(
             // Check if Connection is dead
             // quic_conn_dead will be passed to task if connection alive
             let dead = dead_conn.clone();
-            if *dead.lock().await {
+            if *dead.lock().await || quic.close_reason().is_some() {
+                println!("{}",  quic.close_reason().unwrap());
                 break;
             }
 
@@ -114,19 +115,25 @@ pub async fn doq(
                     continue;
                 }
 
-                if let Ok(bistream) = quic.open_bi().await {
-                    tokio::spawn(async move {
-                        let mut temp = false;
-                        if let Err(e) = send_dq(bistream, (dns_query, query_size), addr, udp).await
-                        {
-                            let e_str = e.to_string();
-                            println!("{}", e_str);
-                            temp = true;
-                        }
-                        if temp {
-                            *(dead.lock().await) = true;
-                        }
-                    });
+                match quic.open_bi().await {
+                    Ok(bistream)=>{
+                        tokio::spawn(async move {
+                            let mut temp = false;
+                            if let Err(e) = send_dq(bistream, (dns_query, query_size), addr, udp).await
+                            {
+                                let e_str = e.to_string();
+                                println!("{}", e_str);
+                                temp = true;
+                            }
+                            if temp {
+                                *(dead.lock().await) = true;
+                            }
+                        });
+                    },
+                    Err(conn_e)=>{
+                        println!("{conn_e}");
+                        break;
+                    }
                 }
             }
         }
@@ -135,16 +142,17 @@ pub async fn doq(
 
 async fn send_dq(
     (mut send, mut recv): (SendStream, RecvStream),
-    dns_query: ([u8; 512], usize),
+    mut dns_query: ([u8; 512], usize),
     addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let doq_size = convert_u16_to_two_u8s_be(dns_query.1 as u16);
-    let doq_query = [&[doq_size[0], doq_size[1]], &dns_query.0[..dns_query.1]].concat();
+    let mut doq_query = [0u8;514];
+    [doq_query[0], doq_query[1]] = convert_u16_to_two_u8s_be(dns_query.1 as u16);
+    doq_query[2..].copy_from_slice(&mut dns_query.0);
 
-    send.write(&doq_query).await?;
+    send.write(&doq_query[..dns_query.1+2]).await?;
     send.finish()?;
-    let mut buff = [0u8; 512];
+    let mut buff = [0u8; 514];
     if let Some(resp_size) = recv.read(&mut buff).await? {
         let _ = udp.send_to(&buff[2..resp_size], addr).await;
     }

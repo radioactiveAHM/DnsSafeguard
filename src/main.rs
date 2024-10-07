@@ -329,11 +329,12 @@ async fn http1(
             if arc_rule.enable && rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp.clone()).await {
                 continue;
             }
-            let query_base64url = base64_url::encode(&dns_query[..query_size]);
 
+            let mut temp = [0u8;512];
+            let query_bs4url = base64_url::encode_to_slice(&dns_query[..query_size], &mut temp).unwrap();
             let http_req = [
                 b"GET /dns-query?dns=",
-                query_base64url.as_bytes(),
+                query_bs4url,
                 b" HTTP/1.1\r\nHost: ",
                 server_name.as_bytes(),
                 b"\r\nConnection: keep-alive\r\nAccept: application/dns-message\r\n\r\n",

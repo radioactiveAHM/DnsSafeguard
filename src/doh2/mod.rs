@@ -1,6 +1,7 @@
 use crate::fragment;
 use crate::rule::rulecheck;
 use h2::client::SendRequest;
+use core::str;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
@@ -128,17 +129,19 @@ async fn send_req(
     addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let mut temp = [0u8;512];
+    let query_bs4url = base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?;
     // HTTP Request
     let req = http::Request::get(format!(
         "https://{}/dns-query?dns={}",
         server_name,
-        base64_url::encode(&dns_query.0[..dns_query.1])
+        str::from_utf8(query_bs4url)?
     ))
     .header("Accept", "application/dns-message")
     .body(())?;
 
     // Sending request
-    let resp = h2_client.send_request(req, false)?.0.await?;
+    let resp = h2_client.send_request(req, true)?.0.await?;
 
     if resp.status() == http::status::StatusCode::OK {
         // Get body (dns query)

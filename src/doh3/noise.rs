@@ -193,6 +193,7 @@ pub async fn noiser(noise: Noise, target: SocketAddr, socket: &socket2::Socket) 
             panic!("Invalid noise type");
         }
     }
+    println!("Noise sent");
 }
 
 async fn continues_noise(noise: Noise, target: SocketAddr, socket: socket2::Socket) {

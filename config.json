@@ -56,7 +56,8 @@
 				"options": [
 					"googlesyndication",
 					"analytic",
-					"googletagmanager"
+					"googletagmanager",
+					".ir"
 				],
 				"target": "block"
 			}

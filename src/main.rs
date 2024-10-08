@@ -1,13 +1,13 @@
 mod config;
 mod doh2;
 mod doh3;
+mod doq;
 mod dot;
 mod fragment;
 mod multi;
+mod rule;
 mod tls;
 mod utils;
-mod rule;
-mod doq;
 
 use std::sync::Arc;
 
@@ -20,41 +20,51 @@ use tokio::{
 use utils::tcp_connect_handle;
 
 #[derive(Clone)]
-pub struct Rule{
+pub struct Rule {
     pub options: Vec<Vec<u8>>,
-    pub target: String
+    pub target: String,
 }
 #[derive(Clone)]
-pub struct Rules{
+pub struct Rules {
     pub enable: bool,
-    pub rule: Vec<Rule>
+    pub rule: Vec<Rule>,
 }
-fn convert_rules(config_rules: config::Rules)->Rules{
-    let r = config_rules.rule.iter().map(|config_rule|{
-        let options = config_rule.options.iter().map(|option|{
-            if option.contains("."){
-                let mut temp = Vec::new();
-                for p in option.split("."){
-                    let mut ptemp = p.as_bytes().to_vec();
-                    ptemp.insert(0, p.len() as u8);
-                    temp.append(&mut ptemp);
-                }
+fn convert_rules(config_rules: config::Rules) -> Rules {
+    let r = config_rules
+        .rule
+        .iter()
+        .map(|config_rule| {
+            let options = config_rule
+                .options
+                .iter()
+                .map(|option| {
+                    if option.contains(".") {
+                        let mut temp = Vec::new();
+                        for p in option.split(".") {
+                            if p!="" && p!=" "{
+                                let mut ptemp = p.as_bytes().to_vec();
+                                ptemp.insert(0, p.len() as u8);
+                                temp.append(&mut ptemp);
+                            }
+                        }
 
-                temp
-            }else {
-                option.as_bytes().to_vec()
+                        temp
+                    } else {
+                        option.as_bytes().to_vec()
+                    }
+                })
+                .collect();
+
+            Rule {
+                options,
+                target: config_rule.target.clone(),
             }
-        }).collect();
-
-        Rule {
-            options,
-            target: config_rule.target.clone()
-        }
-    }).collect();
+        })
+        .collect();
 
     Rules {
         enable: config_rules.enable,
-        rule: r
+        rule: r,
     }
 }
 
@@ -82,7 +92,7 @@ async fn main() {
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
-                        v6rules
+                        v6rules,
                     )
                     .await
                 }
@@ -93,7 +103,7 @@ async fn main() {
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
-                        v6rules
+                        v6rules,
                     )
                     .await
                 }
@@ -104,7 +114,7 @@ async fn main() {
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
-                        v6rules
+                        v6rules,
                     )
                     .await
                 }
@@ -118,7 +128,7 @@ async fn main() {
                         v6.noise,
                         connecting_timeout_sec,
                         conf.connection,
-                        v6rules
+                        v6rules,
                     )
                     .await
                 }
@@ -129,7 +139,7 @@ async fn main() {
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
-                        v6rules
+                        v6rules,
                     )
                     .await;
                 }
@@ -140,11 +150,11 @@ async fn main() {
                         &v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
-                        v6rules
+                        v6rules,
                     )
                     .await;
-                },
-                "doq"=>{
+                }
+                "doq" => {
                     let connecting_timeout_sec = quic_conf_file_v6.connecting_timeout_sec;
                     doq::doq(
                         v6.server_name,
@@ -154,8 +164,9 @@ async fn main() {
                         v6.noise,
                         connecting_timeout_sec,
                         conf.connection,
-                        v6rules
-                    ).await;
+                        v6rules,
+                    )
+                    .await;
                 }
                 _ => {
                     println!("Invalid http version");
@@ -173,7 +184,7 @@ async fn main() {
                 &conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
-                rules
+                rules,
             )
             .await
         }
@@ -184,7 +195,7 @@ async fn main() {
                 &conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
-                rules
+                rules,
             )
             .await
         }
@@ -195,7 +206,7 @@ async fn main() {
                 &conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
-                rules
+                rules,
             )
             .await
         }
@@ -209,7 +220,7 @@ async fn main() {
                 conf.noise,
                 connecting_timeout_sec,
                 conf.connection,
-                rules
+                rules,
             )
             .await
         }
@@ -220,7 +231,7 @@ async fn main() {
                 &conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
-                rules
+                rules,
             )
             .await;
         }
@@ -231,11 +242,11 @@ async fn main() {
                 &conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
-                rules
+                rules,
             )
             .await;
         }
-        "doq"=>{
+        "doq" => {
             let connecting_timeout_sec = conf.quic.connecting_timeout_sec;
             doq::doq(
                 conf.server_name,
@@ -245,8 +256,9 @@ async fn main() {
                 conf.noise,
                 connecting_timeout_sec,
                 conf.connection,
-                rules
-            ).await;
+                rules,
+            )
+            .await;
         }
         _ => {
             println!("Invalid http version");
@@ -326,12 +338,15 @@ async fn http1(
             }
             let (query_size, addr) = udp_ok.unwrap();
             // rule check
-            if arc_rule.enable && rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp.clone()).await {
+            if arc_rule.enable
+                && rulecheck(arc_rule.clone(), (dns_query, query_size), addr, udp.clone()).await
+            {
                 continue;
             }
 
-            let mut temp = [0u8;512];
-            let query_bs4url = base64_url::encode_to_slice(&dns_query[..query_size], &mut temp).unwrap();
+            let mut temp = [0u8; 512];
+            let query_bs4url =
+                base64_url::encode_to_slice(&dns_query[..query_size], &mut temp).unwrap();
             let http_req = [
                 b"GET /dns-query?dns=",
                 query_bs4url,

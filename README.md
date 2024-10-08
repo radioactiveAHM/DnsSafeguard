@@ -50,6 +50,10 @@ To build the project, execute the following command in the project directory: `c
       1. Go to your Windows network settings.
       2. Configure the DNS server address to match the IP address specified in the config.json file for the `UDP Socket Addresses` section.
 
+## DNS server
+
+[Go to dns servers page](/DNS.md)
+
 ## Configuration File - `config.json`
 
 The `config.json` file is a crucial part of the DnsSafeguard application. It contains the necessary settings to control the behavior of the DNS client.

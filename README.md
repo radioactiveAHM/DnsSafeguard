@@ -2,30 +2,30 @@
 
 # DnsSafeguard
 
-DnsSafeguard is a fast and secure DNS client written in Rust. It is designed to intercept DNS queries over a UDP socket and securely transmit them to a DNS server using DNS over HTTPS/TLS/QUIC (DoH/DoT/DoQ) protocols. Additionally, it employs TLS client hello fragmentation and UDP Noise to bypass Great Firewall (GFW) censorship.
-
-Special thanks to the developers of [Rustls](https://github.com/rustls/rustls) for providing an excellent TLS framework.
+DnsSafeguard is a fast and secure DNS client written in Rust, designed to intercept DNS queries over a UDP socket and securely transmit them to a DNS server using DNS over HTTPS/TLS/QUIC (DoH/DoT/DoQ) protocols. By leveraging TLS client hello fragmentation and UDP Noise, it successfully bypasses the Great Firewall (GFW) censorship.
 
 ## Features
 
-* **Secure Communication:** Utilizes Rustls to ensure encrypted communication (TLS) with DNS servers
-* **UDP Socket:** Captures DNS queries on a UDP socket.
-* **DoH Protocol:** Transmits DNS queries using the DoH protocol, supporting all HTTP versions (HTTP/1.1, H2, H3) for enhanced privacy.
-* **DoT Protocol:** Transmits DNS queries using the DoT protocol, featuring support for both blocking and non-blocking algorithms.
-* **DoQ Protocol:** Transmits DNS queries using the DoQ protocol, which is highly secure, efficient, and avoids head-of-line blocking.
-* **Censorship Bypass:** Implements TLS client hello fragmentation with 4 possible methods to evade GFW TLS censorship.
-* **Customizable UDP Noise** Implements UDP Noise with four different types to bypass QUIC blocking.
+* **Secure Communication:** Utilizes Rustls for encrypted communication (TLS) with DNS servers.
+* **UDP Socket:** Captures DNS queries on a UDP socket for efficient handling.
+* **DoH Protocol:** Transmits DNS queries using the DoH protocol, supporting HTTP versions (HTTP/1.1, H2, H3) to ensure enhanced privacy.
+* **DoT Protocol:** Transmits DNS queries using the DoT protocol with both blocking and non-blocking algorithms.
+* **DoQ Protocol:**  Transmits DNS queries using the DoQ protocol, providing highly secure and efficient communication, avoiding head-of-line blocking.
+* **Rules:** Create rules for groups of domains and keywords to control DNS queries effectively.
+* **Censorship Bypass:** Implements TLS client hello fragmentation with four methods to evade GFW TLS censorship.
+* **Customizable UDP Noise** Implements four types of UDP Noise to bypass QUIC blocking.
 
 ## Roadmap
 
-* [x] **IPv6 Support**
-* [x] **HTTP/3**
-* [x] **HTTP/2**
-* [x] **HTTP/2 TLS Fragmenting**
-* [x] **HTTP/1.1 Multi-Connection**
-* [x] **DNS over TLS (DOT) (Blocking & Non-Blocking)**
-* [x] **UDP Noise**
-* [x] **DNS over QUIC (DOQ)**
+* [x] IPv6 Support
+* [x] HTTP/3 Support
+* [x] HTTP/2 Support
+* [x] HTTP/2 TLS Fragmentation
+* [x] HTTP/1.1 Multi-Connection
+* [x] DNS over TLS (DoT) with Blocking & Non-Blocking Support
+* [x] UDP Noise Implementation
+* [x] Advanced Rules Management
+* [x] DNS over QUIC (DoQ) Support
 
 ## Building the Project
 
@@ -49,6 +49,9 @@ To build the project, execute the following command in the project directory: `c
   5. Set Up Windows DNS:
       1. Go to your Windows network settings.
       2. Configure the DNS server address to match the IP address specified in the config.json file for the `UDP Socket Addresses` section.
+
+* **Linux**
+  * Exact same steps as Windows except for step 5: open the `/etc/resolv.conf` file and configure the DNS server address to match the IP address specified in the `config.json` file for the `UDP Socket Addresses` section. For example, if UDP Socket Addresses value is `127.0.0.1`, then the content in `/etc/resolv.conf` must be `nameserver 127.0.0.1`.
 
 ## DNS server
 

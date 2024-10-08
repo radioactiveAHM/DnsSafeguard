@@ -12,61 +12,12 @@ mod utils;
 use std::sync::Arc;
 
 use multi::h1_multi;
-use rule::rulecheck;
+use rule::{convert_rules, rulecheck, Rules};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     time::sleep,
 };
 use utils::tcp_connect_handle;
-
-#[derive(Clone)]
-pub struct Rule {
-    pub options: Vec<Vec<u8>>,
-    pub target: String,
-}
-#[derive(Clone)]
-pub struct Rules {
-    pub enable: bool,
-    pub rule: Vec<Rule>,
-}
-fn convert_rules(config_rules: config::Rules) -> Rules {
-    let r = config_rules
-        .rule
-        .iter()
-        .map(|config_rule| {
-            let options = config_rule
-                .options
-                .iter()
-                .map(|option| {
-                    if option.contains(".") {
-                        let mut temp = Vec::new();
-                        for p in option.split(".") {
-                            if p!="" && p!=" "{
-                                let mut ptemp = p.as_bytes().to_vec();
-                                ptemp.insert(0, p.len() as u8);
-                                temp.append(&mut ptemp);
-                            }
-                        }
-
-                        temp
-                    } else {
-                        option.as_bytes().to_vec()
-                    }
-                })
-                .collect();
-
-            Rule {
-                options,
-                target: config_rule.target.clone(),
-            }
-        })
-        .collect();
-
-    Rules {
-        enable: config_rules.enable,
-        rule: r,
-    }
-}
 
 #[tokio::main]
 async fn main() {

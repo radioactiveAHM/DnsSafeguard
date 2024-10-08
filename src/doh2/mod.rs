@@ -70,9 +70,13 @@ pub async fn http2(
         println!("H2 Connection Established");
         retry = 0;
 
+        let dead_conn = Arc::new(Mutex::new(false));
+
         // handle h2 low level connection
+        let dead_conn_h2 = dead_conn.clone();
         tokio::spawn(async move {
             if let Err(e) = h2_.await {
+                *(dead_conn_h2.lock().await) = true;
                 println!("GOT ERR={:?}", e);
             }
         });
@@ -80,7 +84,6 @@ pub async fn http2(
         // UDP socket to listen for DNS query
         // prepare atomic
         let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
-        let dead_conn = Arc::new(Mutex::new(false));
         let arc_sn = Arc::new(server_name.clone());
 
         loop {

@@ -2,7 +2,7 @@ use std::{net::SocketAddr, str::FromStr, sync::Arc, time::Duration};
 
 use tokio::time::timeout;
 
-use crate::{catch_in_buff, Rules};
+use crate::catch_in_buff;
 
 pub async fn rulecheck(
     rules: Arc<Rules>,
@@ -58,4 +58,53 @@ async fn handle_bypass(
     }
 
     Ok(())
+}
+
+#[derive(Clone)]
+pub struct Rule {
+    pub options: Vec<Vec<u8>>,
+    pub target: String,
+}
+#[derive(Clone)]
+pub struct Rules {
+    pub enable: bool,
+    pub rule: Vec<Rule>,
+}
+pub fn convert_rules(config_rules: crate::config::Rules) -> Rules {
+    let r = config_rules
+        .rule
+        .iter()
+        .map(|config_rule| {
+            let options = config_rule
+                .options
+                .iter()
+                .map(|option| {
+                    if option.contains(".") {
+                        let mut temp = Vec::new();
+                        for p in option.split(".") {
+                            if p!="" && p!=" "{
+                                let mut ptemp = p.as_bytes().to_vec();
+                                ptemp.insert(0, p.len() as u8);
+                                temp.append(&mut ptemp);
+                            }
+                        }
+
+                        temp
+                    } else {
+                        option.as_bytes().to_vec()
+                    }
+                })
+                .collect();
+
+            Rule {
+                options,
+                target: config_rule.target.clone(),
+            }
+        })
+        .collect();
+
+    Rules {
+        enable: config_rules.enable,
+        rule: r,
+    }
 }

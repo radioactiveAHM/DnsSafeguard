@@ -82,7 +82,7 @@ pub fn convert_rules(config_rules: crate::config::Rules) -> Rules {
                     if option.contains(".") {
                         let mut temp = Vec::new();
                         for p in option.split(".") {
-                            if p!="" && p!=" "{
+                            if !p.is_empty() && p!=" "{
                                 let mut ptemp = p.as_bytes().to_vec();
                                 ptemp.insert(0, p.len() as u8);
                                 temp.append(&mut ptemp);

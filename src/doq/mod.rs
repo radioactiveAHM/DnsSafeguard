@@ -142,13 +142,13 @@ pub async fn doq(
 
 async fn send_dq(
     (mut send, mut recv): (SendStream, RecvStream),
-    mut dns_query: ([u8; 512], usize),
+    dns_query: ([u8; 512], usize),
     addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut doq_query = [0u8;514];
     [doq_query[0], doq_query[1]] = convert_u16_to_two_u8s_be(dns_query.1 as u16);
-    doq_query[2..].copy_from_slice(&mut dns_query.0);
+    doq_query[2..].copy_from_slice(&dns_query.0);
 
     send.write(&doq_query[..dns_query.1+2]).await?;
     send.finish()?;

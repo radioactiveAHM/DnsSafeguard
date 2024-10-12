@@ -360,13 +360,7 @@ fn c_len(http_head: &[u8]) -> usize {
 }
 
 fn catch_in_buff(find: &[u8], buff: &[u8]) -> Option<(usize, usize)> {
-    let size = find.len();
-    let mut index = size;
-    for _ in &buff[size..] {
-        if find == &buff[index - size..index] {
-            return Some((index - size, index));
-        }
-        index += 1
-    }
-    None
+    buff.windows(find.len())
+        .position(|pre| pre == find)
+        .map(|a| (a, a + buff.len()))
 }

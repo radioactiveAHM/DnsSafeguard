@@ -61,7 +61,7 @@ pub async fn dot(
                 // Size of dns Query as two u8
                 let mut dot_query = [0u8;514];
                 [dot_query[0], dot_query[1]] = convert_u16_to_two_u8s_be(query_size as u16);
-                dot_query[2..].copy_from_slice(&mut query);
+                dot_query[2..].copy_from_slice(&query);
 
                 // Send DOT query
                 if conn.write(&dot_query[..query_size+2]).await.is_err() {
@@ -180,7 +180,7 @@ pub async fn dot_nonblocking(
                 // Size of dns Query as two u8
                 let mut dot_query = [0u8;514];
                 [dot_query[0], dot_query[1]] = convert_u16_to_two_u8s_be(query_size as u16);
-                dot_query[2..].copy_from_slice(&mut query);
+                dot_query[2..].copy_from_slice(&query);
 
                 // Send DOT query
                 if conn_w.write(&dot_query[..query_size+2]).await.is_err() {

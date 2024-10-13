@@ -18,7 +18,7 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     time::sleep,
 };
-use utils::tcp_connect_handle;
+use utils::{genrequrlh1, tcp_connect_handle};
 
 #[tokio::main]
 async fn main() {
@@ -296,14 +296,8 @@ async fn http1(
             let mut temp = [0u8; 512];
             let query_bs4url =
                 base64_url::encode_to_slice(&dns_query[..query_size], &mut temp).unwrap();
-            let http_req = [
-                b"GET /dns-query?dns=",
-                query_bs4url,
-                b" HTTP/1.1\r\nHost: ",
-                server_name.as_bytes(),
-                b"\r\nConnection: keep-alive\r\nAccept: application/dns-message\r\n\r\n",
-            ]
-            .concat();
+            let mut url = [0;1024];
+            let http_req = genrequrlh1(&mut url, server_name.as_bytes(), query_bs4url);
 
             // Write http request
             if c.write(&http_req).await.is_err() {

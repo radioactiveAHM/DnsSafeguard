@@ -13,7 +13,7 @@ use tokio::{
 use bytes::Buf;
 use h3::client::SendRequest;
 
-use crate::{config::{self, Noise}, rule::rulecheck};
+use crate::{config::{self, Noise}, rule::rulecheck, utils::genrequrl};
 
 pub async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise) -> quinn::Endpoint {
     let socket = socket2::Socket::new(
@@ -215,14 +215,10 @@ async fn send_request(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut temp = [0u8;512];
     let query_bs4url = base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?;
-    let req = http::Request::get(format!(
-        "https://{}/dns-query?dns={}",
-        server_name,
-        str::from_utf8(query_bs4url)?
-    ))
+    let mut url = [0;1024];
+    let req = http::Request::get(genrequrl(&mut url, server_name.as_bytes(), query_bs4url))
     .header("Accept", "application/dns-message")
-    .body(())
-    .unwrap();
+    .body(())?;
 
     // Send HTTP request
     let mut reqs = h3.borrow_mut().send_request(req).await?;

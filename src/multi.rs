@@ -5,7 +5,7 @@ use tokio::{
 };
 
 use crate::{
-    c_len, catch_in_buff, config::{self, Connection}, fragment, rule::rulecheck, tls, utils::tcp_connect_handle
+    c_len, catch_in_buff, config::{self, Connection}, fragment, rule::rulecheck, tls, utils::{genrequrlh1, tcp_connect_handle}
 };
 
 pub async fn h1_multi(
@@ -76,13 +76,8 @@ pub async fn h1_multi(
                         // HTTP Req
                         let mut temp = [0u8;512];
                         let query_bs4url = base64_url::encode_to_slice(&query.0[..query.1], &mut temp).unwrap();
-                        let http_req = [
-                            b"GET /dns-query?dns=",
-                            query_bs4url,
-                            b" HTTP/1.1\r\nHost: ",
-                            sn.as_bytes(),
-                            b"\r\nConnection: keep-alive\r\nAccept: application/dns-message\r\n\r\n",
-                        ].concat();
+                        let mut url = [0;1024];
+                        let http_req = genrequrlh1(&mut url, sn.as_bytes(), query_bs4url);
 
                         // Send HTTP Req
                         if c.write(&http_req).await.is_err() {

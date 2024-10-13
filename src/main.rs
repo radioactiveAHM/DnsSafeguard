@@ -326,14 +326,15 @@ async fn http1(
                 let content_length = c_len(&http_resp[..x1]);
                 if content_length != 0 && content_length == body.len() {
                     // Full body recved
-                    udp.send_to(body, addr).await.unwrap_or(0);
+                    let _ = udp.send_to(body, addr).await;
                 } else if content_length != 0 && content_length > body.len() {
                     // There is another chunk of body
                     // We know it's not bigger than 512 bytes
-                    let mut b2 = [0; 512];
-                    let b2_len = c.read(&mut b2).await.unwrap_or(0);
-
-                    let _ = udp.send_to(&[body, &b2[..b2_len]].concat(), addr).await;
+                    let mut merged_body = [0;512];
+                    merged_body[..body.len()].copy_from_slice(body);
+                    if let Ok(b2_len) = c.read(&mut merged_body[body.len()..]).await{
+                        let _ = udp.send_to(&merged_body[..body.len()+b2_len], addr).await;
+                    }
                 }
             }
         }

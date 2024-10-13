@@ -167,7 +167,7 @@ pub async fn http3(
         // UDP socket to listen for DNS query
         // prepare for atomic
         let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
-        let arc_sn = Arc::new(server_name.clone());
+        let arc_sn: Arc<str> = server_name.clone().into();
 
         loop {
             // Check if Connection is dead
@@ -207,7 +207,7 @@ pub async fn http3(
 }
 
 async fn send_request(
-    server_name: Arc<String>,
+    server_name: Arc<str>,
     mut h3: SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
     dns_query: ([u8; 512], usize),
     addr: SocketAddr,

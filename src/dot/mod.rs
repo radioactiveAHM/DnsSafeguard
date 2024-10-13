@@ -3,7 +3,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 
-use crate::rule::rulecheck;
+use crate::rule::{rulecheck, rulecheck_sync};
 use crate::utils::convert_two_u8s_to_u16_be;
 use crate::{config, multi::tls_conn_gen, tls, utils::convert_u16_to_two_u8s_be};
 
@@ -15,7 +15,6 @@ pub async fn dot(
     connection: config::Connection,
     rule: crate::Rules,
 ) {
-    let arc_rule = Arc::new(rule);
     let ctls = tls::tlsconf(vec![b"dot".to_vec()]);
     let mut retry = 0u8;
     loop {
@@ -47,14 +46,14 @@ pub async fn dot(
         // Tls Client
         let mut conn = tls_conn.unwrap();
         // UDP Server to recv dns query
-        let udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
+        let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
 
         loop {
             // Recv dns query
             let mut query = [0; 512];
             if let Ok((query_size, addr)) = udp.recv_from(&mut query).await {
                 // rule check
-                if arc_rule.enable && rulecheck(arc_rule.clone(), (query,query_size), addr, udp.clone()).await {
+                if rule.enable && rulecheck_sync(&rule, (query,query_size), addr, &udp).await {
                     continue;
                 }
                 // DNS query with two u8 size which is required by DOT
@@ -153,9 +152,7 @@ pub async fn dot_nonblocking(
                     if let Some(waiter) =
                         waiters_lock.iter().position(|waiter| waiter.0 == query_id)
                     {
-                        udp.send_to(query, waiters_lock[waiter].1)
-                            .await
-                            .unwrap_or(0);
+                        let _ = udp.send_to(query, waiters_lock[waiter].1).await;
                         waiters_lock.swap_remove(waiter);
                     }
                 } else {

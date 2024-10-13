@@ -9,10 +9,11 @@ mod rule;
 mod tls;
 mod utils;
 
-use std::{sync::Arc, time};
+use core::str;
+use std::sync::Arc;
 
 use multi::h1_multi;
-use rule::{convert_rules, rulecheck, Rules};
+use rule::{convert_rules, rulecheck_sync, Rules};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     time::sleep,
@@ -226,7 +227,6 @@ async fn http1(
     connection: config::Connection,
     rule: Rules,
 ) {
-    let arc_rule = Arc::new(rule);
     // TLS Client
     let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()]);
 
@@ -279,7 +279,7 @@ async fn http1(
 
         let mut c = tls_conn.unwrap();
         // UDP socket to listen for DNS query
-        let udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
+        let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
 
         loop {
             let mut dns_query = [0u8; 512];
@@ -289,9 +289,7 @@ async fn http1(
             }
             let (query_size, addr) = udp_ok.unwrap();
             // rule check
-            if arc_rule.enable
-                && rulecheck(arc_rule.clone(), (dns_query, query_size), addr, udp.clone()).await
-            {
+            if rule.enable && rulecheck_sync(&rule, (dns_query, query_size), addr, &udp).await {
                 continue;
             }
 
@@ -335,9 +333,7 @@ async fn http1(
                     let mut b2 = [0; 512];
                     let b2_len = c.read(&mut b2).await.unwrap_or(0);
 
-                    udp.send_to(&[body, &b2[..b2_len]].concat(), addr)
-                        .await
-                        .unwrap_or(0);
+                    let _ = udp.send_to(&[body, &b2[..b2_len]].concat(), addr).await;
                 }
             }
         }
@@ -345,15 +341,19 @@ async fn http1(
 }
 
 fn c_len(http_head: &[u8]) -> usize {
-    for head in String::from_utf8_lossy(http_head).split("\r\n") {
-        let lower_head = head.to_lowercase();
-        if lower_head.contains("content-length") {
-            return lower_head
-                .split("content-length: ")
-                .last()
+    let content_length = b"content-length: ";
+    for line in http_head.split(|&b| b == b'\r' || b == b'\n') {
+        if let Some(pos) = line
+            .windows(content_length.len())
+            .position(|window| window.eq_ignore_ascii_case(content_length))
+        {
+            if let Ok(length) = std::str::from_utf8(&line[pos + content_length.len()..])
                 .unwrap_or("0")
+                .trim()
                 .parse::<usize>()
-                .unwrap_or(0);
+            {
+                return length;
+            }
         }
     }
     0

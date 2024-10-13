@@ -61,6 +61,11 @@ To build the project, execute the following command in the project directory: `c
 
 The `config.json` file is a crucial part of the DnsSafeguard application. It contains the necessary settings to control the behavior of the DNS client.
 
+### Protocols info
+
+* `h1` and `dot` are extremely cost-effective and operate on a single thread. All protocols establish a single connection, except for `h1 multi`, which supports multiple connections.
+* `h3` and `doq` are built on the QUIC protocol and can be configured using the `Quic` section in the configuration file.
+
 ### Structure
 
 The configuration file is structured in JSON format and includes the following settings:

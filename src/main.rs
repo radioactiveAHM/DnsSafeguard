@@ -22,7 +22,7 @@ use utils::tcp_connect_handle;
 
 #[tokio::main]
 async fn main() {
-    tokio_rustls::rustls::crypto::aws_lc_rs::default_provider()
+    tokio_rustls::rustls::crypto::ring::default_provider()
         .install_default()
         .unwrap();
     // Load config

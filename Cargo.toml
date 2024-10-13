@@ -21,7 +21,7 @@ http = "1.1.0"
 bytes = "1.7.2"
 base64-url = "3.0.0"
 h2 = "0.4.6"
-tokio-rustls = { git = "https://github.com/radioactiveAHM/tokio-rustls.git", default-features = false, features = ["aws_lc_rs"] }
+tokio-rustls = { git = "https://github.com/radioactiveAHM/tokio-rustls.git", default-features = false, features = ["ring"] }
 crossbeam-channel = "0.5.13"
 socket2 = "0.5.7"
 

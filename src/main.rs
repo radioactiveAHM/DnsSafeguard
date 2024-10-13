@@ -9,7 +9,7 @@ mod rule;
 mod tls;
 mod utils;
 
-use std::sync::Arc;
+use std::{sync::Arc, time};
 
 use multi::h1_multi;
 use rule::{convert_rules, rulecheck, Rules};
@@ -362,5 +362,5 @@ fn c_len(http_head: &[u8]) -> usize {
 fn catch_in_buff(find: &[u8], buff: &[u8]) -> Option<(usize, usize)> {
     buff.windows(find.len())
         .position(|pre| pre == find)
-        .map(|a| (a, a + buff.len()))
+        .map(|a| (a, a + find.len()))
 }

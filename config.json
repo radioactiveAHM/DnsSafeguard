@@ -45,6 +45,7 @@
 	},
 	"connection": {
 		"h1_multi_connections": 3,
+		"dot_nonblocking_dns_query_lifetime": 5,
 		"reconnect_sleep": 1,
 		"max_reconnect": 5,
 		"max_reconnect_sleep": 30

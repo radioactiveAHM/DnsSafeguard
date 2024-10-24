@@ -73,7 +73,7 @@ pub async fn dot(
                 // Recv DOT query
                 let mut resp_dot_query = [0; 514];
                 if let Ok(resp_dot_query_size) = conn.read(&mut resp_dot_query).await {
-                    if resp_dot_query_size > 5 {
+                    if resp_dot_query_size as u16 == convert_two_u8s_to_u16_be([resp_dot_query[0],resp_dot_query[1]])+2 {
                         let _ = udp
                             .send_to(&resp_dot_query[2..(resp_dot_query_size)], addr)
                             .await;
@@ -147,15 +147,14 @@ pub async fn dot_nonblocking(
                 // Recv DOT query
                 let mut resp_dot_query = [0; 514];
                 if let Ok(resp_dot_query_size) = conn_r.read(&mut resp_dot_query).await {
-                    if resp_dot_query_size > 5 {
+                    if resp_dot_query_size as u16 == convert_two_u8s_to_u16_be([resp_dot_query[0],resp_dot_query[1]])+2 {
                         let query = &resp_dot_query[2..(resp_dot_query_size)];
-                        let query_id = convert_two_u8s_to_u16_be([query[0], query[1]]);
 
                         // match the response with DNS message ID
                         let mut waiters_lock = waiters.lock().await;
-                        if let Some(waiter) =
-                            waiters_lock.iter().position(|waiter| waiter.0 == query_id)
-                        {
+                        if let Some(waiter) = waiters_lock.iter().position(|waiter| {
+                            waiter.0 == convert_two_u8s_to_u16_be([query[0], query[1]])
+                        }) {
                             let _ = udp.send_to(query, waiters_lock.swap_remove(waiter).1).await;
                         }
                     }

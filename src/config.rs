@@ -38,6 +38,7 @@ pub struct Quic {
 #[derive(serde::Deserialize, Clone, Copy)]
 pub struct Connection {
     pub h1_multi_connections: u8,
+    pub dot_nonblocking_dns_query_lifetime: u64,
     pub reconnect_sleep: u64,
     pub max_reconnect: u8,
     pub max_reconnect_sleep: u64,

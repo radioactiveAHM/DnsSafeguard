@@ -54,17 +54,17 @@ pub async fn dot(
             let mut query = [0; 512];
             if let Ok((query_size, addr)) = udp.recv_from(&mut query).await {
                 // rule check
-                if rule.enable && rulecheck_sync(&rule, (query,query_size), addr, &udp).await {
+                if rule.enable && rulecheck_sync(&rule, (query, query_size), addr, &udp).await {
                     continue;
                 }
                 // DNS query with two u8 size which is required by DOT
                 // Size of dns Query as two u8
-                let mut dot_query = [0u8;514];
+                let mut dot_query = [0u8; 514];
                 [dot_query[0], dot_query[1]] = convert_u16_to_two_u8s_be(query_size as u16);
                 dot_query[2..].copy_from_slice(&query);
 
                 // Send DOT query
-                if conn.write(&dot_query[..query_size+2]).await.is_err() {
+                if conn.write(&dot_query[..query_size + 2]).await.is_err() {
                     // Connection is closed
                     println!("connection closed by peer");
                     break;
@@ -74,8 +74,9 @@ pub async fn dot(
                 let mut resp_dot_query = [0; 514];
                 if let Ok(resp_dot_query_size) = conn.read(&mut resp_dot_query).await {
                     if resp_dot_query_size > 5 {
-                        let _ = udp.send_to(&resp_dot_query[2..(resp_dot_query_size)], addr)
-                        .await;
+                        let _ = udp
+                            .send_to(&resp_dot_query[2..(resp_dot_query_size)], addr)
+                            .await;
                     }
                 } else {
                     // Connection is closed
@@ -149,14 +150,13 @@ pub async fn dot_nonblocking(
                     if resp_dot_query_size > 5 {
                         let query = &resp_dot_query[2..(resp_dot_query_size)];
                         let query_id = convert_two_u8s_to_u16_be([query[0], query[1]]);
-    
+
                         // match the response with DNS message ID
                         let mut waiters_lock = waiters.lock().await;
                         if let Some(waiter) =
                             waiters_lock.iter().position(|waiter| waiter.0 == query_id)
                         {
-                            let _ = udp.send_to(query, waiters_lock[waiter].1).await;
-                            waiters_lock.swap_remove(waiter);
+                            let _ = udp.send_to(query, waiters_lock.swap_remove(waiter).1).await;
                         }
                     }
                 } else {
@@ -166,12 +166,17 @@ pub async fn dot_nonblocking(
         });
 
         let waiters_cleanup = waiters.clone();
-        let cleaner_task = tokio::spawn(async move{
+        let cleaner_task = tokio::spawn(async move {
             loop {
-                sleep(Duration::from_secs(connection.dot_nonblocking_dns_query_lifetime)).await;
+                sleep(Duration::from_secs(
+                    connection.dot_nonblocking_dns_query_lifetime,
+                ))
+                .await;
                 let mut waiters_cleanup_lock = waiters_cleanup.lock().await;
-                if waiters_cleanup_lock.len()>0{
-                    waiters_cleanup_lock.retain(|waiter| waiter.2.elapsed().as_secs()<connection.dot_nonblocking_dns_query_lifetime);
+                if waiters_cleanup_lock.len() > 0 {
+                    waiters_cleanup_lock.retain(|waiter| {
+                        waiter.2.elapsed().as_secs() < connection.dot_nonblocking_dns_query_lifetime
+                    });
                 }
             }
         });
@@ -185,22 +190,27 @@ pub async fn dot_nonblocking(
             let mut query = [0; 512];
             if let Ok((query_size, addr)) = udp.recv_from(&mut query).await {
                 // rule check
-                if arc_rule.enable && rulecheck(arc_rule.clone(), (query,query_size), addr, udp.clone()).await {
+                if arc_rule.enable
+                    && rulecheck(arc_rule.clone(), (query, query_size), addr, udp.clone()).await
+                {
                     continue;
                 }
                 // DNS query with two u8 size which is required by DOT
                 // Size of dns Query as two u8
-                let mut dot_query = [0u8;514];
+                let mut dot_query = [0u8; 514];
                 [dot_query[0], dot_query[1]] = convert_u16_to_two_u8s_be(query_size as u16);
                 dot_query[2..].copy_from_slice(&query);
 
                 // Push DNS message ID and UDP resolver addr to waiter
-                let mut waiters_lock = 
-                waiters.lock().await;
-                waiters_lock.push((convert_two_u8s_to_u16_be([query[0], query[1]]), addr, tokio::time::Instant::now()));
+                let mut waiters_lock = waiters.lock().await;
+                waiters_lock.push((
+                    convert_two_u8s_to_u16_be([query[0], query[1]]),
+                    addr,
+                    tokio::time::Instant::now(),
+                ));
 
                 // Send DOT query
-                if conn_w.write(&dot_query[..query_size+2]).await.is_err() {
+                if conn_w.write(&dot_query[..query_size + 2]).await.is_err() {
                     // Connection is closed
                     println!("connection closed by peer");
                     task.abort();

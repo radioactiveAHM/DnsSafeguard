@@ -300,7 +300,7 @@ async fn http1(
             let http_req = genrequrlh1(&mut url, server_name.as_bytes(), query_bs4url);
 
             // Write http request
-            if c.write(&http_req).await.is_err() {
+            if c.write(http_req).await.is_err() {
                 println!("connection closed by peer");
                 break;
             }

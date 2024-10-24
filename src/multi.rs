@@ -80,7 +80,7 @@ pub async fn h1_multi(
                         let http_req = genrequrlh1(&mut url, sn.as_bytes(), query_bs4url);
 
                         // Send HTTP Req
-                        if c.write(&http_req).await.is_err() {
+                        if c.write(http_req).await.is_err() {
                             println!("connection closed by peer");
                             break;
                         }

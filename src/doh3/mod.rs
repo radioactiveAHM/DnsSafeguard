@@ -13,7 +13,7 @@ use tokio::{
 use bytes::Buf;
 use h3::client::SendRequest;
 
-use crate::{config::{self, Noise}, rule::rulecheck, utils::genrequrl};
+use crate::{chttp::genrequrl, config::{self, Noise}, rule::rulecheck};
 
 pub async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise) -> quinn::Endpoint {
     let socket = socket2::Socket::new(
@@ -81,6 +81,7 @@ pub async fn http3(
     connecting_timeout_sec: u64,
     connection: config::Connection,
     rule: crate::Rules,
+    custom_http_path: String
 ) {
     let arc_rule = Arc::new(rule);
     let socketadrs = SocketAddr::from_str(socket_addrs).unwrap();
@@ -168,6 +169,11 @@ pub async fn http3(
         // prepare for atomic
         let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
         let arc_sn: Arc<str> = server_name.clone().into();
+        let cpath: Option<Arc<str>> = if custom_http_path.len()>0{
+            Some(custom_http_path.clone().into())
+        }else {
+            None
+        };
 
         loop {
             // Check if Connection is dead
@@ -189,9 +195,10 @@ pub async fn http3(
                 
                 let h3 = h3.clone();
                 let sn = arc_sn.clone();
+                let cpath = cpath.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
-                    if let Err(e) = send_request(sn, h3, (dns_query, query_size), addr, udp).await {
+                    if let Err(e) = send_request(sn, h3, (dns_query, query_size), addr, udp, cpath).await {
                         println!("{}", e);
                         temp = true;
                     }
@@ -212,11 +219,12 @@ async fn send_request(
     dns_query: ([u8; 512], usize),
     addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
+    cpath: Option<Arc<str>>
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut temp = [0u8;512];
     let query_bs4url = base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?;
     let mut url = [0;1024];
-    let req = http::Request::get(genrequrl(&mut url, server_name.as_bytes(), query_bs4url))
+    let req = http::Request::get(genrequrl(&mut url, server_name.as_bytes(), query_bs4url, cpath))
     .header("Accept", "application/dns-message")
     .body(())?;
 

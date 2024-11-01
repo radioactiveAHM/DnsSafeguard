@@ -8,17 +8,19 @@ mod multi;
 mod rule;
 mod tls;
 mod utils;
+mod chttp;
 
 use core::str;
 use std::sync::Arc;
 
+use chttp::genrequrlh1;
 use multi::h1_multi;
 use rule::{convert_rules, rulecheck_sync, Rules};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     time::sleep,
 };
-use utils::{genrequrlh1, tcp_connect_handle};
+use utils::tcp_connect_handle;
 
 #[tokio::main]
 async fn main() {
@@ -45,6 +47,7 @@ async fn main() {
                         &v6.fragmenting,
                         conf.connection,
                         v6rules,
+                        v6.custom_http_path
                     )
                     .await
                 }
@@ -56,6 +59,7 @@ async fn main() {
                         &v6.fragmenting,
                         conf.connection,
                         v6rules,
+                        v6.custom_http_path
                     )
                     .await
                 }
@@ -67,6 +71,7 @@ async fn main() {
                         &v6.fragmenting,
                         conf.connection,
                         v6rules,
+                        v6.custom_http_path
                     )
                     .await
                 }
@@ -81,6 +86,7 @@ async fn main() {
                         connecting_timeout_sec,
                         conf.connection,
                         v6rules,
+                        v6.custom_http_path
                     )
                     .await
                 }
@@ -137,6 +143,7 @@ async fn main() {
                 &conf.fragmenting,
                 conf.connection,
                 rules,
+                conf.custom_http_path
             )
             .await
         }
@@ -148,6 +155,7 @@ async fn main() {
                 &conf.fragmenting,
                 conf.connection,
                 rules,
+                conf.custom_http_path
             )
             .await
         }
@@ -159,6 +167,7 @@ async fn main() {
                 &conf.fragmenting,
                 conf.connection,
                 rules,
+                conf.custom_http_path
             )
             .await
         }
@@ -173,6 +182,7 @@ async fn main() {
                 connecting_timeout_sec,
                 conf.connection,
                 rules,
+                conf.custom_http_path
             )
             .await
         }
@@ -226,6 +236,7 @@ async fn http1(
     fragmenting: &config::Fragmenting,
     connection: config::Connection,
     rule: Rules,
+    custom_http_path: String
 ) {
     // TLS Client
     let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()]);
@@ -280,6 +291,11 @@ async fn http1(
         let mut c = tls_conn.unwrap();
         // UDP socket to listen for DNS query
         let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
+        let cpath: Option<&str> = if custom_http_path.len()>0{
+            Some(custom_http_path.as_str())
+        }else {
+            None
+        };
 
         loop {
             let mut dns_query = [0u8; 512];
@@ -297,7 +313,7 @@ async fn http1(
             let query_bs4url =
                 base64_url::encode_to_slice(&dns_query[..query_size], &mut temp).unwrap();
             let mut url = [0;1024];
-            let http_req = genrequrlh1(&mut url, server_name.as_bytes(), query_bs4url);
+            let http_req = genrequrlh1(&mut url, server_name.as_bytes(), query_bs4url,&cpath);
 
             // Write http request
             if c.write(http_req).await.is_err() {

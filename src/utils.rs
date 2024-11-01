@@ -33,28 +33,3 @@ pub async fn tcp_connect_handle(socket_addrs: &str) -> TcpStream {
         }
     }
 }
-
-pub fn genrequrl<'a>(url: &'a mut [u8],server_name: &[u8], query_bs4url: &[u8])->&'a str{
-    let scheme = b"https://";
-    let path = b"/dns-query?dns=";
-
-    url[..scheme.len()].copy_from_slice(scheme);
-    url[scheme.len()..server_name.len()+scheme.len()].copy_from_slice(server_name);
-    url[scheme.len()+server_name.len()..path.len()+scheme.len()+server_name.len()].copy_from_slice(path);
-    url[scheme.len()+server_name.len()+path.len()..query_bs4url.len()+scheme.len()+server_name.len()+path.len()].copy_from_slice(query_bs4url);
-    str::from_utf8(&url[..scheme.len()+server_name.len()+path.len()+query_bs4url.len()]).unwrap()
-}
-
-pub fn genrequrlh1<'a>(url: &'a mut [u8],server_name: &[u8], query_bs4url: &[u8])->&'a [u8]{
-    let main = b"GET /dns-query?dns=";
-    let main_end = b" HTTP/1.1\r\nHost: ";
-    let heads = b"\r\nConnection: keep-alive\r\nAccept: application/dns-message\r\n\r\n";
-
-    url[..main.len()].copy_from_slice(main);
-    url[main.len()..query_bs4url.len()+main.len()].copy_from_slice(query_bs4url);
-    url[query_bs4url.len()+main.len()..main_end.len()+query_bs4url.len()+main.len()].copy_from_slice(main_end);
-    url[main_end.len()+query_bs4url.len()+main.len()..server_name.len()+main_end.len()+query_bs4url.len()+main.len()].copy_from_slice(server_name);
-    url[server_name.len()+main_end.len()+query_bs4url.len()+main.len()..heads.len()+server_name.len()+main_end.len()+query_bs4url.len()+main.len()].copy_from_slice(heads);
-
-    &url[..heads.len()+server_name.len()+main_end.len()+query_bs4url.len()+main.len()]
-}

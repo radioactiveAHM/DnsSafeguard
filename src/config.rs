@@ -22,6 +22,7 @@ pub struct Ipv6 {
     pub server_name: String,
     pub socket_addrs: String,
     pub udp_socket_addrs: String,
+    pub custom_http_path: String,
     pub fragmenting: Fragmenting,
     pub noise: Noise,
 }
@@ -62,6 +63,7 @@ pub struct Config {
     pub server_name: String,
     pub socket_addrs: String,
     pub udp_socket_addrs: String,
+    pub custom_http_path: String,
     pub fragmenting: Fragmenting,
     pub noise: Noise,
     pub ipv6: Ipv6,

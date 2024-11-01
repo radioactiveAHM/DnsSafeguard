@@ -5,7 +5,7 @@ use tokio::{
 };
 
 use crate::{
-    c_len, catch_in_buff, config::{self, Connection}, fragment, rule::rulecheck, tls, utils::{genrequrlh1, tcp_connect_handle}
+    c_len, catch_in_buff, chttp::genrequrlh1, config::{self, Connection}, fragment, rule::rulecheck, tls, utils::tcp_connect_handle
 };
 
 pub async fn h1_multi(
@@ -15,6 +15,7 @@ pub async fn h1_multi(
     fragmenting: &config::Fragmenting,
     connection: Connection,
     rule: crate::Rules,
+    custom_http_path: String
 ) {
     let arc_rule = Arc::new(rule);
     // TLS Client Config
@@ -37,6 +38,7 @@ pub async fn h1_multi(
         let frag = (*fragmenting).clone();
         let sn = server_name.clone();
         let sa = socket_addrs.to_string();
+        let custom_http_path = custom_http_path.clone();
         tokio::spawn(async move {
             let server_addr = sa;
             let task_rcv = recver_cln;
@@ -67,6 +69,11 @@ pub async fn h1_multi(
                 println!("HTTP/1.1 Connection {} Established", conn_i);
                 retry = 0;
                 let mut c = tls_conn.unwrap();
+                let cpath: Option<&str> = if custom_http_path.len()>0{
+                    Some(custom_http_path.as_str())
+                }else {
+                    None
+                };
                 loop {
                     let mut package = Result::Err(crossbeam_channel::RecvError);
                     tokio::task::block_in_place(|| {
@@ -77,7 +84,7 @@ pub async fn h1_multi(
                         let mut temp = [0u8;512];
                         let query_bs4url = base64_url::encode_to_slice(&query.0[..query.1], &mut temp).unwrap();
                         let mut url = [0;1024];
-                        let http_req = genrequrlh1(&mut url, sn.as_bytes(), query_bs4url);
+                        let http_req = genrequrlh1(&mut url, sn.as_bytes(), query_bs4url, &cpath);
 
                         // Send HTTP Req
                         if c.write(http_req).await.is_err() {

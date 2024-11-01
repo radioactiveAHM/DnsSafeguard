@@ -81,6 +81,7 @@ The configuration file is structured in JSON format and includes the following s
 * `Server Name`: The domain name of the DNS server.
 * `Socket Addresses`: The IP address and port for the DNS server connection.
 * `UDP Socket Addresses`: Local UDP address and port for DNS queries.
+* `Custom Http Path`: Use a custom HTTP path for HTTP-based protocols like H1, H2, and H3. Leave it <ins>empty</ins> to use the default DoH standard path. Examples: `/jsd3n5nb4/dns-query`, `/user/d618995a10e74acec7ed454ac6e39d6eb693de7bd623a9296c86527b61c46a82/dns-query`.
 * `Fragmenting`: The fragmentation method to use during the TLS handshake has three valid values: `linear`, `random`, `single` and `jump`.
 * `Noise`: UDP noise setting.
   * `ntype`: Noise type. Variants include `dns`, `str`, `lsd`, and `rand`.

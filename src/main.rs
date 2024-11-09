@@ -11,11 +11,12 @@ mod utils;
 mod chttp;
 
 use core::str;
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 
 use chttp::genrequrlh1;
 use multi::h1_multi;
 use rule::{convert_rules, rulecheck_sync, Rules};
+use tls::tlsfragmenting;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     time::sleep,
@@ -38,12 +39,12 @@ async fn main() {
     let v6rules = rules.clone();
     tokio::spawn(async move {
         if v6.enable {
-            match v6.protocol.as_str() {
-                "h1 multi" => {
+            match v6.protocol {
+                config::Protocol::h1_multi => {
                     h1_multi(
                         v6.server_name,
-                        &v6.socket_addrs,
-                        &v6.udp_socket_addrs,
+                        v6.socket_addrs,
+                        v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
                         v6rules,
@@ -51,11 +52,11 @@ async fn main() {
                     )
                     .await
                 }
-                "h1" => {
+                config::Protocol::h1 => {
                     http1(
                         v6.server_name,
-                        &v6.socket_addrs,
-                        &v6.udp_socket_addrs,
+                        v6.socket_addrs,
+                        v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
                         v6rules,
@@ -63,11 +64,11 @@ async fn main() {
                     )
                     .await
                 }
-                "h2" => {
+                config::Protocol::h2 => {
                     doh2::http2(
                         v6.server_name,
-                        &v6.socket_addrs,
-                        &v6.udp_socket_addrs,
+                        v6.socket_addrs,
+                        v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
                         v6rules,
@@ -75,12 +76,12 @@ async fn main() {
                     )
                     .await
                 }
-                "h3" => {
+                config::Protocol::h3 => {
                     let connecting_timeout_sec = quic_conf_file_v6.connecting_timeout_sec;
                     doh3::http3(
                         v6.server_name,
-                        &v6.socket_addrs,
-                        &v6.udp_socket_addrs,
+                        v6.socket_addrs,
+                        v6.udp_socket_addrs,
                         quic_conf_file_v6,
                         v6.noise,
                         connecting_timeout_sec,
@@ -90,34 +91,34 @@ async fn main() {
                     )
                     .await
                 }
-                "dot" => {
+                config::Protocol::dot => {
                     dot::dot(
                         v6.server_name,
-                        &v6.socket_addrs,
-                        &v6.udp_socket_addrs,
+                        v6.socket_addrs,
+                        v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
                         v6rules,
                     )
                     .await;
                 }
-                "dot nonblocking" => {
+                config::Protocol::dot_nonblocking => {
                     dot::dot_nonblocking(
                         v6.server_name,
-                        &v6.socket_addrs,
-                        &v6.udp_socket_addrs,
+                        v6.socket_addrs,
+                        v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
                         v6rules,
                     )
                     .await;
                 }
-                "doq" => {
+                config::Protocol::doq => {
                     let connecting_timeout_sec = quic_conf_file_v6.connecting_timeout_sec;
                     doq::doq(
                         v6.server_name,
-                        &v6.socket_addrs,
-                        &v6.udp_socket_addrs,
+                        v6.socket_addrs,
+                        v6.udp_socket_addrs,
                         quic_conf_file_v6,
                         v6.noise,
                         connecting_timeout_sec,
@@ -125,21 +126,17 @@ async fn main() {
                         v6rules,
                     )
                     .await;
-                }
-                _ => {
-                    println!("Invalid http version");
-                    panic!();
                 }
             }
         }
     });
 
-    match conf.protocol.as_str() {
-        "h1 multi" => {
+    match conf.protocol {
+        config::Protocol::h1_multi => {
             h1_multi(
                 conf.server_name,
-                &conf.socket_addrs,
-                &conf.udp_socket_addrs,
+                conf.socket_addrs,
+                conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
                 rules,
@@ -147,11 +144,11 @@ async fn main() {
             )
             .await
         }
-        "h1" => {
+        config::Protocol::h1 => {
             http1(
                 conf.server_name,
-                &conf.socket_addrs,
-                &conf.udp_socket_addrs,
+                conf.socket_addrs,
+                conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
                 rules,
@@ -159,11 +156,11 @@ async fn main() {
             )
             .await
         }
-        "h2" => {
+        config::Protocol::h2 => {
             doh2::http2(
                 conf.server_name,
-                &conf.socket_addrs,
-                &conf.udp_socket_addrs,
+                conf.socket_addrs,
+                conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
                 rules,
@@ -171,12 +168,12 @@ async fn main() {
             )
             .await
         }
-        "h3" => {
+        config::Protocol::h3 => {
             let connecting_timeout_sec = conf.quic.connecting_timeout_sec;
             doh3::http3(
                 conf.server_name,
-                &conf.socket_addrs,
-                &conf.udp_socket_addrs,
+                conf.socket_addrs,
+                conf.udp_socket_addrs,
                 conf.quic,
                 conf.noise,
                 connecting_timeout_sec,
@@ -186,34 +183,34 @@ async fn main() {
             )
             .await
         }
-        "dot" => {
+        config::Protocol::dot => {
             dot::dot(
                 conf.server_name,
-                &conf.socket_addrs,
-                &conf.udp_socket_addrs,
+                conf.socket_addrs,
+                conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
                 rules,
             )
             .await;
         }
-        "dot nonblocking" => {
+        config::Protocol::dot_nonblocking => {
             dot::dot_nonblocking(
                 conf.server_name,
-                &conf.socket_addrs,
-                &conf.udp_socket_addrs,
+                conf.socket_addrs,
+                conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
                 rules,
             )
             .await;
         }
-        "doq" => {
+        config::Protocol::doq => {
             let connecting_timeout_sec = conf.quic.connecting_timeout_sec;
             doq::doq(
                 conf.server_name,
-                &conf.socket_addrs,
-                &conf.udp_socket_addrs,
+                conf.socket_addrs,
+                conf.udp_socket_addrs,
                 conf.quic,
                 conf.noise,
                 connecting_timeout_sec,
@@ -221,22 +218,18 @@ async fn main() {
                 rules,
             )
             .await;
-        }
-        _ => {
-            println!("Invalid http version");
-            panic!();
         }
     }
 }
 
 async fn http1(
     server_name: String,
-    socket_addrs: &str,
-    udp_socket_addrs: &str,
+    socket_addrs: SocketAddr,
+    udp_socket_addrs: SocketAddr,
     fragmenting: &config::Fragmenting,
     connection: config::Connection,
     rule: Rules,
-    custom_http_path: String
+    custom_http_path: Option<String>
 ) {
     // TLS Client
     let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()]);
@@ -257,13 +250,7 @@ async fn http1(
                 if fragmenting.enable {
                     tokio::task::block_in_place(|| {
                         tokio::runtime::Handle::current().block_on(async {
-                            match fragmenting.method.as_str() {
-                                "linear" => fragment::fragment_client_hello(tls, tcp).await,
-                                "random" => fragment::fragment_client_hello_rand(tls, tcp).await,
-                                "single" => fragment::fragment_client_hello_pack(tls, tcp).await,
-                                "jump" => fragment::fragment_client_hello_jump(tls, tcp).await,
-                                _ => panic!("Invalid fragment method"),
-                            }
+                            tlsfragmenting(fragmenting, tls, tcp);
                         });
                     });
                 }
@@ -291,11 +278,7 @@ async fn http1(
         let mut c = tls_conn.unwrap();
         // UDP socket to listen for DNS query
         let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
-        let cpath: Option<&str> = if custom_http_path.len()>0{
-            Some(custom_http_path.as_str())
-        }else {
-            None
-        };
+        let cpath: Option<&str> = custom_http_path.as_deref();
 
         loop {
             let mut dns_query = [0u8; 512];
@@ -305,7 +288,7 @@ async fn http1(
             }
             let (query_size, addr) = udp_ok.unwrap();
             // rule check
-            if rule.enable && rulecheck_sync(&rule, (dns_query, query_size), addr, &udp).await {
+            if rule.is_some() && rulecheck_sync(&rule, (dns_query, query_size), addr, &udp).await {
                 continue;
             }
 

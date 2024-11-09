@@ -1,7 +1,27 @@
+use std::net::SocketAddr;
+
+#[derive(serde::Deserialize, Clone, Copy)]
+#[allow(non_camel_case_types)]
+pub enum FragMethod {
+    linear,
+    random,
+    single,
+    jump
+}
+
 #[derive(serde::Deserialize, Clone)]
 pub struct Fragmenting {
     pub enable: bool,
-    pub method: String,
+    pub method: FragMethod,
+}
+
+#[derive(serde::Deserialize, Clone, Copy)]
+#[allow(non_camel_case_types)]
+pub enum NoiseType {
+    dns,
+    str,
+    lsd,
+    rand
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -10,26 +30,47 @@ pub struct Noise {
     pub packet_length: usize,
     pub packets: u8,
     pub sleep: u64,
-    pub ntype: String,
+    pub ntype: NoiseType,
     pub content: String,
     pub continues: bool,
 }
 
+#[derive(serde::Deserialize, Clone, Copy)]
+#[allow(non_camel_case_types)]
+pub enum Protocol {
+    h1,
+    h1_multi,
+    h2,
+    h3,
+    dot,
+    dot_nonblocking,
+    doq
+}
+
+
 #[derive(serde::Deserialize)]
 pub struct Ipv6 {
     pub enable: bool,
-    pub protocol: String,
+    pub protocol: Protocol,
     pub server_name: String,
-    pub socket_addrs: String,
-    pub udp_socket_addrs: String,
-    pub custom_http_path: String,
+    pub socket_addrs: SocketAddr,
+    pub udp_socket_addrs: SocketAddr,
+    pub custom_http_path: Option<String>,
     pub fragmenting: Fragmenting,
     pub noise: Noise,
 }
 
+#[derive(serde::Deserialize, Clone, Copy)]
+#[allow(non_camel_case_types)]
+pub enum CongestionController {
+    bbr,
+    cubic,
+    newreno
+}
+
 #[derive(serde::Deserialize, Clone)]
 pub struct Quic {
-    pub congestion_controller: String,
+    pub congestion_controller: CongestionController,
     pub keep_alive_interval: u64,
     pub datagram_receive_buffer_size: usize,
     pub datagram_send_buffer_size: usize,
@@ -51,25 +92,19 @@ pub struct Rule{
     pub target: String
 }
 
-#[derive(serde::Deserialize, Clone)]
-pub struct Rules{
-    pub enable: bool,
-    pub rule: Vec<Rule>
-}
-
 #[derive(serde::Deserialize)]
 pub struct Config {
-    pub protocol: String,
+    pub protocol: Protocol,
     pub server_name: String,
-    pub socket_addrs: String,
-    pub udp_socket_addrs: String,
-    pub custom_http_path: String,
+    pub socket_addrs: SocketAddr,
+    pub udp_socket_addrs: SocketAddr,
+    pub custom_http_path: Option<String>,
     pub fragmenting: Fragmenting,
     pub noise: Noise,
     pub ipv6: Ipv6,
     pub quic: Quic,
     pub connection: Connection,
-    pub rules: Rules
+    pub rules: Option<Vec<Rule>>
 }
 
 pub fn load_config() -> Config {

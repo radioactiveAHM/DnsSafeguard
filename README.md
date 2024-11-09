@@ -26,6 +26,7 @@ DnsSafeguard is a fast and secure DNS client written in Rust, designed to interc
 * [x] UDP Noise Implementation
 * [x] Advanced Rules Management
 * [x] DNS over QUIC (DoQ) Support
+* [ ] Encrypted Client Hello (ECH)
 
 ## Building the Project
 
@@ -72,17 +73,17 @@ The configuration file is structured in JSON format and includes the following s
 
 * `Protocol`: Specifies the protocol used for DNS queries.
   * `h1`: Single HTTP/1.1 Connection.
-  * `h1 multi`: Multiple HTTP/1.1 Connection.
+  * `h1_multi`: Multiple HTTP/1.1 Connection.
   * `h2`: HTTP/2 Connection.
   * `h3`: HTTP/3 Connection (does not support fragmenting).
   * `dot`: DOT Connection (DNS over TLS).
-  * `dot nonblocking`: DOT Non-Blocking Connection (DNS over TLS).
+  * `dot_nonblocking`: DOT Non-Blocking Connection (DNS over TLS).
   * `doq`: DoQ Connection (DNS over QUIC).
 * `Server Name`: The domain name of the DNS server.
 * `Socket Addresses`: The IP address and port for the DNS server connection.
 * `UDP Socket Addresses`: Local UDP address and port for DNS queries.
-* `Custom Http Path`: Use a custom HTTP path for HTTP-based protocols like H1, H2, and H3. Leave it <ins>empty</ins> to use the default DoH standard path. Examples: `/jsd3n5nb4/dns-query`, `/user/d618995a10e74acec7ed454ac6e39d6eb693de7bd623a9296c86527b61c46a82/dns-query`.
-* `Fragmenting`: The fragmentation method to use during the TLS handshake has three valid values: `linear`, `random`, `single` and `jump`.
+* `Custom Http Path`: Use a custom HTTP path for HTTP-based protocols like H1, H2, and H3. Leave it <ins>empty</ins> to use the default DoH standard path. Examples: `/jsd3n5nb4/dns-query`, `/user/d618995a10e74acec7ed454ac6e39d6eb/dns-query`. Value can be `null`.
+* `Fragmenting`: The fragmentation method to use during the TLS handshake has 4 valid values: `linear`, `random`, `single` and `jump`. [Go to fragmenting page](/FRAG.md)
 * `Noise`: UDP noise setting.
   * `ntype`: Noise type. Variants include `dns`, `str`, `lsd`, and `rand`.
   * `content`: Domain for `dns` ntype. Text for `str` ntype.
@@ -102,11 +103,9 @@ The configuration file is structured in JSON format and includes the following s
   * `reconnect_sleep`: Duration to sleep before reconnecting (in seconds).
   * `max_reconnect`: Maximum reconnect attempts before sleeping for a longer duration.
   * `max_reconnect_sleep`: Duration to sleep when the maximum reconnect attempts are reached.
-* `rules`: Block or bypass DNS queries containing specified domains or keywords.
-  * `enable`: Enable or disable rules.
-  * `rule`: List of defined rules.
-    * `options`: List of domains or keywords.
-    * `target`: Can be `block` or a DNS server providing plaintext UDP protocol (e.g., 1.1.1.1:53).
+* `rules`: Block or bypass DNS queries containing specified domains or keywords. Value can be `null`.
+  * `options`: List of domains or keywords.
+  * `target`: Can be `block` or a DNS server providing plaintext UDP protocol (e.g., 1.1.1.1:53).
 
 ## Notes
 

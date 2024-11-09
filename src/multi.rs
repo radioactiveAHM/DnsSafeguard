@@ -1,21 +1,27 @@
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     time::sleep,
 };
 
 use crate::{
-    c_len, catch_in_buff, chttp::genrequrlh1, config::{self, Connection}, fragment, rule::rulecheck, tls, utils::tcp_connect_handle
+    c_len, catch_in_buff, chttp::genrequrlh1, config::{self, Connection}, rule::rulecheck, tls::{self, tlsfragmenting}, utils::tcp_connect_handle
 };
+
+type CrossContainer = (
+    ([u8;512],usize),
+    std::net::SocketAddr,
+    Arc<tokio::net::UdpSocket>,
+);
 
 pub async fn h1_multi(
     server_name: String,
-    socket_addrs: &str,
-    udp_socket_addrs: &str,
+    socket_addrs: SocketAddr,
+    udp_socket_addrs: SocketAddr,
     fragmenting: &config::Fragmenting,
     connection: Connection,
     rule: crate::Rules,
-    custom_http_path: String
+    custom_http_path: Option<String>
 ) {
     let arc_rule = Arc::new(rule);
     // TLS Client Config
@@ -29,24 +35,18 @@ pub async fn h1_multi(
 
     // Spawn Task for multiple connections
     for conn_i in 0u8..connection.h1_multi_connections {
-        let recver_cln: crossbeam_channel::Receiver<(
-            ([u8;512],usize),
-            std::net::SocketAddr,
-            Arc<tokio::net::UdpSocket>,
-        )> = recver.clone();
+        let recver_cln: crossbeam_channel::Receiver<CrossContainer> = recver.clone();
         let tls_config = ctls.clone();
         let frag = (*fragmenting).clone();
         let sn = server_name.clone();
-        let sa = socket_addrs.to_string();
         let custom_http_path = custom_http_path.clone();
         tokio::spawn(async move {
-            let server_addr = sa;
             let task_rcv = recver_cln;
             let mut retry = 0u8;
             loop {
                 let tls_conn = tls_conn_gen(
                     sn.clone(),
-                    server_addr.clone(),
+                    socket_addrs,
                     frag.clone(),
                     tls_config.clone(),
                 )
@@ -69,11 +69,7 @@ pub async fn h1_multi(
                 println!("HTTP/1.1 Connection {} Established", conn_i);
                 retry = 0;
                 let mut c = tls_conn.unwrap();
-                let cpath: Option<&str> = if custom_http_path.len()>0{
-                    Some(custom_http_path.as_str())
-                }else {
-                    None
-                };
+                let cpath: Option<&str> = custom_http_path.as_deref();
                 loop {
                     let mut package = Result::Err(crossbeam_channel::RecvError);
                     tokio::task::block_in_place(|| {
@@ -132,7 +128,7 @@ pub async fn h1_multi(
 
         if let Ok((query_size, addr)) = udp_arc.recv_from(&mut dns_query).await {
             // rule check
-            if arc_rule.enable && rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp_arc.clone()).await{
+            if arc_rule.is_some() && rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp_arc.clone()).await{
                 continue;
             }
             
@@ -147,7 +143,7 @@ pub async fn h1_multi(
 
 pub async fn tls_conn_gen(
     server_name: String,
-    socket_addrs: String,
+    socket_addrs: SocketAddr,
     fragmenting: config::Fragmenting,
     ctls: Arc<tokio_rustls::rustls::ClientConfig>,
 ) -> Result<tokio_rustls::client::TlsStream<tokio::net::TcpStream>, std::io::Error> {
@@ -158,20 +154,12 @@ pub async fn tls_conn_gen(
     tokio_rustls::TlsConnector::from(ctls)
         .connect_with_stream(
             example_com,
-            tcp_connect_handle(&socket_addrs).await,
+            tcp_connect_handle(socket_addrs).await,
             |tls, tcp| {
                 // Do fragmenting
                 if fragmenting.enable {
                     tokio::task::block_in_place(|| {
-                        tokio::runtime::Handle::current().block_on(async {
-                            match fragmenting.method.as_str() {
-                                "linear" => fragment::fragment_client_hello(tls, tcp).await,
-                                "random" => fragment::fragment_client_hello_rand(tls, tcp).await,
-                                "single" => fragment::fragment_client_hello_pack(tls, tcp).await,
-                                "jump" => fragment::fragment_client_hello_jump(tls, tcp).await,
-                                _ => panic!("Invalid fragment method"),
-                            }
-                        });
+                        tlsfragmenting(&fragmenting, tls, tcp);
                     });
                 }
             },

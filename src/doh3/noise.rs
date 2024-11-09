@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use crate::config::Noise;
+use crate::config::{Noise,NoiseType};
 use rand::Rng;
 use tokio::time::sleep;
 
@@ -142,8 +142,8 @@ pub async fn noiser(noise: Noise, target: SocketAddr, socket: &socket2::Socket) 
         }
     }
 
-    match noise.ntype.as_str() {
-        "rand" => {
+    match noise.ntype {
+        NoiseType::rand => {
             for _ in 0..noise.packets {
                 // generate random packet
                 let mut packet = [0u8; 1024];
@@ -159,7 +159,7 @@ pub async fn noiser(noise: Noise, target: SocketAddr, socket: &socket2::Socket) 
                 sleep(std::time::Duration::from_millis(noise.sleep)).await;
             }
         }
-        "dns" => {
+        NoiseType::dns => {
             if socket
                 .send_to(&dns::DnsRcord::with_domain(&noise.content), &target.into())
                 .unwrap_or(0)
@@ -169,7 +169,7 @@ pub async fn noiser(noise: Noise, target: SocketAddr, socket: &socket2::Socket) 
             }
             sleep(std::time::Duration::from_millis(noise.sleep)).await;
         }
-        "str" => {
+        NoiseType::str => {
             if socket
                 .send_to(noise.content.as_bytes(), &target.into())
                 .unwrap_or(0)
@@ -179,7 +179,7 @@ pub async fn noiser(noise: Noise, target: SocketAddr, socket: &socket2::Socket) 
             }
             sleep(std::time::Duration::from_millis(noise.sleep)).await;
         }
-        "lsd" => {
+        NoiseType::lsd => {
             if socket
                 .send_to(&lsd::LSD::new(target).into_buffer(), &target.into())
                 .unwrap_or(0)
@@ -189,17 +189,14 @@ pub async fn noiser(noise: Noise, target: SocketAddr, socket: &socket2::Socket) 
             }
             sleep(std::time::Duration::from_millis(noise.sleep)).await;
         }
-        _ => {
-            panic!("Invalid noise type");
-        }
     }
     println!("Noise sent");
 }
 
 async fn continues_noise(noise: Noise, target: SocketAddr, socket: socket2::Socket) {
     loop {
-        match noise.ntype.as_str() {
-            "rand" => {
+        match noise.ntype {
+            NoiseType::rand => {
                 for _ in 0..noise.packets {
                     // generate random packet
                     let mut packet = [0u8; 1024];
@@ -215,7 +212,7 @@ async fn continues_noise(noise: Noise, target: SocketAddr, socket: socket2::Sock
                     sleep(std::time::Duration::from_millis(noise.sleep)).await;
                 }
             }
-            "dns" => {
+            NoiseType::dns => {
                 if socket
                     .send_to(&dns::DnsRcord::with_domain(&noise.content), &target.into())
                     .unwrap_or(0)
@@ -225,7 +222,7 @@ async fn continues_noise(noise: Noise, target: SocketAddr, socket: socket2::Sock
                 }
                 sleep(std::time::Duration::from_millis(noise.sleep)).await;
             }
-            "str" => {
+            NoiseType::str => {
                 if socket
                     .send_to(noise.content.as_bytes(), &target.into())
                     .unwrap_or(0)
@@ -235,7 +232,7 @@ async fn continues_noise(noise: Noise, target: SocketAddr, socket: socket2::Sock
                 }
                 sleep(std::time::Duration::from_millis(noise.sleep)).await;
             }
-            "lsd" => {
+            NoiseType::lsd => {
                 if socket
                     .send_to(&lsd::LSD::new(target).into_buffer(), &target.into())
                     .unwrap_or(0)
@@ -244,9 +241,6 @@ async fn continues_noise(noise: Noise, target: SocketAddr, socket: socket2::Sock
                     println!("Noise failed");
                 }
                 sleep(std::time::Duration::from_millis(noise.sleep)).await;
-            }
-            _ => {
-                panic!("Invalid noise type");
             }
         }
     }

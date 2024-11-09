@@ -1,6 +1,4 @@
-use std::sync::Arc;
-
-pub fn tc(quic_conf_file: crate::config::Quic) -> Arc<quinn::TransportConfig> {
+pub fn tc(quic_conf_file: crate::config::Quic) -> std::sync::Arc<quinn::TransportConfig> {
     let mut transport_config = quinn::TransportConfig::default();
 
     transport_config.keep_alive_interval(Some(std::time::Duration::from_secs(
@@ -15,19 +13,21 @@ pub fn tc(quic_conf_file: crate::config::Quic) -> Arc<quinn::TransportConfig> {
 
     transport_config.datagram_send_buffer_size(quic_conf_file.datagram_send_buffer_size);
 
-    Arc::new(transport_config)
+    std::sync::Arc::new(transport_config)
 }
 
 fn congestion_selection(
-    congestion_controller: String,
-) -> Arc<dyn quinn::congestion::ControllerFactory + Send + Sync + 'static> {
-    match congestion_controller.as_str() {
-        "bbr" => Arc::new(quinn::congestion::BbrConfig::default()),
-        "cubic" => Arc::new(quinn::congestion::CubicConfig::default()),
-        "newreno" => Arc::new(quinn::congestion::NewRenoConfig::default()),
-        _ => {
-            print!("Invalid congestion controller");
-            panic!()
+    congestion_controller: crate::config::CongestionController,
+) -> std::sync::Arc<dyn quinn::congestion::ControllerFactory + Send + Sync + 'static> {
+    match congestion_controller {
+        crate::config::CongestionController::bbr => {
+            std::sync::Arc::new(quinn::congestion::BbrConfig::default())
+        }
+        crate::config::CongestionController::cubic => {
+            std::sync::Arc::new(quinn::congestion::CubicConfig::default())
+        }
+        crate::config::CongestionController::newreno => {
+            std::sync::Arc::new(quinn::congestion::NewRenoConfig::default())
         }
     }
 }

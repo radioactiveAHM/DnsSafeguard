@@ -1,6 +1,6 @@
-use crate::fragment;
 use crate::rule::rulecheck;
 use crate::chttp::genrequrl;
+use crate::tls::tlsfragmenting;
 use h2::client::SendRequest;
 use core::str;
 use std::{net::SocketAddr, sync::Arc};
@@ -13,12 +13,12 @@ use crate::utils::tcp_connect_handle;
 
 pub async fn http2(
     server_name: String,
-    socket_addrs: &str,
-    udp_socket_addrs: &str,
+    socket_addrs: SocketAddr,
+    udp_socket_addrs: SocketAddr,
     fragmenting: &config::Fragmenting,
     connection: config::Connection,
     rule: crate::Rules,
-    custom_http_path: String
+    custom_http_path: Option<String>
 ) {
     let arc_rule = Arc::new(rule);
     // TLS Conf
@@ -37,19 +37,7 @@ pub async fn http2(
         let tls_conn = tokio_rustls::TlsConnector::from(Arc::clone(&h2tls))
             .connect_with_stream(example_com, tcp, |tls, tcp| {
                 // Do fragmenting
-                if fragmenting.enable {
-                    tokio::task::block_in_place(|| {
-                        tokio::runtime::Handle::current().block_on(async {
-                            match fragmenting.method.as_str() {
-                                "linear" => fragment::fragment_client_hello(tls, tcp).await,
-                                "random" => fragment::fragment_client_hello_rand(tls, tcp).await,
-                                "single" => fragment::fragment_client_hello_pack(tls, tcp).await,
-                                "jump" => fragment::fragment_client_hello_jump(tls, tcp).await,
-                                _ => panic!("Invalid fragment method"),
-                            }
-                        });
-                    });
-                }
+                tlsfragmenting(fragmenting, tls, tcp);
             })
             .await;
         if tls_conn.is_err() {
@@ -87,8 +75,8 @@ pub async fn http2(
         // prepare atomic
         let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
         let arc_sn: Arc<str> = server_name.clone().into();
-        let cpath: Option<Arc<str>> = if custom_http_path.len()>0{
-            Some(custom_http_path.clone().into())
+        let cpath: Option<Arc<str>> = if custom_http_path.is_some(){
+            Some(custom_http_path.clone().unwrap().into())
         }else {
             None
         };
@@ -106,7 +94,7 @@ pub async fn http2(
 
             if let Ok((query_size, addr)) = udp_arc.recv_from(&mut dns_query).await {
                 // rule check
-                if arc_rule.enable && rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp_arc.clone()).await{
+                if arc_rule.is_some() && rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp_arc.clone()).await{
                     continue;
                 }
 
@@ -126,8 +114,6 @@ pub async fn http2(
                         *(h2_conn_dead.lock().await) = true;
                     }
                 });
-            } else {
-                println!("Failed to recv DNS Query");
             }
         }
     }

@@ -3,7 +3,7 @@
 	"server_name": "cloudflare-dns.com",
 	"socket_addrs": "1.1.1.1:443",
 	"udp_socket_addrs": "127.0.0.1:53",
-	"custom_http_path": "",
+	"custom_http_path": null,
 	"fragmenting": {
 		"enable": true,
 		"method": "single"
@@ -23,7 +23,7 @@
 		"server_name": "cloudflare-dns.com",
 		"socket_addrs": "[2001:4860:4860::8888]:443",
 		"udp_socket_addrs": "[::1]:53",
-		"custom_http_path": "",
+		"custom_http_path": null,
 		"fragmenting": {
 			"enable": false,
 			"method": "single"
@@ -52,17 +52,14 @@
 		"max_reconnect": 5,
 		"max_reconnect_sleep": 30
 	},
-	"rules": {
-		"enable": true,
-		"rule": [
-			{
-				"options": [
-					"googlesyndication",
-					"analytic",
-					"googletagmanager"
-				],
-				"target": "block"
-			}
-		]
-	}
+	"rules": [
+		{
+			"options": [
+				"googlesyndication",
+				"analytic",
+				"googletagmanager"
+			],
+			"target": "block"
+		}
+	]
 }

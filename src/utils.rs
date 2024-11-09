@@ -1,4 +1,4 @@
-use core::str;
+use std::net::SocketAddr;
 
 use tokio::{net::TcpStream, time::sleep};
 
@@ -11,7 +11,7 @@ pub fn convert_two_u8s_to_u16_be(bytes: [u8; 2]) -> u16 {
     ((bytes[0] as u16) << 8) | bytes[1] as u16
 }
 
-pub async fn tcp_connect_handle(socket_addrs: &str) -> TcpStream {
+pub async fn tcp_connect_handle(socket_addrs: SocketAddr) -> TcpStream {
     let mut retry = 0u8;
     loop {
         match tokio::net::TcpStream::connect(socket_addrs).await {

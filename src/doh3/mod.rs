@@ -74,18 +74,17 @@ pub async fn udp_setup(
 
 pub async fn http3(
     server_name: String,
-    socket_addrs: &str,
-    udp_socket_addrs: &str,
+    socket_addrs: SocketAddr,
+    udp_socket_addrs: SocketAddr,
     quic_conf_file: config::Quic,
     noise: Noise,
     connecting_timeout_sec: u64,
     connection: config::Connection,
     rule: crate::Rules,
-    custom_http_path: String
+    custom_http_path: Option<String>
 ) {
     let arc_rule = Arc::new(rule);
-    let socketadrs = SocketAddr::from_str(socket_addrs).unwrap();
-    let mut endpoint = udp_setup(socketadrs, noise.clone(), quic_conf_file.clone(), "h3").await;
+    let mut endpoint = udp_setup(socket_addrs, noise.clone(), quic_conf_file.clone(), "h3").await;
 
     let mut retry = 0u8;
     loop {
@@ -97,13 +96,13 @@ pub async fn http3(
             .await;
             retry = 0;
             // on windows when pc goes sleep the endpoint config is fucked up
-            endpoint = udp_setup(socketadrs, noise.clone(), quic_conf_file.clone(), "h3").await;
+            endpoint = udp_setup(socket_addrs, noise.clone(), quic_conf_file.clone(), "h3").await;
             continue;
         }
 
         println!("QUIC Connecting");
         // Connect to dns server
-        let connecting = endpoint.connect(socketadrs, server_name.as_str()).unwrap();
+        let connecting = endpoint.connect(socket_addrs, server_name.as_str()).unwrap();
 
         let conn = {
             let timing = timeout(
@@ -117,7 +116,7 @@ pub async fn http3(
                     } else {
                         let conn = endpoint
                             .connect(
-                                SocketAddr::from_str(socket_addrs).unwrap(),
+                                socket_addrs,
                                 server_name.as_str(),
                             )
                             .unwrap()
@@ -169,8 +168,8 @@ pub async fn http3(
         // prepare for atomic
         let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
         let arc_sn: Arc<str> = server_name.clone().into();
-        let cpath: Option<Arc<str>> = if custom_http_path.len()>0{
-            Some(custom_http_path.clone().into())
+        let cpath: Option<Arc<str>> = if custom_http_path.is_some(){
+            Some(custom_http_path.clone().unwrap().into())
         }else {
             None
         };
@@ -189,7 +188,7 @@ pub async fn http3(
 
             if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
                 // rule check
-                if arc_rule.enable && rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp.clone()).await {
+                if arc_rule.is_some() && rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp.clone()).await {
                     continue;
                 }
                 
@@ -206,8 +205,6 @@ pub async fn http3(
                         *(quic_conn_dead.lock().await) = true;
                     }
                 });
-            } else {
-                println!("Failed to recv DNS Query");
             }
         }
     }

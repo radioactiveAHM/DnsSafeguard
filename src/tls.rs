@@ -1,6 +1,4 @@
-use std::sync::Arc;
-
-pub fn tlsconf(alpn: Vec<Vec<u8>>) -> Arc<tokio_rustls::rustls::ClientConfig> {
+pub fn tlsconf(alpn: Vec<Vec<u8>>) -> std::sync::Arc<tokio_rustls::rustls::ClientConfig> {
     let root_store = tokio_rustls::rustls::RootCertStore::from_iter(
         webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
     );
@@ -10,5 +8,32 @@ pub fn tlsconf(alpn: Vec<Vec<u8>>) -> Arc<tokio_rustls::rustls::ClientConfig> {
     config.alpn_protocols = alpn;
     config.enable_early_data = true;
 
-    Arc::new(config)
+    std::sync::Arc::new(config)
+}
+
+pub fn tlsfragmenting(
+    fragmenting: &crate::config::Fragmenting,
+    tls: &mut quinn::rustls::ClientConnection,
+    tcp: &mut tokio::net::TcpStream,
+) {
+    if fragmenting.enable {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                match fragmenting.method {
+                    crate::config::FragMethod::linear => {
+                        crate::fragment::fragment_client_hello(tls, tcp).await
+                    }
+                    crate::config::FragMethod::random => {
+                        crate::fragment::fragment_client_hello_rand(tls, tcp).await
+                    }
+                    crate::config::FragMethod::single => {
+                        crate::fragment::fragment_client_hello_pack(tls, tcp).await
+                    }
+                    crate::config::FragMethod::jump => {
+                        crate::fragment::fragment_client_hello_jump(tls, tcp).await
+                    }
+                }
+            });
+        });
+    }
 }

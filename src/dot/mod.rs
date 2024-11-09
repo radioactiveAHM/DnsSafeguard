@@ -1,3 +1,4 @@
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -10,8 +11,8 @@ use crate::{config, multi::tls_conn_gen, tls, utils::convert_u16_to_two_u8s_be};
 
 pub async fn dot(
     server_name: String,
-    socket_addrs: &str,
-    udp_socket_addrs: &str,
+    socket_addrs: SocketAddr,
+    udp_socket_addrs: SocketAddr,
     fragmenting: &config::Fragmenting,
     connection: config::Connection,
     rule: crate::Rules,
@@ -21,7 +22,7 @@ pub async fn dot(
     loop {
         let tls_conn = tls_conn_gen(
             server_name.clone(),
-            socket_addrs.to_string(),
+            socket_addrs,
             fragmenting.clone(),
             ctls.clone(),
         )
@@ -54,7 +55,7 @@ pub async fn dot(
             let mut query = [0; 512];
             if let Ok((query_size, addr)) = udp.recv_from(&mut query).await {
                 // rule check
-                if rule.enable && rulecheck_sync(&rule, (query, query_size), addr, &udp).await {
+                if rule.is_some() && rulecheck_sync(&rule, (query, query_size), addr, &udp).await {
                     continue;
                 }
                 // DNS query with two u8 size which is required by DOT
@@ -90,8 +91,8 @@ pub async fn dot(
 
 pub async fn dot_nonblocking(
     server_name: String,
-    socket_addrs: &str,
-    udp_socket_addrs: &str,
+    socket_addrs: SocketAddr,
+    udp_socket_addrs: SocketAddr,
     fragmenting: &config::Fragmenting,
     connection: config::Connection,
     rule: crate::Rules,
@@ -105,7 +106,7 @@ pub async fn dot_nonblocking(
         }
         let tls_conn = tls_conn_gen(
             server_name.clone(),
-            socket_addrs.to_string(),
+            socket_addrs,
             fragmenting.clone(),
             ctls.clone(),
         )
@@ -189,7 +190,7 @@ pub async fn dot_nonblocking(
             let mut query = [0; 512];
             if let Ok((query_size, addr)) = udp.recv_from(&mut query).await {
                 // rule check
-                if arc_rule.enable
+                if arc_rule.is_some()
                     && rulecheck(arc_rule.clone(), (query, query_size), addr, udp.clone()).await
                 {
                     continue;

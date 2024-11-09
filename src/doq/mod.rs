@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, str::FromStr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc};
 
 use quinn::{RecvStream, SendStream};
 use tokio::{
@@ -15,8 +15,8 @@ use crate::{
 
 pub async fn doq(
     server_name: String,
-    socket_addrs: &str,
-    udp_socket_addrs: &str,
+    socket_addrs: SocketAddr,
+    udp_socket_addrs: SocketAddr,
     quic_conf_file: config::Quic,
     noise: Noise,
     connecting_timeout_sec: u64,
@@ -24,8 +24,7 @@ pub async fn doq(
     rule: crate::Rules,
 ) {
     let arc_rule = Arc::new(rule);
-    let socketadrs = SocketAddr::from_str(socket_addrs).unwrap();
-    let mut endpoint = udp_setup(socketadrs, noise.clone(), quic_conf_file.clone(), "doq").await;
+    let mut endpoint = udp_setup(socket_addrs, noise.clone(), quic_conf_file.clone(), "doq").await;
 
     let mut retry = 0u8;
 
@@ -38,13 +37,13 @@ pub async fn doq(
             .await;
             retry = 0;
             // on windows when pc goes sleep the endpoint config is fucked up
-            endpoint = udp_setup(socketadrs, noise.clone(), quic_conf_file.clone(), "doq").await;
+            endpoint = udp_setup(socket_addrs, noise.clone(), quic_conf_file.clone(), "doq").await;
             continue;
         }
 
         println!("QUIC Connecting");
         // Connect to dns server
-        let connecting = endpoint.connect(socketadrs, server_name.as_str()).unwrap();
+        let connecting = endpoint.connect(socket_addrs, server_name.as_str()).unwrap();
 
         let conn = {
             let timing = timeout(
@@ -58,7 +57,7 @@ pub async fn doq(
                     } else {
                         let conn = endpoint
                             .connect(
-                                SocketAddr::from_str(socket_addrs).unwrap(),
+                                socket_addrs,
                                 server_name.as_str(),
                             )
                             .unwrap()
@@ -111,7 +110,7 @@ pub async fn doq(
 
             if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
                 // rule check
-                if arc_rule.enable && rulecheck(arc_rule.clone(), (dns_query, query_size), addr, udp.clone()).await{
+                if arc_rule.is_some() && rulecheck(arc_rule.clone(), (dns_query, query_size), addr, udp.clone()).await{
                     continue;
                 }
 

@@ -30,7 +30,7 @@ pub async fn doq(
 
     loop {
         if retry == connection.max_reconnect {
-            println!("Max retry reached. Sleeping for 30 seconds");
+            println!("Max retry reached. Sleeping for {}", connection.max_reconnect_sleep);
             sleep(std::time::Duration::from_secs(
                 connection.max_reconnect_sleep,
             ))

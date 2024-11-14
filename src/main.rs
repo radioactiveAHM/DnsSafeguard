@@ -43,6 +43,7 @@ async fn main() {
                 config::Protocol::h1_multi => {
                     h1_multi(
                         v6.server_name,
+                        v6.disable_domain_sni,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
                         &v6.fragmenting,
@@ -55,6 +56,7 @@ async fn main() {
                 config::Protocol::h1 => {
                     http1(
                         v6.server_name,
+                        v6.disable_domain_sni,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
                         &v6.fragmenting,
@@ -67,6 +69,7 @@ async fn main() {
                 config::Protocol::h2 => {
                     doh2::http2(
                         v6.server_name,
+                        v6.disable_domain_sni,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
                         &v6.fragmenting,
@@ -94,6 +97,7 @@ async fn main() {
                 config::Protocol::dot => {
                     dot::dot(
                         v6.server_name,
+                        v6.disable_domain_sni,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
                         &v6.fragmenting,
@@ -105,6 +109,7 @@ async fn main() {
                 config::Protocol::dot_nonblocking => {
                     dot::dot_nonblocking(
                         v6.server_name,
+                        v6.disable_domain_sni,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
                         &v6.fragmenting,
@@ -135,6 +140,7 @@ async fn main() {
         config::Protocol::h1_multi => {
             h1_multi(
                 conf.server_name,
+                conf.disable_domain_sni,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
                 &conf.fragmenting,
@@ -147,6 +153,7 @@ async fn main() {
         config::Protocol::h1 => {
             http1(
                 conf.server_name,
+                conf.disable_domain_sni,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
                 &conf.fragmenting,
@@ -159,6 +166,7 @@ async fn main() {
         config::Protocol::h2 => {
             doh2::http2(
                 conf.server_name,
+                conf.disable_domain_sni,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
                 &conf.fragmenting,
@@ -186,6 +194,7 @@ async fn main() {
         config::Protocol::dot => {
             dot::dot(
                 conf.server_name,
+                conf.disable_domain_sni,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
                 &conf.fragmenting,
@@ -197,6 +206,7 @@ async fn main() {
         config::Protocol::dot_nonblocking => {
             dot::dot_nonblocking(
                 conf.server_name,
+                conf.disable_domain_sni,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
                 &conf.fragmenting,
@@ -224,6 +234,7 @@ async fn main() {
 
 async fn http1(
     server_name: String,
+    disable_domain_sni: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
     fragmenting: &config::Fragmenting,
@@ -240,9 +251,14 @@ async fn http1(
         let tcp = tcp_connect_handle(socket_addrs).await;
         println!("New HTTP/1.1 connection");
 
-        let example_com = (server_name.clone())
+        let example_com = if disable_domain_sni {
+            (socket_addrs.ip())
+            .into()
+        }else{
+            (server_name.clone())
             .try_into()
-            .expect("Invalid server name");
+            .expect("Invalid server name")
+        };
         // Perform TLS Client Hello fragmenting
         let tls_conn = tokio_rustls::TlsConnector::from(Arc::clone(&ctls))
             .connect_with_stream(example_com, tcp, |tls, tcp| {
@@ -258,7 +274,7 @@ async fn http1(
             .await;
         if tls_conn.is_err() {
             if retry == connection.max_reconnect {
-                println!("Max retry reached. Sleeping for 1Min");
+                println!("Max retry reached. Sleeping for {}", connection.max_reconnect_sleep);
                 sleep(std::time::Duration::from_secs(
                     connection.max_reconnect_sleep,
                 ))

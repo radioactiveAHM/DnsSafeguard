@@ -1,6 +1,7 @@
 {
 	"protocol": "h2",
 	"server_name": "cloudflare-dns.com",
+	"disable_domain_sni": false,
 	"socket_addrs": "1.1.1.1:443",
 	"udp_socket_addrs": "127.0.0.1:53",
 	"custom_http_path": null,
@@ -21,6 +22,7 @@
 		"enable": false,
 		"protocol": "h2",
 		"server_name": "cloudflare-dns.com",
+		"disable_domain_sni": false,
 		"socket_addrs": "[2001:4860:4860::8888]:443",
 		"udp_socket_addrs": "[::1]:53",
 		"custom_http_path": null,

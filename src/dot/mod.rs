@@ -11,6 +11,7 @@ use crate::{config, multi::tls_conn_gen, tls, utils::convert_u16_to_two_u8s_be};
 
 pub async fn dot(
     server_name: String,
+    disable_domain_sni: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
     fragmenting: &config::Fragmenting,
@@ -22,6 +23,7 @@ pub async fn dot(
     loop {
         let tls_conn = tls_conn_gen(
             server_name.clone(),
+            disable_domain_sni,
             socket_addrs,
             fragmenting.clone(),
             ctls.clone(),
@@ -29,7 +31,7 @@ pub async fn dot(
         .await;
         if tls_conn.is_err() {
             if retry == connection.max_reconnect {
-                println!("Max retry reached. Sleeping for 1Min");
+                println!("Max retry reached. Sleeping for {}", connection.max_reconnect_sleep);
                 sleep(std::time::Duration::from_secs(
                     connection.max_reconnect_sleep,
                 ))
@@ -91,6 +93,7 @@ pub async fn dot(
 
 pub async fn dot_nonblocking(
     server_name: String,
+    disable_domain_sni: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
     fragmenting: &config::Fragmenting,
@@ -106,6 +109,7 @@ pub async fn dot_nonblocking(
         }
         let tls_conn = tls_conn_gen(
             server_name.clone(),
+            disable_domain_sni,
             socket_addrs,
             fragmenting.clone(),
             ctls.clone(),

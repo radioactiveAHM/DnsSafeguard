@@ -10,10 +10,10 @@ categories = ["network-programming"]
 
 [dependencies]
 webpki-roots = "0.26.6"
-serde = { version = "1.0.214", features = ["derive"] }
+serde = { version = "1.0.215", features = ["derive"] }
 serde_json = "1.0.132"
 rand = "0.8.5"
-quinn = "0.11.5"
+quinn = "0.11.6"
 tokio = { version = "1.41.1", features = ["rt-multi-thread", "net", "macros"] }
 h3-quinn = "0.0.7"
 h3 = "0.0.6"

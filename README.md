@@ -26,7 +26,6 @@ DnsSafeguard is a fast and secure DNS client written in Rust, designed to interc
 * [x] UDP Noise Implementation
 * [x] Advanced Rules Management
 * [x] DNS over QUIC (DoQ) Support
-* [ ] Encrypted Client Hello (ECH)
 
 ## Building the Project
 
@@ -80,6 +79,7 @@ The configuration file is structured in JSON format and includes the following s
   * `dot_nonblocking`: DOT Non-Blocking Connection (DNS over TLS).
   * `doq`: DoQ Connection (DNS over QUIC).
 * `Server Name`: The domain name of the DNS server.
+* `Disable Domain SNI`: When enabled, the server name is not used as SNI, which can be a good alternative to the fragmenting method. Some public DNS servers, like Google, support this. Supported protocols include H1, H2, DoT, DoT_nonblocking, and H1_multi.
 * `Socket Addresses`: The IP address and port for the DNS server connection.
 * `UDP Socket Addresses`: Local UDP address and port for DNS queries.
 * `Custom Http Path`: Use a custom HTTP path for HTTP-based protocols like H1, H2, and H3. Leave it <ins>empty</ins> to use the default DoH standard path.

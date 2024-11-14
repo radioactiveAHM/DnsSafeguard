@@ -53,6 +53,7 @@ pub struct Ipv6 {
     pub enable: bool,
     pub protocol: Protocol,
     pub server_name: String,
+    pub disable_domain_sni: bool,
     pub socket_addrs: SocketAddr,
     pub udp_socket_addrs: SocketAddr,
     pub custom_http_path: Option<String>,
@@ -96,6 +97,7 @@ pub struct Rule{
 pub struct Config {
     pub protocol: Protocol,
     pub server_name: String,
+    pub disable_domain_sni: bool,
     pub socket_addrs: SocketAddr,
     pub udp_socket_addrs: SocketAddr,
     pub custom_http_path: Option<String>,

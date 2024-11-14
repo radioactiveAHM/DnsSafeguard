@@ -13,6 +13,7 @@ use crate::utils::tcp_connect_handle;
 
 pub async fn http2(
     server_name: String,
+    disable_domain_sni: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
     fragmenting: &config::Fragmenting,
@@ -30,9 +31,14 @@ pub async fn http2(
         let tcp = tcp_connect_handle(socket_addrs).await;
         println!("New H2 connection");
 
-        let example_com = (server_name.clone())
+        let example_com = if disable_domain_sni {
+            (socket_addrs.ip())
+            .into()
+        }else{
+            (server_name.clone())
             .try_into()
-            .expect("Invalid server name");
+            .expect("Invalid server name")
+        };
         // TLS Client
         let tls_conn = tokio_rustls::TlsConnector::from(Arc::clone(&h2tls))
             .connect_with_stream(example_com, tcp, |tls, tcp| {
@@ -42,7 +48,7 @@ pub async fn http2(
             .await;
         if tls_conn.is_err() {
             if retry == connection.max_reconnect {
-                println!("Max retry reached. Sleeping for 1Min");
+                println!("Max retry reached. Sleeping for {}", connection.max_reconnect_sleep);
                 sleep(std::time::Duration::from_secs(
                     connection.max_reconnect_sleep,
                 ))

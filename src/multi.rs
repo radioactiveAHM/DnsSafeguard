@@ -5,23 +5,29 @@ use tokio::{
 };
 
 use crate::{
-    c_len, catch_in_buff, chttp::genrequrlh1, config::{self, Connection}, rule::rulecheck, tls::{self, tlsfragmenting}, utils::tcp_connect_handle
+    c_len, catch_in_buff,
+    chttp::genrequrlh1,
+    config::{self, Connection},
+    rule::rulecheck,
+    tls::{self, tlsfragmenting},
+    utils::tcp_connect_handle,
 };
 
 type CrossContainer = (
-    ([u8;512],usize),
+    ([u8; 512], usize),
     std::net::SocketAddr,
     Arc<tokio::net::UdpSocket>,
 );
 
 pub async fn h1_multi(
     server_name: String,
+    disable_domain_sni: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
     fragmenting: &config::Fragmenting,
     connection: Connection,
     rule: crate::Rules,
-    custom_http_path: Option<String>
+    custom_http_path: Option<String>,
 ) {
     let arc_rule = Arc::new(rule);
     // TLS Client Config
@@ -46,6 +52,7 @@ pub async fn h1_multi(
             loop {
                 let tls_conn = tls_conn_gen(
                     sn.clone(),
+                    disable_domain_sni,
                     socket_addrs,
                     frag.clone(),
                     tls_config.clone(),
@@ -53,7 +60,10 @@ pub async fn h1_multi(
                 .await;
                 if tls_conn.is_err() {
                     if retry == connection.max_reconnect {
-                        println!("Max retry reached. Sleeping for 1Min");
+                        println!(
+                            "Max retry reached. Sleeping for {}",
+                            connection.max_reconnect_sleep
+                        );
                         sleep(std::time::Duration::from_secs(
                             connection.max_reconnect_sleep,
                         ))
@@ -77,9 +87,10 @@ pub async fn h1_multi(
                     });
                     if let Ok((query, addr, udp)) = package {
                         // HTTP Req
-                        let mut temp = [0u8;512];
-                        let query_bs4url = base64_url::encode_to_slice(&query.0[..query.1], &mut temp).unwrap();
-                        let mut url = [0;1024];
+                        let mut temp = [0u8; 512];
+                        let query_bs4url =
+                            base64_url::encode_to_slice(&query.0[..query.1], &mut temp).unwrap();
+                        let mut url = [0; 1024];
                         let http_req = genrequrlh1(&mut url, sn.as_bytes(), query_bs4url, &cpath);
 
                         // Send HTTP Req
@@ -128,12 +139,23 @@ pub async fn h1_multi(
 
         if let Ok((query_size, addr)) = udp_arc.recv_from(&mut dns_query).await {
             // rule check
-            if arc_rule.is_some() && rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp_arc.clone()).await{
+            if arc_rule.is_some()
+                && rulecheck(
+                    arc_rule.clone(),
+                    (dns_query, query_size),
+                    addr,
+                    udp_arc.clone(),
+                )
+                .await
+            {
                 continue;
             }
-            
+
             tokio::task::block_in_place(|| {
-                if sender.send(((dns_query,query_size), addr, udp_arc)).is_err() {
+                if sender
+                    .send(((dns_query, query_size), addr, udp_arc))
+                    .is_err()
+                {
                     println!("Tasks are dead")
                 }
             });
@@ -143,13 +165,18 @@ pub async fn h1_multi(
 
 pub async fn tls_conn_gen(
     server_name: String,
+    disable_domain_sni: bool,
     socket_addrs: SocketAddr,
     fragmenting: config::Fragmenting,
     ctls: Arc<tokio_rustls::rustls::ClientConfig>,
 ) -> Result<tokio_rustls::client::TlsStream<tokio::net::TcpStream>, std::io::Error> {
-    let example_com = (server_name.clone())
-        .try_into()
-        .expect("Invalid server name");
+    let example_com = if disable_domain_sni {
+        (socket_addrs.ip()).into()
+    } else {
+        (server_name.clone())
+            .try_into()
+            .expect("Invalid server name")
+    };
 
     tokio_rustls::TlsConnector::from(ctls)
         .connect_with_stream(

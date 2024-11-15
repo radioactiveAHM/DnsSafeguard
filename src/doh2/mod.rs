@@ -1,8 +1,8 @@
-use crate::rule::rulecheck;
 use crate::chttp::genrequrl;
+use crate::rule::rulecheck;
 use crate::tls::tlsfragmenting;
-use h2::client::SendRequest;
 use core::str;
+use h2::client::SendRequest;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
@@ -19,7 +19,7 @@ pub async fn http2(
     fragmenting: &config::Fragmenting,
     connection: config::Connection,
     rule: crate::Rules,
-    custom_http_path: Option<String>
+    custom_http_path: Option<String>,
 ) {
     let arc_rule = Arc::new(rule);
     // TLS Conf
@@ -32,12 +32,11 @@ pub async fn http2(
         println!("New H2 connection");
 
         let example_com = if disable_domain_sni {
-            (socket_addrs.ip())
-            .into()
-        }else{
+            (socket_addrs.ip()).into()
+        } else {
             (server_name.clone())
-            .try_into()
-            .expect("Invalid server name")
+                .try_into()
+                .expect("Invalid server name")
         };
         // TLS Client
         let tls_conn = tokio_rustls::TlsConnector::from(Arc::clone(&h2tls))
@@ -48,7 +47,10 @@ pub async fn http2(
             .await;
         if tls_conn.is_err() {
             if retry == connection.max_reconnect {
-                println!("Max retry reached. Sleeping for {}", connection.max_reconnect_sleep);
+                println!(
+                    "Max retry reached. Sleeping for {}",
+                    connection.max_reconnect_sleep
+                );
                 sleep(std::time::Duration::from_secs(
                     connection.max_reconnect_sleep,
                 ))
@@ -81,9 +83,9 @@ pub async fn http2(
         // prepare atomic
         let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
         let arc_sn: Arc<str> = server_name.clone().into();
-        let cpath: Option<Arc<str>> = if custom_http_path.is_some(){
+        let cpath: Option<Arc<str>> = if custom_http_path.is_some() {
             Some(custom_http_path.clone().unwrap().into())
-        }else {
+        } else {
             None
         };
 
@@ -100,7 +102,15 @@ pub async fn http2(
 
             if let Ok((query_size, addr)) = udp_arc.recv_from(&mut dns_query).await {
                 // rule check
-                if arc_rule.is_some() && rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp_arc.clone()).await{
+                if arc_rule.is_some()
+                    && rulecheck(
+                        arc_rule.clone(),
+                        (dns_query, query_size),
+                        addr,
+                        udp_arc.clone(),
+                    )
+                    .await
+                {
                     continue;
                 }
 
@@ -110,7 +120,9 @@ pub async fn http2(
                 let cpath = cpath.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
-                    if let Err(e) = send_req(sn, (dns_query, query_size), h2_client, addr, udp_arc, cpath).await {
+                    if let Err(e) =
+                        send_req(sn, (dns_query, query_size), h2_client, addr, udp_arc, cpath).await
+                    {
                         let error = e.to_string();
                         println!("{}", error);
                         temp = true;
@@ -131,13 +143,18 @@ async fn send_req(
     mut h2_client: SendRequest<bytes::Bytes>,
     addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
-    cpath: Option<Arc<str>>
+    cpath: Option<Arc<str>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut temp = [0u8;512];
+    let mut temp = [0u8; 512];
     let query_bs4url = base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?;
     // HTTP Request
-    let mut url = [0;1024];
-    let req = http::Request::get(genrequrl(&mut url, server_name.as_bytes(), query_bs4url,cpath))
+    let mut url = [0; 1024];
+    let req = http::Request::get(genrequrl(
+        &mut url,
+        server_name.as_bytes(),
+        query_bs4url,
+        cpath,
+    ))
     .header("Accept", "application/dns-message")
     .body(())?;
 

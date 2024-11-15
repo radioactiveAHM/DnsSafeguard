@@ -13,7 +13,11 @@ use tokio::{
 use bytes::Buf;
 use h3::client::SendRequest;
 
-use crate::{chttp::genrequrl, config::{self, Noise}, rule::rulecheck};
+use crate::{
+    chttp::genrequrl,
+    config::{self, Noise},
+    rule::rulecheck,
+};
 
 pub async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise) -> quinn::Endpoint {
     let socket = socket2::Socket::new(
@@ -43,7 +47,7 @@ pub async fn udp_setup(
     socketadrs: SocketAddr,
     noise: Noise,
     quic_conf_file: crate::config::Quic,
-    alpn: &str
+    alpn: &str,
 ) -> quinn::Endpoint {
     let qaddress = {
         if socketadrs.is_ipv4() {
@@ -81,7 +85,7 @@ pub async fn http3(
     connecting_timeout_sec: u64,
     connection: config::Connection,
     rule: crate::Rules,
-    custom_http_path: Option<String>
+    custom_http_path: Option<String>,
 ) {
     let arc_rule = Arc::new(rule);
     let mut endpoint = udp_setup(socket_addrs, noise.clone(), quic_conf_file.clone(), "h3").await;
@@ -89,7 +93,10 @@ pub async fn http3(
     let mut retry = 0u8;
     loop {
         if retry == connection.max_reconnect {
-            println!("Max retry reached. Sleeping for {}", connection.max_reconnect_sleep);
+            println!(
+                "Max retry reached. Sleeping for {}",
+                connection.max_reconnect_sleep
+            );
             sleep(std::time::Duration::from_secs(
                 connection.max_reconnect_sleep,
             ))
@@ -102,7 +109,9 @@ pub async fn http3(
 
         println!("QUIC Connecting");
         // Connect to dns server
-        let connecting = endpoint.connect(socket_addrs, server_name.as_str()).unwrap();
+        let connecting = endpoint
+            .connect(socket_addrs, server_name.as_str())
+            .unwrap();
 
         let conn = {
             let timing = timeout(
@@ -115,10 +124,7 @@ pub async fn http3(
                         Ok(conn)
                     } else {
                         let conn = endpoint
-                            .connect(
-                                socket_addrs,
-                                server_name.as_str(),
-                            )
+                            .connect(socket_addrs, server_name.as_str())
                             .unwrap()
                             .await;
                         if conn.is_ok() {
@@ -168,9 +174,9 @@ pub async fn http3(
         // prepare for atomic
         let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
         let arc_sn: Arc<str> = server_name.clone().into();
-        let cpath: Option<Arc<str>> = if custom_http_path.is_some(){
+        let cpath: Option<Arc<str>> = if custom_http_path.is_some() {
             Some(custom_http_path.clone().unwrap().into())
-        }else {
+        } else {
             None
         };
 
@@ -188,16 +194,20 @@ pub async fn http3(
 
             if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
                 // rule check
-                if arc_rule.is_some() && rulecheck(arc_rule.clone(), (dns_query,query_size), addr, udp.clone()).await {
+                if arc_rule.is_some()
+                    && rulecheck(arc_rule.clone(), (dns_query, query_size), addr, udp.clone()).await
+                {
                     continue;
                 }
-                
+
                 let h3 = h3.clone();
                 let sn = arc_sn.clone();
                 let cpath = cpath.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
-                    if let Err(e) = send_request(sn, h3, (dns_query, query_size), addr, udp, cpath).await {
+                    if let Err(e) =
+                        send_request(sn, h3, (dns_query, query_size), addr, udp, cpath).await
+                    {
                         println!("{}", e);
                         temp = true;
                     }
@@ -216,12 +226,17 @@ async fn send_request(
     dns_query: ([u8; 512], usize),
     addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
-    cpath: Option<Arc<str>>
+    cpath: Option<Arc<str>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut temp = [0u8;512];
+    let mut temp = [0u8; 512];
     let query_bs4url = base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?;
-    let mut url = [0;1024];
-    let req = http::Request::get(genrequrl(&mut url, server_name.as_bytes(), query_bs4url, cpath))
+    let mut url = [0; 1024];
+    let req = http::Request::get(genrequrl(
+        &mut url,
+        server_name.as_bytes(),
+        query_bs4url,
+        cpath,
+    ))
     .header("Accept", "application/dns-message")
     .body(())?;
 

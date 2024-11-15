@@ -1,3 +1,4 @@
+mod chttp;
 mod config;
 mod doh2;
 mod doh3;
@@ -8,7 +9,6 @@ mod multi;
 mod rule;
 mod tls;
 mod utils;
-mod chttp;
 
 use core::str;
 use std::{net::SocketAddr, sync::Arc};
@@ -49,7 +49,7 @@ async fn main() {
                         &v6.fragmenting,
                         conf.connection,
                         v6rules,
-                        v6.custom_http_path
+                        v6.custom_http_path,
                     )
                     .await
                 }
@@ -62,7 +62,7 @@ async fn main() {
                         &v6.fragmenting,
                         conf.connection,
                         v6rules,
-                        v6.custom_http_path
+                        v6.custom_http_path,
                     )
                     .await
                 }
@@ -75,7 +75,7 @@ async fn main() {
                         &v6.fragmenting,
                         conf.connection,
                         v6rules,
-                        v6.custom_http_path
+                        v6.custom_http_path,
                     )
                     .await
                 }
@@ -90,7 +90,7 @@ async fn main() {
                         connecting_timeout_sec,
                         conf.connection,
                         v6rules,
-                        v6.custom_http_path
+                        v6.custom_http_path,
                     )
                     .await
                 }
@@ -146,7 +146,7 @@ async fn main() {
                 &conf.fragmenting,
                 conf.connection,
                 rules,
-                conf.custom_http_path
+                conf.custom_http_path,
             )
             .await
         }
@@ -159,7 +159,7 @@ async fn main() {
                 &conf.fragmenting,
                 conf.connection,
                 rules,
-                conf.custom_http_path
+                conf.custom_http_path,
             )
             .await
         }
@@ -172,7 +172,7 @@ async fn main() {
                 &conf.fragmenting,
                 conf.connection,
                 rules,
-                conf.custom_http_path
+                conf.custom_http_path,
             )
             .await
         }
@@ -187,7 +187,7 @@ async fn main() {
                 connecting_timeout_sec,
                 conf.connection,
                 rules,
-                conf.custom_http_path
+                conf.custom_http_path,
             )
             .await
         }
@@ -240,7 +240,7 @@ async fn http1(
     fragmenting: &config::Fragmenting,
     connection: config::Connection,
     rule: Rules,
-    custom_http_path: Option<String>
+    custom_http_path: Option<String>,
 ) {
     // TLS Client
     let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()]);
@@ -252,12 +252,11 @@ async fn http1(
         println!("New HTTP/1.1 connection");
 
         let example_com = if disable_domain_sni {
-            (socket_addrs.ip())
-            .into()
-        }else{
+            (socket_addrs.ip()).into()
+        } else {
             (server_name.clone())
-            .try_into()
-            .expect("Invalid server name")
+                .try_into()
+                .expect("Invalid server name")
         };
         // Perform TLS Client Hello fragmenting
         let tls_conn = tokio_rustls::TlsConnector::from(Arc::clone(&ctls))
@@ -274,7 +273,10 @@ async fn http1(
             .await;
         if tls_conn.is_err() {
             if retry == connection.max_reconnect {
-                println!("Max retry reached. Sleeping for {}", connection.max_reconnect_sleep);
+                println!(
+                    "Max retry reached. Sleeping for {}",
+                    connection.max_reconnect_sleep
+                );
                 sleep(std::time::Duration::from_secs(
                     connection.max_reconnect_sleep,
                 ))
@@ -311,8 +313,8 @@ async fn http1(
             let mut temp = [0u8; 512];
             let query_bs4url =
                 base64_url::encode_to_slice(&dns_query[..query_size], &mut temp).unwrap();
-            let mut url = [0;1024];
-            let http_req = genrequrlh1(&mut url, server_name.as_bytes(), query_bs4url,&cpath);
+            let mut url = [0; 1024];
+            let http_req = genrequrlh1(&mut url, server_name.as_bytes(), query_bs4url, &cpath);
 
             // Write http request
             if c.write(http_req).await.is_err() {
@@ -339,10 +341,10 @@ async fn http1(
                 } else if content_length != 0 && content_length > body.len() {
                     // There is another chunk of body
                     // We know it's not bigger than 512 bytes
-                    let mut merged_body = [0;512];
+                    let mut merged_body = [0; 512];
                     merged_body[..body.len()].copy_from_slice(body);
-                    if let Ok(b2_len) = c.read(&mut merged_body[body.len()..]).await{
-                        let _ = udp.send_to(&merged_body[..body.len()+b2_len], addr).await;
+                    if let Ok(b2_len) = c.read(&mut merged_body[body.len()..]).await {
+                        let _ = udp.send_to(&merged_body[..body.len() + b2_len], addr).await;
                     }
                 }
             }

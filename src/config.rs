@@ -6,7 +6,7 @@ pub enum FragMethod {
     linear,
     random,
     single,
-    jump
+    jump,
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -21,7 +21,7 @@ pub enum NoiseType {
     dns,
     str,
     lsd,
-    rand
+    rand,
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -44,9 +44,8 @@ pub enum Protocol {
     h3,
     dot,
     dot_nonblocking,
-    doq
+    doq,
 }
-
 
 #[derive(serde::Deserialize)]
 pub struct Ipv6 {
@@ -66,7 +65,7 @@ pub struct Ipv6 {
 pub enum CongestionController {
     bbr,
     cubic,
-    newreno
+    newreno,
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -88,9 +87,9 @@ pub struct Connection {
 }
 
 #[derive(serde::Deserialize, Clone)]
-pub struct Rule{
+pub struct Rule {
     pub options: Vec<String>,
-    pub target: String
+    pub target: String,
 }
 
 #[derive(serde::Deserialize)]
@@ -106,7 +105,7 @@ pub struct Config {
     pub ipv6: Ipv6,
     pub quic: Quic,
     pub connection: Connection,
-    pub rules: Option<Vec<Rule>>
+    pub rules: Option<Vec<Rule>>,
 }
 
 pub fn load_config() -> Config {

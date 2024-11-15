@@ -30,7 +30,10 @@ pub async fn doq(
 
     loop {
         if retry == connection.max_reconnect {
-            println!("Max retry reached. Sleeping for {}", connection.max_reconnect_sleep);
+            println!(
+                "Max retry reached. Sleeping for {}",
+                connection.max_reconnect_sleep
+            );
             sleep(std::time::Duration::from_secs(
                 connection.max_reconnect_sleep,
             ))
@@ -43,7 +46,9 @@ pub async fn doq(
 
         println!("QUIC Connecting");
         // Connect to dns server
-        let connecting = endpoint.connect(socket_addrs, server_name.as_str()).unwrap();
+        let connecting = endpoint
+            .connect(socket_addrs, server_name.as_str())
+            .unwrap();
 
         let conn = {
             let timing = timeout(
@@ -56,10 +61,7 @@ pub async fn doq(
                         Ok(conn)
                     } else {
                         let conn = endpoint
-                            .connect(
-                                socket_addrs,
-                                server_name.as_str(),
-                            )
+                            .connect(socket_addrs, server_name.as_str())
                             .unwrap()
                             .await;
                         if conn.is_ok() {
@@ -100,7 +102,7 @@ pub async fn doq(
             // quic_conn_dead will be passed to task if connection alive
             let dead = dead_conn.clone();
             if *dead.lock().await || quic.close_reason().is_some() {
-                println!("{}",  quic.close_reason().unwrap());
+                println!("{}", quic.close_reason().unwrap());
                 break;
             }
 
@@ -110,15 +112,18 @@ pub async fn doq(
 
             if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
                 // rule check
-                if arc_rule.is_some() && rulecheck(arc_rule.clone(), (dns_query, query_size), addr, udp.clone()).await{
+                if arc_rule.is_some()
+                    && rulecheck(arc_rule.clone(), (dns_query, query_size), addr, udp.clone()).await
+                {
                     continue;
                 }
 
                 match quic.open_bi().await {
-                    Ok(bistream)=>{
+                    Ok(bistream) => {
                         tokio::spawn(async move {
                             let mut temp = false;
-                            if let Err(e) = send_dq(bistream, (dns_query, query_size), addr, udp).await
+                            if let Err(e) =
+                                send_dq(bistream, (dns_query, query_size), addr, udp).await
                             {
                                 let e_str = e.to_string();
                                 println!("{}", e_str);
@@ -128,8 +133,8 @@ pub async fn doq(
                                 *(dead.lock().await) = true;
                             }
                         });
-                    },
-                    Err(conn_e)=>{
+                    }
+                    Err(conn_e) => {
                         println!("{conn_e}");
                         break;
                     }
@@ -145,11 +150,11 @@ async fn send_dq(
     addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut doq_query = [0u8;514];
+    let mut doq_query = [0u8; 514];
     [doq_query[0], doq_query[1]] = convert_u16_to_two_u8s_be(dns_query.1 as u16);
     doq_query[2..].copy_from_slice(&dns_query.0);
 
-    send.write(&doq_query[..dns_query.1+2]).await?;
+    send.write(&doq_query[..dns_query.1 + 2]).await?;
     send.finish()?;
     let mut buff = [0u8; 514];
     if let Some(resp_size) = recv.read(&mut buff).await? {

@@ -82,7 +82,7 @@ The configuration file is structured in JSON format and includes the following s
 * `Disable Domain SNI`: When enabled, the server name is not used as SNI, which can be a good alternative to the fragmenting method. Some public DNS servers, like Google, support this. Supported protocols include H1, H2, DoT, DoT_nonblocking, and H1_multi.
 * `Socket Addresses`: The IP address and port for the DNS server connection.
 * `UDP Socket Addresses`: Local UDP address and port for DNS queries.
-* `Custom Http Path`: Use a custom HTTP path for HTTP-based protocols like H1, H2, and H3. Leave it <ins>empty</ins> to use the default DoH standard path.
+* `Custom Http Path`: Specify a custom HTTP path for HTTP-based protocols such as H1, H2, and H3. Use `null` for default which is the standard DoH path.
   * Examples: `/jsd3n5nb4/dns-query`, `/user/d618995a10e74acec7ed454ac6e39d6eb/dns-query`.
   * Warning: Custom path must end with `/dns-query`.
 * `Fragmenting`: The fragmentation method to use during the TLS handshake has 4 valid values: `linear`, `random`, `single` and `jump`. [Go to fragmenting page](/FRAG.md)

@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use crate::config::{Noise,NoiseType};
+use crate::config::{Noise, NoiseType};
 use rand::Rng;
 use tokio::time::sleep;
 

@@ -31,7 +31,10 @@ pub async fn dot(
         .await;
         if tls_conn.is_err() {
             if retry == connection.max_reconnect {
-                println!("Max retry reached. Sleeping for {}", connection.max_reconnect_sleep);
+                println!(
+                    "Max retry reached. Sleeping for {}",
+                    connection.max_reconnect_sleep
+                );
                 sleep(std::time::Duration::from_secs(
                     connection.max_reconnect_sleep,
                 ))
@@ -76,7 +79,9 @@ pub async fn dot(
                 // Recv DOT query
                 let mut resp_dot_query = [0; 514];
                 if let Ok(resp_dot_query_size) = conn.read(&mut resp_dot_query).await {
-                    if resp_dot_query_size as u16 == convert_two_u8s_to_u16_be([resp_dot_query[0],resp_dot_query[1]])+2 {
+                    if resp_dot_query_size as u16
+                        == convert_two_u8s_to_u16_be([resp_dot_query[0], resp_dot_query[1]]) + 2
+                    {
                         let _ = udp
                             .send_to(&resp_dot_query[2..(resp_dot_query_size)], addr)
                             .await;
@@ -152,7 +157,9 @@ pub async fn dot_nonblocking(
                 // Recv DOT query
                 let mut resp_dot_query = [0; 514];
                 if let Ok(resp_dot_query_size) = conn_r.read(&mut resp_dot_query).await {
-                    if resp_dot_query_size as u16 == convert_two_u8s_to_u16_be([resp_dot_query[0],resp_dot_query[1]])+2 {
+                    if resp_dot_query_size as u16
+                        == convert_two_u8s_to_u16_be([resp_dot_query[0], resp_dot_query[1]]) + 2
+                    {
                         let query = &resp_dot_query[2..(resp_dot_query_size)];
 
                         // match the response with DNS message ID

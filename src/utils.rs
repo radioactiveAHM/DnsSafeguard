@@ -1,5 +1,3 @@
-use std::net::SocketAddr;
-
 use tokio::{net::TcpStream, time::sleep};
 
 #[allow(unused)]
@@ -11,7 +9,7 @@ pub fn convert_two_u8s_to_u16_be(bytes: [u8; 2]) -> u16 {
     ((bytes[0] as u16) << 8) | bytes[1] as u16
 }
 
-pub async fn tcp_connect_handle(socket_addrs: SocketAddr) -> TcpStream {
+pub async fn tcp_connect_handle(socket_addrs: std::net::SocketAddr) -> TcpStream {
     let mut retry = 0u8;
     loop {
         match tokio::net::TcpStream::connect(socket_addrs).await {
@@ -31,5 +29,18 @@ pub async fn tcp_connect_handle(socket_addrs: SocketAddr) -> TcpStream {
                 continue;
             }
         }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct SNI([u8; 255], usize);
+impl SNI{
+    pub fn new(server_name: &str)->Self{
+        let mut sni = SNI([0;255], server_name.len());
+        sni.0[..server_name.len()].copy_from_slice(server_name.as_bytes());
+        sni
+    }
+    pub fn slice(&self)->&[u8]{
+        &self.0[..self.1]
     }
 }

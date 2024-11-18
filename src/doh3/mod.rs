@@ -16,7 +16,7 @@ use h3::client::SendRequest;
 use crate::{
     chttp::genrequrl,
     config::{self, Noise},
-    rule::rulecheck,
+    rule::rulecheck, utils::SNI,
 };
 
 pub async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise) -> quinn::Endpoint {
@@ -173,7 +173,7 @@ pub async fn http3(
         // UDP socket to listen for DNS query
         // prepare for atomic
         let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
-        let arc_sn: Arc<str> = server_name.clone().into();
+        let sn = SNI::new(server_name.as_str());
         let cpath: Option<Arc<str>> = if custom_http_path.is_some() {
             Some(custom_http_path.clone().unwrap().into())
         } else {
@@ -201,7 +201,6 @@ pub async fn http3(
                 }
 
                 let h3 = h3.clone();
-                let sn = arc_sn.clone();
                 let cpath = cpath.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
@@ -221,7 +220,7 @@ pub async fn http3(
 }
 
 async fn send_request(
-    server_name: Arc<str>,
+    server_name: SNI,
     mut h3: SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
     dns_query: ([u8; 512], usize),
     addr: SocketAddr,
@@ -233,7 +232,7 @@ async fn send_request(
     let mut url = [0; 1024];
     let req = http::Request::get(genrequrl(
         &mut url,
-        server_name.as_bytes(),
+        server_name.slice(),
         query_bs4url,
         cpath,
     ))

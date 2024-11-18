@@ -1,6 +1,7 @@
 use crate::chttp::genrequrl;
 use crate::rule::rulecheck;
 use crate::tls::tlsfragmenting;
+use crate::utils::SNI;
 use core::str;
 use h2::client::SendRequest;
 use std::{net::SocketAddr, sync::Arc};
@@ -82,7 +83,7 @@ pub async fn http2(
         // UDP socket to listen for DNS query
         // prepare atomic
         let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
-        let arc_sn: Arc<str> = server_name.clone().into();
+        let sn = SNI::new(server_name.as_str());
         let cpath: Option<Arc<str>> = if custom_http_path.is_some() {
             Some(custom_http_path.clone().unwrap().into())
         } else {
@@ -116,7 +117,6 @@ pub async fn http2(
 
                 // Base64url dns query
                 let h2_client = client.clone();
-                let sn = arc_sn.clone();
                 let cpath = cpath.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
@@ -138,7 +138,7 @@ pub async fn http2(
 }
 
 async fn send_req(
-    server_name: Arc<str>,
+    server_name: SNI,
     dns_query: ([u8; 512], usize),
     mut h2_client: SendRequest<bytes::Bytes>,
     addr: SocketAddr,
@@ -151,7 +151,7 @@ async fn send_req(
     let mut url = [0; 1024];
     let req = http::Request::get(genrequrl(
         &mut url,
-        server_name.as_bytes(),
+        server_name.slice(),
         query_bs4url,
         cpath,
     ))

@@ -1,3 +1,5 @@
+use core::str;
+
 use tokio::{net::TcpStream, time::sleep};
 
 #[allow(unused)]
@@ -34,13 +36,20 @@ pub async fn tcp_connect_handle(socket_addrs: std::net::SocketAddr) -> TcpStream
 
 #[derive(Clone, Copy)]
 pub struct SNI([u8; 255], usize);
-impl SNI{
-    pub fn new(server_name: &str)->Self{
-        let mut sni = SNI([0;255], server_name.len());
+impl SNI {
+    pub fn new(server_name: String) -> Self {
+        if server_name.len() > 255 {
+            panic!("Error: The server name exceeds the maximum allowed length of 255 characters. Please provide a shorter server name.")
+        }
+        let mut sni = SNI([0; 255], server_name.len());
         sni.0[..server_name.len()].copy_from_slice(server_name.as_bytes());
         sni
     }
-    pub fn slice(&self)->&[u8]{
+    pub fn slice(&self) -> &[u8] {
         &self.0[..self.1]
+    }
+
+    pub fn string(&self) -> &str {
+        str::from_utf8(&self.0[..self.1]).expect("Error: Invalid UTF-8 sequence")
     }
 }

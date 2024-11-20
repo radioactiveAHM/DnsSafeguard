@@ -10,7 +10,7 @@ use crate::{
     config::{self, Connection},
     rule::rulecheck,
     tls::{self, tlsfragmenting},
-    utils::tcp_connect_handle,
+    utils::{tcp_connect_handle, SNI},
 };
 
 type CrossContainer = (
@@ -20,7 +20,7 @@ type CrossContainer = (
 );
 
 pub async fn h1_multi(
-    server_name: String,
+    sn: SNI,
     disable_domain_sni: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
@@ -44,14 +44,13 @@ pub async fn h1_multi(
         let recver_cln: crossbeam_channel::Receiver<CrossContainer> = recver.clone();
         let tls_config = ctls.clone();
         let frag = (*fragmenting).clone();
-        let sn = server_name.clone();
         let custom_http_path = custom_http_path.clone();
         tokio::spawn(async move {
             let task_rcv = recver_cln;
             let mut retry = 0u8;
             loop {
                 let tls_conn = tls_conn_gen(
-                    sn.clone(),
+                    sn.string().to_string(),
                     disable_domain_sni,
                     socket_addrs,
                     frag.clone(),
@@ -91,7 +90,7 @@ pub async fn h1_multi(
                         let query_bs4url =
                             base64_url::encode_to_slice(&query.0[..query.1], &mut temp).unwrap();
                         let mut url = [0; 1024];
-                        let http_req = genrequrlh1(&mut url, sn.as_bytes(), query_bs4url, &cpath);
+                        let http_req = genrequrlh1(&mut url, sn.slice(), query_bs4url, &cpath);
 
                         // Send HTTP Req
                         if c.write(http_req).await.is_err() {

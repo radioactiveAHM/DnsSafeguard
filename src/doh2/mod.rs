@@ -13,7 +13,7 @@ use crate::tls;
 use crate::utils::tcp_connect_handle;
 
 pub async fn http2(
-    server_name: String,
+    sn: SNI,
     disable_domain_sni: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
@@ -35,7 +35,8 @@ pub async fn http2(
         let example_com = if disable_domain_sni {
             (socket_addrs.ip()).into()
         } else {
-            (server_name.clone())
+            sn.string()
+                .to_string()
                 .try_into()
                 .expect("Invalid server name")
         };
@@ -83,7 +84,6 @@ pub async fn http2(
         // UDP socket to listen for DNS query
         // prepare atomic
         let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
-        let sn = SNI::new(server_name.as_str());
         let cpath: Option<Arc<str>> = if custom_http_path.is_some() {
             Some(custom_http_path.clone().unwrap().into())
         } else {

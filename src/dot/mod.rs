@@ -6,11 +6,11 @@ use tokio::sync::Mutex;
 use tokio::time::{sleep, Instant};
 
 use crate::rule::{rulecheck, rulecheck_sync};
-use crate::utils::convert_two_u8s_to_u16_be;
+use crate::utils::{convert_two_u8s_to_u16_be, SNI};
 use crate::{config, multi::tls_conn_gen, tls, utils::convert_u16_to_two_u8s_be};
 
 pub async fn dot(
-    server_name: String,
+    sn: SNI,
     disable_domain_sni: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
@@ -22,7 +22,7 @@ pub async fn dot(
     let mut retry = 0u8;
     loop {
         let tls_conn = tls_conn_gen(
-            server_name.clone(),
+            sn.string().to_string(),
             disable_domain_sni,
             socket_addrs,
             fragmenting.clone(),
@@ -97,7 +97,7 @@ pub async fn dot(
 }
 
 pub async fn dot_nonblocking(
-    server_name: String,
+    sn: SNI,
     disable_domain_sni: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
@@ -113,7 +113,7 @@ pub async fn dot_nonblocking(
             panic!();
         }
         let tls_conn = tls_conn_gen(
-            server_name.clone(),
+            sn.string().to_string(),
             disable_domain_sni,
             socket_addrs,
             fragmenting.clone(),

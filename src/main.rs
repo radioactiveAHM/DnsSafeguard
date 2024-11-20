@@ -21,7 +21,7 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     time::sleep,
 };
-use utils::tcp_connect_handle;
+use utils::{tcp_connect_handle, SNI};
 
 #[tokio::main]
 async fn main() {
@@ -42,7 +42,7 @@ async fn main() {
             match v6.protocol {
                 config::Protocol::h1_multi => {
                     h1_multi(
-                        v6.server_name,
+                        SNI::new(v6.server_name),
                         v6.disable_domain_sni,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
@@ -55,7 +55,7 @@ async fn main() {
                 }
                 config::Protocol::h1 => {
                     http1(
-                        v6.server_name,
+                        SNI::new(v6.server_name),
                         v6.disable_domain_sni,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
@@ -68,7 +68,7 @@ async fn main() {
                 }
                 config::Protocol::h2 => {
                     doh2::http2(
-                        v6.server_name,
+                        SNI::new(v6.server_name),
                         v6.disable_domain_sni,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
@@ -82,7 +82,7 @@ async fn main() {
                 config::Protocol::h3 => {
                     let connecting_timeout_sec = quic_conf_file_v6.connecting_timeout_sec;
                     doh3::http3(
-                        v6.server_name,
+                        SNI::new(v6.server_name),
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
                         quic_conf_file_v6,
@@ -96,7 +96,7 @@ async fn main() {
                 }
                 config::Protocol::dot => {
                     dot::dot(
-                        v6.server_name,
+                        SNI::new(v6.server_name),
                         v6.disable_domain_sni,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
@@ -108,7 +108,7 @@ async fn main() {
                 }
                 config::Protocol::dot_nonblocking => {
                     dot::dot_nonblocking(
-                        v6.server_name,
+                        SNI::new(v6.server_name),
                         v6.disable_domain_sni,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
@@ -121,7 +121,7 @@ async fn main() {
                 config::Protocol::doq => {
                     let connecting_timeout_sec = quic_conf_file_v6.connecting_timeout_sec;
                     doq::doq(
-                        v6.server_name,
+                        SNI::new(v6.server_name),
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
                         quic_conf_file_v6,
@@ -139,7 +139,7 @@ async fn main() {
     match conf.protocol {
         config::Protocol::h1_multi => {
             h1_multi(
-                conf.server_name,
+                SNI::new(conf.server_name),
                 conf.disable_domain_sni,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
@@ -152,7 +152,7 @@ async fn main() {
         }
         config::Protocol::h1 => {
             http1(
-                conf.server_name,
+                SNI::new(conf.server_name),
                 conf.disable_domain_sni,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
@@ -165,7 +165,7 @@ async fn main() {
         }
         config::Protocol::h2 => {
             doh2::http2(
-                conf.server_name,
+                SNI::new(conf.server_name),
                 conf.disable_domain_sni,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
@@ -179,7 +179,7 @@ async fn main() {
         config::Protocol::h3 => {
             let connecting_timeout_sec = conf.quic.connecting_timeout_sec;
             doh3::http3(
-                conf.server_name,
+                SNI::new(conf.server_name),
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
                 conf.quic,
@@ -193,7 +193,7 @@ async fn main() {
         }
         config::Protocol::dot => {
             dot::dot(
-                conf.server_name,
+                SNI::new(conf.server_name),
                 conf.disable_domain_sni,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
@@ -205,7 +205,7 @@ async fn main() {
         }
         config::Protocol::dot_nonblocking => {
             dot::dot_nonblocking(
-                conf.server_name,
+                SNI::new(conf.server_name),
                 conf.disable_domain_sni,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
@@ -218,7 +218,7 @@ async fn main() {
         config::Protocol::doq => {
             let connecting_timeout_sec = conf.quic.connecting_timeout_sec;
             doq::doq(
-                conf.server_name,
+                SNI::new(conf.server_name),
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
                 conf.quic,
@@ -233,7 +233,7 @@ async fn main() {
 }
 
 async fn http1(
-    server_name: String,
+    sn: SNI,
     disable_domain_sni: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
@@ -254,7 +254,8 @@ async fn http1(
         let example_com = if disable_domain_sni {
             (socket_addrs.ip()).into()
         } else {
-            (server_name.clone())
+            sn.string()
+                .to_string()
                 .try_into()
                 .expect("Invalid server name")
         };
@@ -314,7 +315,7 @@ async fn http1(
             let query_bs4url =
                 base64_url::encode_to_slice(&dns_query[..query_size], &mut temp).unwrap();
             let mut url = [0; 1024];
-            let http_req = genrequrlh1(&mut url, server_name.as_bytes(), query_bs4url, &cpath);
+            let http_req = genrequrlh1(&mut url, sn.slice(), query_bs4url, &cpath);
 
             // Write http request
             if c.write(http_req).await.is_err() {

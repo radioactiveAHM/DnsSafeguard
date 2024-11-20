@@ -16,7 +16,8 @@ use h3::client::SendRequest;
 use crate::{
     chttp::genrequrl,
     config::{self, Noise},
-    rule::rulecheck, utils::SNI,
+    rule::rulecheck,
+    utils::SNI,
 };
 
 pub async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise) -> quinn::Endpoint {
@@ -77,7 +78,7 @@ pub async fn udp_setup(
 }
 
 pub async fn http3(
-    server_name: String,
+    sn: SNI,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
     quic_conf_file: config::Quic,
@@ -109,9 +110,7 @@ pub async fn http3(
 
         println!("QUIC Connecting");
         // Connect to dns server
-        let connecting = endpoint
-            .connect(socket_addrs, server_name.as_str())
-            .unwrap();
+        let connecting = endpoint.connect(socket_addrs, sn.string()).unwrap();
 
         let conn = {
             let timing = timeout(
@@ -123,10 +122,7 @@ pub async fn http3(
                         println!("QUIC 0RTT Connection Established");
                         Ok(conn)
                     } else {
-                        let conn = endpoint
-                            .connect(socket_addrs, server_name.as_str())
-                            .unwrap()
-                            .await;
+                        let conn = endpoint.connect(socket_addrs, sn.string()).unwrap().await;
                         if conn.is_ok() {
                             println!("QUIC Connection Established");
                         }
@@ -173,7 +169,6 @@ pub async fn http3(
         // UDP socket to listen for DNS query
         // prepare for atomic
         let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
-        let sn = SNI::new(server_name.as_str());
         let cpath: Option<Arc<str>> = if custom_http_path.is_some() {
             Some(custom_http_path.clone().unwrap().into())
         } else {

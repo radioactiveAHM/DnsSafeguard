@@ -10,11 +10,11 @@ use crate::{
     config::{self, Noise},
     doh3::udp_setup,
     rule::rulecheck,
-    utils::convert_u16_to_two_u8s_be,
+    utils::{convert_u16_to_two_u8s_be, SNI},
 };
 
 pub async fn doq(
-    server_name: String,
+    sn: SNI,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
     quic_conf_file: config::Quic,
@@ -46,9 +46,7 @@ pub async fn doq(
 
         println!("QUIC Connecting");
         // Connect to dns server
-        let connecting = endpoint
-            .connect(socket_addrs, server_name.as_str())
-            .unwrap();
+        let connecting = endpoint.connect(socket_addrs, sn.string()).unwrap();
 
         let conn = {
             let timing = timeout(
@@ -60,10 +58,7 @@ pub async fn doq(
                         println!("QUIC 0RTT Connection Established");
                         Ok(conn)
                     } else {
-                        let conn = endpoint
-                            .connect(socket_addrs, server_name.as_str())
-                            .unwrap()
-                            .await;
+                        let conn = endpoint.connect(socket_addrs, sn.string()).unwrap().await;
                         if conn.is_ok() {
                             println!("QUIC Connection Established");
                         }

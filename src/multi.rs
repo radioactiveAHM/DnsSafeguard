@@ -172,7 +172,7 @@ pub async fn tls_conn_gen(
     let example_com = if disable_domain_sni {
         (socket_addrs.ip()).into()
     } else {
-        (server_name.clone())
+        (server_name)
             .try_into()
             .expect("Invalid server name")
     };

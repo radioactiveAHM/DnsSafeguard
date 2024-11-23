@@ -27,6 +27,7 @@ pub async fn dot(
             socket_addrs,
             fragmenting.clone(),
             ctls.clone(),
+            connection,
         )
         .await;
         if tls_conn.is_err() {
@@ -118,6 +119,7 @@ pub async fn dot_nonblocking(
             socket_addrs,
             fragmenting.clone(),
             ctls.clone(),
+            connection,
         )
         .await;
         if tls_conn.is_err() {

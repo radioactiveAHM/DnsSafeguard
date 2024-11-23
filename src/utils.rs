@@ -11,7 +11,10 @@ pub fn convert_two_u8s_to_u16_be(bytes: [u8; 2]) -> u16 {
     ((bytes[0] as u16) << 8) | bytes[1] as u16
 }
 
-pub async fn tcp_connect_handle(socket_addrs: std::net::SocketAddr) -> TcpStream {
+pub async fn tcp_connect_handle(
+    socket_addrs: std::net::SocketAddr,
+    connection_cfg: crate::config::Connection,
+) -> TcpStream {
     let mut retry = 0u8;
     loop {
         match tokio::net::TcpStream::connect(socket_addrs).await {
@@ -19,15 +22,24 @@ pub async fn tcp_connect_handle(socket_addrs: std::net::SocketAddr) -> TcpStream
                 return stream;
             }
             Err(e) => {
-                if retry == 5 {
-                    println!("Max retry reached. Sleeping for 1Min");
-                    sleep(std::time::Duration::from_secs(60)).await;
+                if retry == connection_cfg.max_reconnect {
+                    println!(
+                        "Max retry reached. Sleeping for {}",
+                        connection_cfg.max_reconnect_sleep
+                    );
+                    sleep(std::time::Duration::from_secs(
+                        connection_cfg.max_reconnect_sleep,
+                    ))
+                    .await;
                     retry = 0;
                     continue;
                 }
                 println!("{}", e);
                 retry += 1;
-                sleep(std::time::Duration::from_secs(1)).await;
+                sleep(std::time::Duration::from_secs(
+                    connection_cfg.reconnect_sleep,
+                ))
+                .await;
                 continue;
             }
         }

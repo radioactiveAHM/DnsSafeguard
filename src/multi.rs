@@ -55,6 +55,7 @@ pub async fn h1_multi(
                     socket_addrs,
                     frag.clone(),
                     tls_config.clone(),
+                    connection,
                 )
                 .await;
                 if tls_conn.is_err() {
@@ -168,19 +169,18 @@ pub async fn tls_conn_gen(
     socket_addrs: SocketAddr,
     fragmenting: config::Fragmenting,
     ctls: Arc<tokio_rustls::rustls::ClientConfig>,
+    connection_cfg: Connection,
 ) -> Result<tokio_rustls::client::TlsStream<tokio::net::TcpStream>, std::io::Error> {
     let example_com = if disable_domain_sni {
         (socket_addrs.ip()).into()
     } else {
-        (server_name)
-            .try_into()
-            .expect("Invalid server name")
+        (server_name).try_into().expect("Invalid server name")
     };
 
     tokio_rustls::TlsConnector::from(ctls)
         .connect_with_stream(
             example_com,
-            tcp_connect_handle(socket_addrs).await,
+            tcp_connect_handle(socket_addrs, connection_cfg).await,
             |tls, tcp| {
                 // Do fragmenting
                 if fragmenting.enable {

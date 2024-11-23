@@ -29,7 +29,7 @@ pub async fn http2(
     loop {
         // TCP Connection
         // Panic if socket_addrs invalid
-        let tcp = tcp_connect_handle(socket_addrs).await;
+        let tcp = tcp_connect_handle(socket_addrs, connection).await;
         println!("New H2 connection");
 
         let example_com = if disable_domain_sni {

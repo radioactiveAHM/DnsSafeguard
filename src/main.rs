@@ -25,6 +25,19 @@ use utils::{tcp_connect_handle, SNI};
 
 #[tokio::main]
 async fn main() {
+    #[cfg(target_os = "windows")]
+    {
+        if std::process::Command::new("cmd")
+            .args(["ipconfig", "/flushdns"])
+            .output()
+            .is_ok()
+        {
+            println!("DNS cache cleared");
+        } else {
+            println!("Failed to clear dns cache");
+        }
+    }
+
     tokio_rustls::rustls::crypto::ring::default_provider()
         .install_default()
         .unwrap();
@@ -248,7 +261,7 @@ async fn http1(
     let mut retry = 0u8;
     loop {
         // TCP socket for TLS
-        let tcp = tcp_connect_handle(socket_addrs).await;
+        let tcp = tcp_connect_handle(socket_addrs, connection).await;
         println!("New HTTP/1.1 connection");
 
         let example_com = if disable_domain_sni {

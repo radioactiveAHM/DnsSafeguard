@@ -55,7 +55,7 @@
 		"max_reconnect_sleep": 30
 	},
 	"doh_server": {
-		"enable": true,
+		"enable": false,
 		"listen_address": "127.0.0.1:443",
 		"certificate": "cert.pem",
 		"key": "key.pem",

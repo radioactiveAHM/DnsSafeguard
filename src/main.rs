@@ -9,6 +9,7 @@ mod multi;
 mod rule;
 mod tls;
 mod utils;
+mod dohserver;
 
 use core::str;
 use std::{net::SocketAddr, sync::Arc};
@@ -46,6 +47,12 @@ async fn main() {
     let conf = config::load_config();
     // Convert rules to adjust domains like dns query and improve performance
     let rules = convert_rules(conf.rules);
+
+    if conf.doh_server.enable {
+        tokio::spawn(async move{
+            dohserver::doh_server(conf.doh_server, conf.udp_socket_addrs).await;
+        });
+    }
 
     let v6 = conf.ipv6;
     let quic_conf_file_v6 = conf.quic.clone();

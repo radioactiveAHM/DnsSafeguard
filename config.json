@@ -54,6 +54,13 @@
 		"max_reconnect": 5,
 		"max_reconnect_sleep": 30
 	},
+	"doh_server": {
+		"enable": true,
+		"listen_address": "127.0.0.1:443",
+		"certificate": "cert.pem",
+		"key": "key.pem",
+		"stream_timeout": 30
+	},
 	"rules": [
 		{
 			"options": [

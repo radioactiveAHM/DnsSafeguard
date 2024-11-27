@@ -93,6 +93,15 @@ pub struct Rule {
 }
 
 #[derive(serde::Deserialize)]
+pub struct DohServer {
+    pub enable: bool,
+    pub listen_address: SocketAddr,
+    pub certificate: String,
+    pub key: String,
+    pub stream_timeout: u64
+}
+
+#[derive(serde::Deserialize)]
 pub struct Config {
     pub protocol: Protocol,
     pub server_name: String,
@@ -105,6 +114,7 @@ pub struct Config {
     pub ipv6: Ipv6,
     pub quic: Quic,
     pub connection: Connection,
+    pub doh_server: DohServer,
     pub rules: Option<Vec<Rule>>,
 }
 

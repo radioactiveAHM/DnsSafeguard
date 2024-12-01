@@ -52,6 +52,8 @@ pub async fn doh_server(dsc: DohServer, udp_socket_addrs: SocketAddr){
     .with_no_client_auth()
     .with_single_cert(certs, key).unwrap();
     config.alpn_protocols = vec![b"h2".into()];
+    config.send_tls13_tickets = 0;
+    config.max_early_data_size = 0;
     let acceptor = TlsAcceptor::from(Arc::new(config));
 
     let listener = TcpListener::bind(dsc.listen_address).await.unwrap();
@@ -78,22 +80,30 @@ async fn tc_handler(tc: Tc, timeout_sec: u64, udp_socket_addrs: SocketAddr) -> R
     let stream = tc.acceptor.accept(tc.stream.0).await?;
     let mut conn= h2::server::handshake(stream).await?;
     
+    let mut deadloop: u8 = 0;
     loop {
+        if deadloop == 20 {
+            // dead tcp connection
+            break;
+        }
         if timeout(std::time::Duration::from_secs(timeout_sec), async {
-            if let Some(Ok((req, resp))) = conn.accept().await {
+            if let Some(Ok((req, mut resp))) = conn.accept().await {
+                deadloop = 0;
                 if let Some(bs4dns) = req.uri().query(){
                     if let Ok(dq)=DnsQuery::new(&bs4dns.as_bytes()[4..]){
                         tokio::spawn(async move {
-                            if let Err(e)= handle_dns_req(resp, dq, udp_socket_addrs).await{
+                            if let Err(e)= handle_dns_req(&mut resp, dq, udp_socket_addrs).await{
+                                resp.send_reset(Reason::INTERNAL_ERROR);
                                 println!("{e}");
                             }
                         });
                     }
                 }
+            } else {
+                deadloop += 1;
             }
         }).await.is_err() {
             conn.abrupt_shutdown(Reason::SETTINGS_TIMEOUT);
-            conn.graceful_shutdown();
             break;
         }
     }
@@ -101,7 +111,7 @@ async fn tc_handler(tc: Tc, timeout_sec: u64, udp_socket_addrs: SocketAddr) -> R
     Ok(())
 }
 
-async fn handle_dns_req(mut resp: SendResponse<Bytes>, dq: DnsQuery, udp_socket_addrs: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
+async fn handle_dns_req(resp: &mut SendResponse<Bytes>, dq: DnsQuery, udp_socket_addrs: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
     let agent = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
     agent.connect(udp_socket_addrs).await?;
     agent.send(&dq.0[..dq.1]).await?;
@@ -110,8 +120,31 @@ async fn handle_dns_req(mut resp: SendResponse<Bytes>, dq: DnsQuery, udp_socket_
     let mut buff = [0; 512];
     let size = agent.recv(&mut buff).await?;
 
+    if size>5{
+        let rto = timeout(std::time::Duration::from_secs(5), async {
+            handle_resp(resp, &buff, size).await
+        }).await;
+        
+        if let Ok(inside) = rto {
+            inside?;
+        } else {
+            resp.send_reset(Reason::SETTINGS_TIMEOUT);
+        }
+    }else {
+        resp.send_reset(Reason::INTERNAL_ERROR);
+    }
+
+    Ok(())
+}
+
+async fn handle_resp(resp: &mut SendResponse<Bytes>, buff: &[u8], size: usize) -> Result<(), Box<dyn std::error::Error>> {
     let dq_resp = Bytes::copy_from_slice(&buff[..size]);
-    resp.send_response(Response::builder().status(200).header("Content-Type", "application/dns-message").body(())?, false)?
+    resp.send_response(
+        Response::builder().status(200).header("Content-Type", "application/dns-message")
+        .header("content-length", size)
+        .body(())?,
+        false
+    )?
     .send_data(dq_resp, true)?;
 
     Ok(())

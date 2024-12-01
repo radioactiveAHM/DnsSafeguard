@@ -1,6 +1,6 @@
 /target
 /build
 TODO
-/cert.pem
-/key.pem
+/*.pem
+/*.crt
 /dns.sample

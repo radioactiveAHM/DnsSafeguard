@@ -15,11 +15,8 @@ x509_extensions = v3_req
 prompt = no
 [req_distinguished_name]
 C = US
-ST = NI
-L = Auckland
-O = Localhost
-OU = Localhost
-CN = localhost.co.us
+O = Google Trust Services LLC
+CN = WR2
 [v3_req]
 keyUsage = critical, digitalSignature, keyAgreement
 extendedKeyUsage = serverAuth

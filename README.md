@@ -115,7 +115,7 @@ The configuration file is structured in JSON format and includes the following s
   * `Listen Address`: The IP address and port of the local DoH server (e.g., `127.0.0.1:443`).
   * `Certificate`: Path to the certificate file (e.g., `/path/to/certificate.crt`).
   * `Key`: Path to the key file (e.g., `/path/to/key.key`).
-  * `Stream Timeout`: Lifetime of each HTTP/2 stream (e.g., `30s`).
+  * `Stream Timeout`: Lifetime of each HTTP/2 connection (e.g., `120s`).
 * `Rules`: Block or bypass DNS queries containing specified domains or keywords. Value can be `null`.
   * `options`: List of domains or keywords.
   * `target`: Can be `block` or a DNS server providing plaintext UDP protocol (e.g., 1.1.1.1:53).

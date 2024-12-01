@@ -26,6 +26,8 @@ DnsSafeguard is a fast and secure DNS client written in Rust, designed to interc
 * [x] UDP Noise Implementation
 * [x] Advanced Rules Management
 * [x] DNS over QUIC (DoQ) Support
+* [x] HTTP/2 DoH Server (Beta)
+* [ ] HTTP/1.1 DoH Server
 
 ## Building the Project
 
@@ -57,6 +59,10 @@ To build the project, execute the following command in the project directory: `c
 
 [Go to dns servers page](/DNS.md)
 
+## Local DoH Server
+
+[Go to local DoH server page](/DOHSERVER.md)
+
 ## Configuration File - `config.json`
 
 The `config.json` file is a crucial part of the DnsSafeguard application. It contains the necessary settings to control the behavior of the DNS client.
@@ -74,7 +80,7 @@ The configuration file is structured in JSON format and includes the following s
   * `h1`: Single HTTP/1.1 Connection.
   * `h1_multi`: Multiple HTTP/1.1 Connection.
   * `h2`: HTTP/2 Connection.
-  * `h3`: HTTP/3 Connection (does not support fragmenting).
+  * `h3`: HTTP/3 Connection.
   * `dot`: DOT Connection (DNS over TLS).
   * `dot_nonblocking`: DOT Non-Blocking Connection (DNS over TLS).
   * `doq`: DoQ Connection (DNS over QUIC).
@@ -105,7 +111,12 @@ The configuration file is structured in JSON format and includes the following s
   * `reconnect_sleep`: Duration to sleep before reconnecting (in seconds).
   * `max_reconnect`: Maximum reconnect attempts before sleeping for a longer duration.
   * `max_reconnect_sleep`: Duration to sleep when the maximum reconnect attempts are reached.
-* `rules`: Block or bypass DNS queries containing specified domains or keywords. Value can be `null`.
+* `DoH Server`: Local DNS over HTTPS (HTTP/2) server for browsers.
+  * `Listen Address`: The IP address and port of the local DoH server (e.g., `127.0.0.1:443`).
+  * `Certificate`: Path to the certificate file (e.g., `/path/to/certificate.crt`).
+  * `Key`: Path to the key file (e.g., `/path/to/key.key`).
+  * `Stream Timeout`: Lifetime of each HTTP/2 stream (e.g., `30s`).
+* `Rules`: Block or bypass DNS queries containing specified domains or keywords. Value can be `null`.
   * `options`: List of domains or keywords.
   * `target`: Can be `block` or a DNS server providing plaintext UDP protocol (e.g., 1.1.1.1:53).
 

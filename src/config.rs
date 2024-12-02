@@ -98,7 +98,7 @@ pub struct DohServer {
     pub listen_address: SocketAddr,
     pub certificate: String,
     pub key: String,
-    pub stream_timeout: u64
+    pub log_errors: bool
 }
 
 #[derive(serde::Deserialize)]

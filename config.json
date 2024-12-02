@@ -59,7 +59,7 @@
 		"listen_address": "127.0.0.1:443",
 		"certificate": "cert.pem",
 		"key": "key.pem",
-		"stream_timeout": 30
+		"log_errors": false
 	},
 	"rules": [
 		{

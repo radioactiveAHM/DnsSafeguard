@@ -99,7 +99,7 @@ pub mod lsd {
         cookie: String, // [13u8, 10, 13u8, 10, 13u8, 10]
     }
 
-    impl<'a> LSD<'a> {
+    impl LSD<'_>{
         pub fn new(target: SocketAddr) -> Self {
             let mut rng = thread_rng();
             LSD {

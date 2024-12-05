@@ -26,8 +26,7 @@ DnsSafeguard is a fast and secure DNS client written in Rust, designed to interc
 * [x] UDP Noise Implementation
 * [x] Advanced Rules Management
 * [x] DNS over QUIC (DoQ) Support
-* [x] HTTP/2 DoH Server (Beta)
-* [ ] HTTP/1.1 DoH Server
+* [x] Local HTTP/1.1 and HTTP/2 DoH Server (POST + GET)
 
 ## Building the Project
 

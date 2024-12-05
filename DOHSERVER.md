@@ -30,4 +30,19 @@ IP.1 = 127.0.0.1
 3. Generate the Certificate File: Run the following command to generate the certificate file `openssl req -new -x509 -days 36500 -key key.pem -out cert.pem -config san.cnf`.
 4. Install the Certificate: install the generated certificate file so the system can trust it.
 5. Configure DnsSafeguard: Move the key and certificate files to the DnsSafeguard folder and configure the DnsSafeguard configuration file accordingly.
-6. Use the DoH Server: Use the following URL in browsers or applications to connect to the local DoH server `https://127.0.0.1/dns-query{?dns}`
+6. Use the DoH Server: Use the following URL in browsers or applications to connect to the local DoH server `https://127.0.0.1/dns-query{?dns}` for GET method and `https://127.0.0.1/dns-query` for POST method.
+
+## Windows 11: Trust Certificate
+
+To install a certificate so the Windows 11 can trust it, follow these steps:
+
+1. Rename the Certificate File:
+   * Rename `cert.pem` to `cert.crt` The icon of `cert.crt` should change.
+2. Install the Certificate:
+   * Right-click on `cert.crt` and select `Install Certificate`.
+   * In the Store Location section, select `Local Machine` and click Next.
+   * Choose `Place all certificates in the following store`, then click Browse.
+   * Select `Trusted Root Certification Authorities` and click OK.
+   * Click Next and complete the wizard.
+3. Verify in Browser: Try accessing the desired site in Firefox. If it doesn’t work, repeat the installation process but select `Third-Party Root Certification Authorities` instead of `Trusted Root Certification Authorities`.
+4. Update DnsSafeguard Configuration: Don’t forget to rename `cert.pem` to `cert.crt` in the DnsSafeguard configuration file.

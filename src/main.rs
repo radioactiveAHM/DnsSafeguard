@@ -1,7 +1,10 @@
+#![allow(clippy::too_many_arguments)]
+
 mod chttp;
 mod config;
 mod doh2;
 mod doh3;
+mod dohserver;
 mod doq;
 mod dot;
 mod fragment;
@@ -9,7 +12,6 @@ mod multi;
 mod rule;
 mod tls;
 mod utils;
-mod dohserver;
 
 use core::str;
 use std::{net::SocketAddr, sync::Arc};
@@ -49,7 +51,7 @@ async fn main() {
     let rules = convert_rules(conf.rules);
 
     if conf.doh_server.enable {
-        tokio::spawn(async move{
+        tokio::spawn(async move {
             dohserver::doh_server(conf.doh_server, conf.udp_socket_addrs).await;
         });
     }
@@ -373,7 +375,7 @@ async fn http1(
     }
 }
 
-fn c_len(http_head: &[u8]) -> usize {
+pub fn c_len(http_head: &[u8]) -> usize {
     let content_length = b"content-length: ";
     for line in http_head.split(|&b| b == b'\r' || b == b'\n') {
         if let Some(pos) = line
@@ -392,7 +394,7 @@ fn c_len(http_head: &[u8]) -> usize {
     0
 }
 
-fn catch_in_buff(find: &[u8], buff: &[u8]) -> Option<(usize, usize)> {
+pub fn catch_in_buff(find: &[u8], buff: &[u8]) -> Option<(usize, usize)> {
     buff.windows(find.len())
         .position(|pre| pre == find)
         .map(|a| (a, a + find.len()))

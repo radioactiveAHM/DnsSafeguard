@@ -26,17 +26,31 @@ pub async fn serve_h2(
                     tokio::spawn(async move {
                         if let Err(e) = handle_dns_req_get(&mut resp, dq, udp_socket_addrs).await {
                             resp.send_reset(Reason::INTERNAL_ERROR);
-                            println!("DoH2 server<{}:stream(GET):{}>: {}", peer, resp.stream_id().as_u32(), e);
+                            println!(
+                                "DoH2 server<{}:stream(GET):{}>: {}",
+                                peer,
+                                resp.stream_id().as_u32(),
+                                e
+                            );
                         }
                     });
                 }
-            }else if req.method()==http::Method::POST {
+            } else if req.method() == http::Method::POST {
                 let body: Option<Result<Bytes, h2::Error>> = req.body_mut().data().await;
-                if body.is_none() {continue;}
+                if body.is_none() {
+                    continue;
+                }
                 tokio::spawn(async move {
-                    if let Err(e) = handle_dns_req_post(&mut resp, body.unwrap(), udp_socket_addrs).await {
+                    if let Err(e) =
+                        handle_dns_req_post(&mut resp, body.unwrap(), udp_socket_addrs).await
+                    {
                         resp.send_reset(Reason::INTERNAL_ERROR);
-                        println!("DoH2 server<{}:stream(POST):{}>: {}", peer, resp.stream_id().as_u32(), e);
+                        println!(
+                            "DoH2 server<{}:stream(POST):{}>: {}",
+                            peer,
+                            resp.stream_id().as_u32(),
+                            e
+                        );
                     }
                 });
             }
@@ -71,7 +85,7 @@ async fn handle_dns_req_post(
     }
 
     if size > 5 {
-        let rto = timeout(std::time::Duration::from_secs(15), async {
+        let rto = timeout(std::time::Duration::from_secs(5), async {
             handle_resp(resp, &buff, size).await
         })
         .await;
@@ -110,7 +124,7 @@ async fn handle_dns_req_get(
     }
 
     if size > 5 {
-        let rto = timeout(std::time::Duration::from_secs(15), async {
+        let rto = timeout(std::time::Duration::from_secs(5), async {
             handle_resp(resp, &buff, size).await
         })
         .await;
@@ -133,7 +147,7 @@ async fn handle_resp(
     size: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let dq_resp = Bytes::copy_from_slice(&buff[..size]);
-    resp.send_response(
+    let pending = resp.send_response(
         Response::builder()
             .status(200)
             .header("Content-Type", "application/dns-message")
@@ -141,8 +155,12 @@ async fn handle_resp(
             .header("Content-Length", size)
             .body(())?,
         false,
-    )?
-    .send_data(dq_resp, true)?;
+    );
+
+    if let Ok(mut p) = pending {
+        p.reserve_capacity(size);
+        let _ = p.send_data(dq_resp, true);
+    }
 
     Ok(())
 }

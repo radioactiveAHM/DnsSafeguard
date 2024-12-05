@@ -1,5 +1,9 @@
 use std::{fmt::Display, net::SocketAddr};
-use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::UdpSocket, time::timeout};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::UdpSocket,
+    time::timeout,
+};
 
 use crate::{c_len, catch_in_buff};
 
@@ -8,7 +12,7 @@ use super::DnsQuery;
 pub async fn serve_http11(
     mut stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     udp_socket_addrs: SocketAddr,
-    log: bool
+    log: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let peer = stream.get_ref().0.peer_addr()?;
     let agent = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
@@ -16,29 +20,34 @@ pub async fn serve_http11(
 
     let mut deadloop = 0u8;
     loop {
-        if deadloop==20 {break;}
+        if deadloop == 20 {
+            break;
+        }
 
-        let mut buff = [0;8196];
+        let mut buff = [0; 8196];
         if let Ok(size) = stream.read(&mut buff).await {
             if size > 5 {
-                deadloop=0;
+                deadloop = 0;
                 if let Err(e) = handle_req(&mut stream, &buff[..size], &agent).await {
                     if log {
                         println!("DoH1.1 server<{}:stream>: {}", peer, e);
                     }
                 }
             } else {
-                deadloop+=1;
+                deadloop += 1;
             }
-        }else {
-            deadloop+=1;
+        } else {
+            deadloop += 1;
         }
-        
     }
     Ok(())
 }
 
-async fn handle_req(stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>, buff: &[u8], agent: &UdpSocket) -> Result<(), Box<dyn std::error::Error>> {
+async fn handle_req(
+    stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
+    buff: &[u8],
+    agent: &UdpSocket,
+) -> Result<(), Box<dyn std::error::Error>> {
     let req = HTTP11::parse(buff, stream).await?;
     let dqbuff = req.getbuff();
 
@@ -75,24 +84,24 @@ async fn handle_req(stream: &mut tokio_rustls::server::TlsStream<tokio::net::Tcp
 enum HTTP11Errors {
     NoDnsQuery,
     InvalidMethod,
-    MalformedHttp
+    MalformedHttp,
 }
 impl Display for HTTP11Errors {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             HTTP11Errors::NoDnsQuery => write!(f, "NoDnsQuery"),
             HTTP11Errors::InvalidMethod => write!(f, "InvalidMethod"),
-            HTTP11Errors::MalformedHttp => write!(f, "MalformedHttp")
+            HTTP11Errors::MalformedHttp => write!(f, "MalformedHttp"),
         }
     }
 }
 impl std::error::Error for HTTP11Errors {}
-enum Method{
+enum Method {
     GET(DnsQuery),
-    POST([u8;512], usize)
+    POST([u8; 512], usize),
 }
 struct HTTP11 {
-    method: Method
+    method: Method,
 }
 impl HTTP11 {
     fn find_query(buff: &[u8]) -> Option<&[u8]> {
@@ -100,30 +109,38 @@ impl HTTP11 {
         let b = catch_in_buff(b" HTTP/1.1", buff)?;
         Some(&buff[a.1..b.0])
     }
-    async fn parse(buff: &[u8], stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>) -> Result<Self, Box<dyn std::error::Error>> {
-        if &buff[..3]==b"GET" {
+    async fn parse(
+        buff: &[u8],
+        stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        if &buff[..3] == b"GET" {
             if let Some(query) = HTTP11::find_query(buff) {
                 Ok(Self {
-                    method: Method::GET(DnsQuery::new(query)?)
+                    method: Method::GET(DnsQuery::new(query)?),
                 })
-            }else {
+            } else {
                 Err(Box::new(HTTP11Errors::NoDnsQuery))
             }
-        } else if &buff[..4]==b"POST" {
+        } else if &buff[..4] == b"POST" {
             if let Some(body_pos) = catch_in_buff(b"\r\n\r\n", buff) {
                 let content_length = c_len(&buff[..body_pos.0]);
-                if content_length==0{
+                if content_length == 0 {
                     Err(Box::new(HTTP11Errors::MalformedHttp))
-                }else {
-                    let mut dns = [0u8;512];
+                } else {
+                    let mut dns = [0u8; 512];
                     dns[..buff[body_pos.1..].len()].copy_from_slice(&buff[body_pos.1..]);
-                    if content_length!=buff[body_pos.1..].len() {
+                    if content_length != buff[body_pos.1..].len() {
                         let mut b2 = [0; 512];
                         let size = stream.read(&mut b2).await?;
-                        dns[buff[body_pos.1..].len()..buff[body_pos.1..].len()+size].copy_from_slice(&b2[..size]);
-                        Ok(Self { method: Method::POST(dns, buff[body_pos.1..].len()+size) })
-                    }else {
-                        Ok(Self { method: Method::POST(dns, buff[body_pos.1..].len()) })
+                        dns[buff[body_pos.1..].len()..buff[body_pos.1..].len() + size]
+                            .copy_from_slice(&b2[..size]);
+                        Ok(Self {
+                            method: Method::POST(dns, buff[body_pos.1..].len() + size),
+                        })
+                    } else {
+                        Ok(Self {
+                            method: Method::POST(dns, buff[body_pos.1..].len()),
+                        })
                     }
                 }
             } else {
@@ -134,14 +151,10 @@ impl HTTP11 {
         }
     }
 
-    fn getbuff(&self)-> &[u8] {
+    fn getbuff(&self) -> &[u8] {
         match &self.method {
-            Method::GET(dq)=>{
-                dq.value()
-            },
-            Method::POST(buff, size) => {
-                &buff[..*size]
-            }
+            Method::GET(dq) => dq.value(),
+            Method::POST(buff, size) => &buff[..*size],
         }
     }
 }

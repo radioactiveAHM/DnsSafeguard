@@ -1,12 +1,14 @@
-mod h2p;
 mod h11p;
+mod h2p;
 
 use core::str;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::TcpListener;
+use tokio::time::sleep;
 use tokio_rustls::{rustls, TlsAcceptor};
 
 use crate::config::DohServer;
@@ -35,7 +37,7 @@ impl Tc {
 pub struct DnsQuery([u8; 512], usize);
 impl DnsQuery {
     pub fn new(bs4dns: &[u8]) -> Result<Self, base64_url::base64::DecodeSliceError> {
-        let mut buff = [0; 8196];
+        let mut buff = [0; 512];
         match base64_url::decode_to_slice(bs4dns, &mut buff) {
             Ok(b) => {
                 let mut dq = Self([0; 512], b.len());
@@ -45,12 +47,13 @@ impl DnsQuery {
             Err(e) => Err(e),
         }
     }
-    pub fn value(&self)->&[u8]{
+    pub fn value(&self) -> &[u8] {
         &self.0[..self.1]
     }
 }
 
 pub async fn doh_server(dsc: DohServer, udp_socket_addrs: SocketAddr) {
+    sleep(Duration::from_secs(2)).await;
     let certs = CertificateDer::pem_file_iter(dsc.certificate)
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
@@ -60,8 +63,8 @@ pub async fn doh_server(dsc: DohServer, udp_socket_addrs: SocketAddr) {
         .with_no_client_auth()
         .with_single_cert(certs, key)
         .unwrap();
-
-    config.alpn_protocols = vec![b"h2".into(),b"http/1.1".into()];
+    config.send_tls13_tickets = 0;
+    config.alpn_protocols = vec![b"h2".into(), b"http/1.1".into()];
     let acceptor = TlsAcceptor::from(Arc::new(config));
 
     let listener = TcpListener::bind(dsc.listen_address).await.unwrap();
@@ -74,14 +77,14 @@ pub async fn doh_server(dsc: DohServer, udp_socket_addrs: SocketAddr) {
                 tokio::spawn(async move {
                     if let Err(e) = tc_handler(tc, udp_socket_addrs, dsc.log_errors).await {
                         if dsc.log_errors {
-                            println!("DoH server: {e}")
+                            println!("DoH server<TLS>: {e}")
                         }
                     }
                 });
             }
             Err(e) => {
                 if dsc.log_errors {
-                    println!("DoH server: {e}")
+                    println!("DoH server<TLS>: {e}")
                 }
             }
         }
@@ -91,7 +94,7 @@ pub async fn doh_server(dsc: DohServer, udp_socket_addrs: SocketAddr) {
 async fn tc_handler(
     tc: Tc,
     udp_socket_addrs: SocketAddr,
-    log: bool
+    log: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut stream = tc.accept().await?;
 

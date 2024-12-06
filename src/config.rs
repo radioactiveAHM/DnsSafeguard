@@ -95,6 +95,7 @@ pub struct Rule {
 #[derive(serde::Deserialize)]
 pub struct DohServer {
     pub enable: bool,
+    pub alpn: Vec<String>,
     pub listen_address: SocketAddr,
     pub certificate: String,
     pub key: String,

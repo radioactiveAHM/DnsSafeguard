@@ -21,38 +21,44 @@ pub async fn serve_h2(
         }
         if let Some(Ok((mut req, mut resp))) = conn.accept().await {
             deadloop = 0;
-            if let Some(bs4dns) = req.uri().query() {
-                if let Ok(dq) = DnsQuery::new(&bs4dns.as_bytes()[4..]) {
-                    tokio::spawn(async move {
-                        if let Err(e) = handle_dns_req_get(&mut resp, dq, udp_socket_addrs).await {
+            if req.method() == http::Method::POST {
+                tokio::spawn(async move {
+                    if let Some(Ok(body)) = req.body_mut().data().await {
+                        if let Err(e) =
+                        handle_dns_req_post(&mut resp, body, udp_socket_addrs).await
+                        {
                             resp.send_reset(Reason::INTERNAL_ERROR);
                             println!(
-                                "DoH2 server<{}:stream(GET):{}>: {}",
+                                "DoH2 server<{}:stream(POST):{}>: {}",
                                 peer,
                                 resp.stream_id().as_u32(),
                                 e
                             );
                         }
-                    });
-                }
-            } else if req.method() == http::Method::POST {
-                let body: Option<Result<Bytes, h2::Error>> = req.body_mut().data().await;
-                if body.is_none() {
-                    continue;
-                }
-                tokio::spawn(async move {
-                    if let Err(e) =
-                        handle_dns_req_post(&mut resp, body.unwrap(), udp_socket_addrs).await
-                    {
-                        resp.send_reset(Reason::INTERNAL_ERROR);
-                        println!(
-                            "DoH2 server<{}:stream(POST):{}>: {}",
-                            peer,
-                            resp.stream_id().as_u32(),
-                            e
-                        );
+                    } else {
+                        resp.send_reset(Reason::PROTOCOL_ERROR);
                     }
                 });
+            } else if req.method() == http::Method::GET {
+                if let Some(bs4dns) = req.uri().query() {
+                    if let Ok(dq) = DnsQuery::new(&bs4dns.as_bytes()[4..]) {
+                        tokio::spawn(async move {
+                            if let Err(e) = handle_dns_req_get(&mut resp, dq, udp_socket_addrs).await {
+                                resp.send_reset(Reason::INTERNAL_ERROR);
+                                println!(
+                                    "DoH2 server<{}:stream(GET):{}>: {}",
+                                    peer,
+                                    resp.stream_id().as_u32(),
+                                    e
+                                );
+                            }
+                        });
+                    }
+                } else {
+                    resp.send_reset(Reason::PROTOCOL_ERROR);
+                }
+            }else {
+                resp.send_reset(Reason::PROTOCOL_ERROR);
             }
         } else {
             deadloop += 1;
@@ -64,13 +70,12 @@ pub async fn serve_h2(
 
 async fn handle_dns_req_post(
     resp: &mut SendResponse<Bytes>,
-    body: Result<Bytes, h2::Error>,
+    body: Bytes,
     udp_socket_addrs: SocketAddr,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let dns = body?;
     let agent = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
     agent.connect(udp_socket_addrs).await?;
-    agent.send(&dns).await?;
+    agent.send(&body).await?;
 
     let mut buff = [0; 8196];
     let size: usize;

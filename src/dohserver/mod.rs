@@ -64,7 +64,7 @@ pub async fn doh_server(dsc: DohServer, udp_socket_addrs: SocketAddr) {
         .with_single_cert(certs, key)
         .unwrap();
     config.send_tls13_tickets = 0;
-    config.alpn_protocols = vec![b"h2".into(), b"http/1.1".into()];
+    config.alpn_protocols = dsc.alpn.iter().map(|string| string.as_bytes().to_vec()).collect();
     let acceptor = TlsAcceptor::from(Arc::new(config));
 
     let listener = TcpListener::bind(dsc.listen_address).await.unwrap();

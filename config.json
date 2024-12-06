@@ -1,5 +1,5 @@
 {
-	"protocol": "h2",
+	"protocol": "h3",
 	"server_name": "cloudflare-dns.com",
 	"disable_domain_sni": false,
 	"socket_addrs": "1.1.1.1:443",
@@ -56,8 +56,9 @@
 	},
 	"doh_server": {
 		"enable": false,
+		"alpn": ["h2", "http/1.1"],
 		"listen_address": "127.0.0.1:443",
-		"certificate": "cert.pem",
+		"certificate": "cert.crt",
 		"key": "key.pem",
 		"log_errors": false
 	},

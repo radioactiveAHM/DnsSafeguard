@@ -5,7 +5,7 @@ use tokio::{
     time::timeout,
 };
 
-use crate::{c_len, catch_in_buff};
+use crate::{c_len, catch_in_buff, utils::Buffering};
 
 use super::DnsQuery;
 
@@ -66,15 +66,15 @@ async fn handle_req(
     }
 
     if size > 5 {
+        let mut temp = [0u8; 768];
         stream.write(
-            format!(
-                "HTTP/1.1 OK 200\r\nContent-Type: application/dns-message\r\nCache-Contro: max-age=300\r\nContent-Length: {}\r\n\r\n",
-                size
-            ).as_bytes()
+            Buffering(&mut temp, 0)
+        .write(
+            format!("HTTP/1.1 200 OK\r\nContent-Type: application/dns-message\r\nCache-Contro: max-age=300\r\nContent-Length: {}\r\n\r\n", size).as_bytes()
+        ).write(&buff[..size]).get()
         ).await?;
-        stream.write(&buff[..size]).await?;
     } else {
-        stream.write(b"HTTP/1.1 OK 404\r\n\r\n").await?;
+        stream.write(b"HTTP/1.1 404 Not Found\r\n\r\n").await?;
     }
 
     Ok(())

@@ -1,5 +1,4 @@
 use core::str;
-
 use tokio::{net::TcpStream, time::sleep};
 
 #[allow(unused)]
@@ -63,5 +62,17 @@ impl SNI {
 
     pub fn string(&self) -> &str {
         str::from_utf8(&self.0[..self.1]).expect("Error: Invalid UTF-8 sequence")
+    }
+}
+
+pub struct Buffering<'a>(pub &'a mut [u8], pub usize);
+impl<'a> Buffering<'a> {
+    pub fn write(&mut self, buff: &[u8]) -> &mut Self {
+        self.0[self.1..self.1 + buff.len()].copy_from_slice(buff);
+        self.1 += buff.len();
+        self
+    }
+    pub fn get(&mut self) -> &[u8] {
+        &self.0[..self.1]
     }
 }

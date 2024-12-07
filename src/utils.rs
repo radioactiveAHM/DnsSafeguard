@@ -1,4 +1,5 @@
 use core::str;
+use std::str::Utf8Error;
 use tokio::{net::TcpStream, time::sleep};
 
 #[allow(unused)]
@@ -72,7 +73,10 @@ impl<'a> Buffering<'a> {
         self.1 += buff.len();
         self
     }
-    pub fn get(&mut self) -> &[u8] {
+    pub fn get(&self) -> &[u8] {
         &self.0[..self.1]
+    }
+    pub fn str(&self) -> Result<&str, Utf8Error> {
+        str::from_utf8(&self.0[..self.1])
     }
 }

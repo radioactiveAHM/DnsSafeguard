@@ -1,6 +1,7 @@
 use crate::chttp::genrequrl;
 use crate::rule::rulecheck;
 use crate::tls::tlsfragmenting;
+use crate::utils::Buffering;
 use crate::utils::SNI;
 use core::str;
 use h2::client::SendRequest;
@@ -148,13 +149,14 @@ async fn send_req(
     let mut temp = [0u8; 512];
     let query_bs4url = base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?;
     // HTTP Request
-    let mut url = [0; 1024];
+    let mut url = [0u8; 1024];
+    let mut b = Buffering(&mut url, 0);
     let req = http::Request::get(genrequrl(
-        &mut url,
+        &mut b,
         server_name.slice(),
         query_bs4url,
         cpath,
-    ))
+    )?)
     .header("Accept", "application/dns-message")
     .body(())?;
 

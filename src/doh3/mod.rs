@@ -17,7 +17,7 @@ use crate::{
     chttp::genrequrl,
     config::{self, Noise},
     rule::rulecheck,
-    utils::SNI,
+    utils::{Buffering, SNI},
 };
 
 pub async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise) -> quinn::Endpoint {
@@ -225,12 +225,13 @@ async fn send_request(
     let mut temp = [0u8; 512];
     let query_bs4url = base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?;
     let mut url = [0; 1024];
+    let mut b = Buffering(&mut url, 0);
     let req = http::Request::get(genrequrl(
-        &mut url,
+        &mut b,
         server_name.slice(),
         query_bs4url,
         cpath,
-    ))
+    )?)
     .header("Accept", "application/dns-message")
     .body(())?;
 

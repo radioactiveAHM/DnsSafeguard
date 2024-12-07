@@ -24,7 +24,7 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     time::sleep,
 };
-use utils::{tcp_connect_handle, SNI};
+use utils::{tcp_connect_handle, Buffering, SNI};
 
 #[tokio::main]
 async fn main() {
@@ -337,7 +337,8 @@ async fn http1(
             let query_bs4url =
                 base64_url::encode_to_slice(&dns_query[..query_size], &mut temp).unwrap();
             let mut url = [0; 1024];
-            let http_req = genrequrlh1(&mut url, sn.slice(), query_bs4url, &cpath);
+            let mut b = Buffering(&mut url, 0);
+            let http_req = genrequrlh1(&mut b, sn.slice(), query_bs4url, &cpath);
 
             // Write http request
             if c.write(http_req).await.is_err() {

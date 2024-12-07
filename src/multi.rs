@@ -10,7 +10,7 @@ use crate::{
     config::{self, Connection},
     rule::rulecheck,
     tls::{self, tlsfragmenting},
-    utils::{tcp_connect_handle, SNI},
+    utils::{tcp_connect_handle, Buffering, SNI},
 };
 
 type CrossContainer = (
@@ -91,7 +91,8 @@ pub async fn h1_multi(
                         let query_bs4url =
                             base64_url::encode_to_slice(&query.0[..query.1], &mut temp).unwrap();
                         let mut url = [0; 1024];
-                        let http_req = genrequrlh1(&mut url, sn.slice(), query_bs4url, &cpath);
+                        let mut b = Buffering(&mut url, 0);
+                        let http_req = genrequrlh1(&mut b, sn.slice(), query_bs4url, &cpath);
 
                         // Send HTTP Req
                         if c.write(http_req).await.is_err() {

@@ -70,7 +70,7 @@ async fn handle_req(
         stream.write(
             Buffering(&mut temp, 0)
         .write(
-            format!("HTTP/1.1 200 OK\r\nContent-Type: application/dns-message\r\nCache-Contro: max-age=300\r\nContent-Length: {}\r\n\r\n", size).as_bytes()
+            format!("HTTP/1.1 200 OK\r\nContent-Type: application/dns-message\r\nCache-Control: max-age=300\r\nContent-Length: {}\r\n\r\n", size).as_bytes()
         ).write(&buff[..size]).get()
         ).await?;
     } else {

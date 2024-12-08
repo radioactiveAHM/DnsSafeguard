@@ -96,7 +96,7 @@ mod h11 {
 
         stream.flush().unwrap();
 
-        let mut temp = [0u8; 1024];
+        let mut temp = [0u8; 8196];
         let dns = std::fs::read("dns.sample").unwrap();
         let head = format!("POST / HTTP/1.1\r\nContent-Length: {}\r\n\r\n", dns.len());
 

@@ -87,10 +87,10 @@ pub async fn h1_multi(
                     });
                     if let Ok((query, addr, udp)) = package {
                         // HTTP Req
-                        let mut temp = [0u8; 512];
+                        let mut temp = [0u8; 4096];
                         let query_bs4url =
                             base64_url::encode_to_slice(&query.0[..query.1], &mut temp).unwrap();
-                        let mut url = [0; 1024];
+                        let mut url = [0; 4096];
                         let mut b = Buffering(&mut url, 0);
                         let http_req = genrequrlh1(&mut b, sn.slice(), query_bs4url, &cpath);
 
@@ -101,7 +101,7 @@ pub async fn h1_multi(
                         }
 
                         // Handle Reciving Data
-                        let mut http_resp = [0; 2048];
+                        let mut http_resp = [0; 4096];
                         let http_resp_size = c.read(&mut http_resp).await.unwrap_or(0);
 
                         // Break if failed to recv response
@@ -119,7 +119,7 @@ pub async fn h1_multi(
                             } else if content_length != 0 && content_length > body.len() {
                                 // There is another chunk of body
                                 // We know it's not bigger than 512 bytes
-                                let mut b2 = [0; 512];
+                                let mut b2 = [0; 4096];
                                 let b2_len = c.read(&mut b2).await.unwrap_or(0);
 
                                 udp.send_to(&[body, &b2[..b2_len]].concat(), addr)

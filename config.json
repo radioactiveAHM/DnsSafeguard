@@ -11,7 +11,7 @@
 	},
 	"noise": {
 		"enable": true,
-		"ntype": "rand",
+		"ntype": "dns",
 		"content": "google.com",
 		"packet_length": 1,
 		"packets": 1,

@@ -78,7 +78,7 @@ pub async fn dot(
                 }
 
                 // Recv DOT query
-                let mut resp_dot_query = [0; 514];
+                let mut resp_dot_query = [0; 4096];
                 if let Ok(resp_dot_query_size) = conn.read(&mut resp_dot_query).await {
                     if resp_dot_query_size as u16
                         == convert_two_u8s_to_u16_be([resp_dot_query[0], resp_dot_query[1]]) + 2
@@ -157,7 +157,7 @@ pub async fn dot_nonblocking(
             let udp = arc_udp;
             loop {
                 // Recv DOT query
-                let mut resp_dot_query = [0; 514];
+                let mut resp_dot_query = [0; 4096];
                 if let Ok(resp_dot_query_size) = conn_r.read(&mut resp_dot_query).await {
                     if resp_dot_query_size as u16
                         == convert_two_u8s_to_u16_be([resp_dot_query[0], resp_dot_query[1]]) + 2

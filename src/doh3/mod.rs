@@ -245,7 +245,7 @@ async fn send_request(
     if resp.status() == http::status::StatusCode::OK {
         // get body
         if let Some(body) = reqs.recv_data().await? {
-            let mut buff = [0; 512];
+            let mut buff = [0; 4096];
             let body_len = body.reader().read(&mut buff)?;
             let _ = udp.send_to(&buff[..body_len], addr).await;
         }

@@ -347,7 +347,7 @@ async fn http1(
             }
 
             // Handle Reciving Data
-            let mut http_resp = [0; 2048];
+            let mut http_resp = [0; 4096];
             let http_resp_size = c.read(&mut http_resp).await.unwrap_or(0);
 
             // Break if failed to recv response
@@ -365,7 +365,7 @@ async fn http1(
                 } else if content_length != 0 && content_length > body.len() {
                     // There is another chunk of body
                     // We know it's not bigger than 512 bytes
-                    let mut merged_body = [0; 512];
+                    let mut merged_body = [0; 4096];
                     merged_body[..body.len()].copy_from_slice(body);
                     if let Ok(b2_len) = c.read(&mut merged_body[body.len()..]).await {
                         let _ = udp.send_to(&merged_body[..body.len() + b2_len], addr).await;

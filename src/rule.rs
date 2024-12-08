@@ -49,7 +49,7 @@ async fn handle_bypass(
     agent.send(&dq.0[..dq.1]).await?;
 
     // stage 2: recv udp query from dns server
-    let mut buff = [0; 512];
+    let mut buff = [0; 4096];
     let dq_resp_size = timeout(Duration::from_secs(5), async {
         agent.recv(&mut buff).await.unwrap_or(0)
     })
@@ -104,7 +104,7 @@ async fn handle_bypass_sync(
     agent.send(&dq.0[..dq.1]).await?;
 
     // stage 2: recv udp query from dns server
-    let mut buff = [0; 512];
+    let mut buff = [0; 4096];
     let dq_resp_size = timeout(Duration::from_secs(5), async {
         agent.recv(&mut buff).await.unwrap_or(0)
     })

@@ -77,7 +77,7 @@ async fn handle_dns_req_post(
     agent.connect(udp_socket_addrs).await?;
     agent.send(&body).await?;
 
-    let mut buff = [0; 8196];
+    let mut buff = [0; 4096];
     let size: usize;
     if let Ok(v) = timeout(std::time::Duration::from_secs(5), async {
         agent.recv(&mut buff).await
@@ -116,7 +116,7 @@ async fn handle_dns_req_get(
     agent.connect(udp_socket_addrs).await?;
     agent.send(dq.value()).await?;
 
-    let mut buff = [0; 8196];
+    let mut buff = [0; 4096];
     let size: usize;
     if let Ok(v) = timeout(std::time::Duration::from_secs(5), async {
         agent.recv(&mut buff).await

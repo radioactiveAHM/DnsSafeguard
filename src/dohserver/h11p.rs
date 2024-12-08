@@ -24,7 +24,7 @@ pub async fn serve_http11(
             break;
         }
 
-        let mut buff = [0; 8196];
+        let mut buff = [0; 1024];
         if let Ok(size) = stream.read(&mut buff).await {
             if size > 5 {
                 deadloop = 0;
@@ -53,7 +53,7 @@ async fn handle_req(
 
     agent.send(dqbuff).await?;
 
-    let mut buff = [0; 8196];
+    let mut buff = [0; 4096];
     let size: usize;
     if let Ok(v) = timeout(std::time::Duration::from_secs(5), async {
         agent.recv(&mut buff).await
@@ -66,7 +66,7 @@ async fn handle_req(
     }
 
     if size > 5 {
-        let mut temp = [0u8; 768];
+        let mut temp = [0u8; 4096];
         stream.write(
             Buffering(&mut temp, 0)
         .write(

@@ -151,7 +151,7 @@ async fn send_dq(
 
     send.write(&doq_query[..dns_query.1 + 2]).await?;
     send.finish()?;
-    let mut buff = [0u8; 514];
+    let mut buff = [0u8; 4096];
     if let Some(resp_size) = recv.read(&mut buff).await? {
         let _ = udp.send_to(&buff[2..resp_size], addr).await;
     }

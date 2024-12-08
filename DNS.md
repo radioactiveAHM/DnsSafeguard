@@ -36,3 +36,8 @@
 
 * Addresses: `185.228.168.9`, `185.228.169.9`, `2a0d:2a00:1::2`, `2a0d:2a00:2::2`
 * SNI: `security-filter-dns.cleanbrowsing.org`
+
+## NextDns
+
+* Addresses: `45.90.28.26`, `45.90.30.26`, `2a07:a8c0::a1:8f24`, `2a07:a8c1::a1:8f24`
+* SNI: `dns.nextdns.io`

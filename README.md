@@ -113,6 +113,7 @@ The configuration file is structured in JSON format and includes the following s
   * `max_reconnect_sleep`: Duration to sleep when the maximum reconnect attempts are reached.
 * `DoH Server`: Local DNS over HTTPS (HTTP/2) server for browsers.
   * `Listen Address`: The IP address and port of the local DoH server (e.g., `127.0.0.1:443`).
+  * `ALPN`: Set up the HTTP version to serve. Supported variants are `h2` and `http/1.1`.
   * `Certificate`: Path to the certificate file (e.g., `/path/to/certificate.crt`).
   * `Key`: Path to the key file (e.g., `/path/to/key.key`).
   * `log_errors`: Enable logging DoH sever errors.

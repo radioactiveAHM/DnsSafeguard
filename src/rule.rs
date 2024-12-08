@@ -65,20 +65,20 @@ async fn handle_bypass(
 
 pub async fn rulecheck_sync(
     rules: &Option<Vec<Rule>>,
-    dq: ([u8; 512], usize),
+    dq: &[u8],
     client_addr: SocketAddr,
     udp: &tokio::net::UdpSocket,
 ) -> bool {
     for rule in rules.as_deref().unwrap() {
         if rule.target == "block" {
             for option in &rule.options {
-                if catch_in_buff(option, &dq.0[..dq.1]).is_some() {
+                if catch_in_buff(option, &dq).is_some() {
                     return true;
                 }
             }
         } else {
             for option in &rule.options {
-                if catch_in_buff(option, &dq.0[..dq.1]).is_some() {
+                if catch_in_buff(option, &dq).is_some() {
                     let bypass_target = SocketAddr::from_str(&rule.target).unwrap();
                     if let Err(e) = handle_bypass_sync(dq, client_addr, bypass_target, udp).await {
                         println!("{e}");
@@ -93,7 +93,7 @@ pub async fn rulecheck_sync(
 }
 
 async fn handle_bypass_sync(
-    dq: ([u8; 512], usize),
+    dq: &[u8],
     client_addr: SocketAddr,
     bypass_target: SocketAddr,
     udp: &tokio::net::UdpSocket,
@@ -101,7 +101,7 @@ async fn handle_bypass_sync(
     // stage 1: send udp query to dns server
     let agent = tokio::net::UdpSocket::bind("0.0.0.0:0").await?;
     agent.connect(bypass_target).await?;
-    agent.send(&dq.0[..dq.1]).await?;
+    agent.send(dq).await?;
 
     // stage 2: recv udp query from dns server
     let mut buff = [0; 4096];

@@ -175,6 +175,7 @@ pub async fn http3(
             None
         };
 
+        let mut dns_query = [0u8; 512];
         loop {
             // Check if Connection is dead
             // quic_conn_dead will be passed to task if connection alive
@@ -184,7 +185,6 @@ pub async fn http3(
             }
 
             // Recive dns query
-            let mut dns_query = [0u8; 512];
             let udp = arc_udp.clone();
 
             if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {

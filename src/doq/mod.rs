@@ -92,6 +92,7 @@ pub async fn doq(
         let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
         let dead_conn = Arc::new(Mutex::new(false));
 
+        let mut dns_query = [0u8; 512];
         loop {
             // Check if Connection is dead
             // quic_conn_dead will be passed to task if connection alive
@@ -102,7 +103,6 @@ pub async fn doq(
             }
 
             // Recive dns query
-            let mut dns_query = [0u8; 512];
             let udp = arc_udp.clone();
 
             if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {

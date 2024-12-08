@@ -28,19 +28,6 @@ use utils::{tcp_connect_handle, Buffering, SNI};
 
 #[tokio::main]
 async fn main() {
-    #[cfg(target_os = "windows")]
-    {
-        if std::process::Command::new("cmd")
-            .args(["ipconfig", "/flushdns"])
-            .output()
-            .is_ok()
-        {
-            println!("DNS cache cleared");
-        } else {
-            println!("Failed to clear dns cache");
-        }
-    }
-
     tokio_rustls::rustls::crypto::ring::default_provider()
         .install_default()
         .unwrap();
@@ -321,22 +308,23 @@ async fn http1(
         let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
         let cpath: Option<&str> = custom_http_path.as_deref();
 
+        let mut dns_query = [0u8; 512];
+        let mut base64_url_temp = [0u8; 512];
+        let mut url = [0; 1024];
+        let mut http_resp = [0; 4096];
         loop {
-            let mut dns_query = [0u8; 512];
             let udp_ok = udp.recv_from(&mut dns_query).await;
             if udp_ok.is_err() {
                 continue;
             }
             let (query_size, addr) = udp_ok.unwrap();
             // rule check
-            if rule.is_some() && rulecheck_sync(&rule, (dns_query, query_size), addr, &udp).await {
+            if rule.is_some() && rulecheck_sync(&rule, &dns_query[..query_size], addr, &udp).await {
                 continue;
             }
 
-            let mut temp = [0u8; 512];
             let query_bs4url =
-                base64_url::encode_to_slice(&dns_query[..query_size], &mut temp).unwrap();
-            let mut url = [0; 1024];
+                base64_url::encode_to_slice(&dns_query[..query_size], &mut base64_url_temp).unwrap();
             let mut b = Buffering(&mut url, 0);
             let http_req = genrequrlh1(&mut b, sn.slice(), query_bs4url, &cpath);
 
@@ -347,7 +335,6 @@ async fn http1(
             }
 
             // Handle Reciving Data
-            let mut http_resp = [0; 4096];
             let http_resp_size = c.read(&mut http_resp).await.unwrap_or(0);
 
             // Break if failed to recv response

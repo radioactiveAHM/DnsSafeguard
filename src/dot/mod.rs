@@ -56,29 +56,27 @@ pub async fn dot(
         // UDP Server to recv dns query
         let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
 
+        let mut query = [0; 514];
+        let mut resp_dot_query = [0; 4096];
         loop {
             // Recv dns query
-            let mut query = [0; 512];
-            if let Ok((query_size, addr)) = udp.recv_from(&mut query).await {
+            if let Ok((query_size, addr)) = udp.recv_from(&mut query[2..]).await {
                 // rule check
-                if rule.is_some() && rulecheck_sync(&rule, (query, query_size), addr, &udp).await {
+                if rule.is_some() && rulecheck_sync(&rule, &query[2..query_size+2], addr, &udp).await {
                     continue;
                 }
                 // DNS query with two u8 size which is required by DOT
                 // Size of dns Query as two u8
-                let mut dot_query = [0u8; 514];
-                [dot_query[0], dot_query[1]] = convert_u16_to_two_u8s_be(query_size as u16);
-                dot_query[2..].copy_from_slice(&query);
+                [query[0], query[1]] = convert_u16_to_two_u8s_be(query_size as u16);
 
                 // Send DOT query
-                if conn.write(&dot_query[..query_size + 2]).await.is_err() {
+                if conn.write(&query[..query_size + 2]).await.is_err() {
                     // Connection is closed
                     println!("connection closed by peer");
                     break;
                 }
 
                 // Recv DOT query
-                let mut resp_dot_query = [0; 4096];
                 if let Ok(resp_dot_query_size) = conn.read(&mut resp_dot_query).await {
                     if resp_dot_query_size as u16
                         == convert_two_u8s_to_u16_be([resp_dot_query[0], resp_dot_query[1]]) + 2
@@ -194,13 +192,14 @@ pub async fn dot_nonblocking(
             }
         });
 
+        let mut query = [0; 512];
+        let mut dot_query = [0u8; 514];
         loop {
             if task.is_finished() {
                 println!("connection closed by peer");
                 break;
             }
             // Recv dns query
-            let mut query = [0; 512];
             if let Ok((query_size, addr)) = udp.recv_from(&mut query).await {
                 // rule check
                 if arc_rule.is_some()
@@ -210,7 +209,6 @@ pub async fn dot_nonblocking(
                 }
                 // DNS query with two u8 size which is required by DOT
                 // Size of dns Query as two u8
-                let mut dot_query = [0u8; 514];
                 [dot_query[0], dot_query[1]] = convert_u16_to_two_u8s_be(query_size as u16);
                 dot_query[2..].copy_from_slice(&query);
 

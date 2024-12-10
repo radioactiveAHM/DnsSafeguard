@@ -10,11 +10,11 @@ use crate::{
     config::{self, Noise},
     doh3::udp_setup,
     rule::rulecheck,
-    utils::{convert_u16_to_two_u8s_be, SNI},
+    utils::{convert_u16_to_two_u8s_be, Sni},
 };
 
 pub async fn doq(
-    sn: SNI,
+    sn: Sni,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
     quic_conf_file: config::Quic,
@@ -92,7 +92,7 @@ pub async fn doq(
         let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
         let dead_conn = Arc::new(Mutex::new(false));
 
-        let mut dns_query = [0u8; 512];
+        let mut dns_query = [0u8; 514];
         loop {
             // Check if Connection is dead
             // quic_conn_dead will be passed to task if connection alive
@@ -105,10 +105,16 @@ pub async fn doq(
             // Recive dns query
             let udp = arc_udp.clone();
 
-            if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
+            if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query[2..]).await {
                 // rule check
                 if arc_rule.is_some()
-                    && rulecheck(arc_rule.clone(), (dns_query, query_size), addr, udp.clone()).await
+                    && rulecheck(
+                        arc_rule.clone(),
+                        crate::rule::RuleDqt::Tls(dns_query, query_size),
+                        addr,
+                        udp.clone(),
+                    )
+                    .await
                 {
                     continue;
                 }
@@ -141,15 +147,13 @@ pub async fn doq(
 
 async fn send_dq(
     (mut send, mut recv): (SendStream, RecvStream),
-    dns_query: ([u8; 512], usize),
+    mut dns_query: ([u8; 514], usize),
     addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut doq_query = [0u8; 514];
-    [doq_query[0], doq_query[1]] = convert_u16_to_two_u8s_be(dns_query.1 as u16);
-    doq_query[2..].copy_from_slice(&dns_query.0);
+    [dns_query.0[0], dns_query.0[1]] = convert_u16_to_two_u8s_be(dns_query.1 as u16);
 
-    send.write(&doq_query[..dns_query.1 + 2]).await?;
+    send.write(&dns_query.0[..dns_query.1 + 2]).await?;
     send.finish()?;
     let mut buff = [0u8; 4096];
     if let Some(resp_size) = recv.read(&mut buff).await? {

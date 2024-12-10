@@ -6,22 +6,35 @@ use crate::catch_in_buff;
 
 pub type Rules = Option<Vec<Rule>>;
 
+pub enum RuleDqt {
+    Http([u8; 512], usize),
+    Tls([u8; 514], usize),
+}
+impl RuleDqt {
+    fn slice(&self) -> &[u8] {
+        match self {
+            Self::Http(dq, size) => &dq[..*size],
+            Self::Tls(dq, size) => &dq[2..*size + 2],
+        }
+    }
+}
+
 pub async fn rulecheck(
     rules: Arc<Option<Vec<Rule>>>,
-    dq: ([u8; 512], usize),
+    dq: RuleDqt,
     client_addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
 ) -> bool {
     for rule in rules.as_deref().unwrap() {
         if rule.target == "block" {
             for option in &rule.options {
-                if catch_in_buff(option, &dq.0[..dq.1]).is_some() {
+                if catch_in_buff(option, dq.slice()).is_some() {
                     return true;
                 }
             }
         } else {
             for option in &rule.options {
-                if catch_in_buff(option, &dq.0[..dq.1]).is_some() {
+                if catch_in_buff(option, dq.slice()).is_some() {
                     let bypass_target = SocketAddr::from_str(&rule.target).unwrap();
                     tokio::spawn(async move {
                         if let Err(e) = handle_bypass(dq, client_addr, bypass_target, udp).await {
@@ -38,7 +51,7 @@ pub async fn rulecheck(
 }
 
 async fn handle_bypass(
-    dq: ([u8; 512], usize),
+    dq: RuleDqt,
     client_addr: SocketAddr,
     bypass_target: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
@@ -46,7 +59,7 @@ async fn handle_bypass(
     // stage 1: send udp query to dns server
     let agent = tokio::net::UdpSocket::bind("0.0.0.0:0").await?;
     agent.connect(bypass_target).await?;
-    agent.send(&dq.0[..dq.1]).await?;
+    agent.send(dq.slice()).await?;
 
     // stage 2: recv udp query from dns server
     let mut buff = [0; 4096];
@@ -72,13 +85,13 @@ pub async fn rulecheck_sync(
     for rule in rules.as_deref().unwrap() {
         if rule.target == "block" {
             for option in &rule.options {
-                if catch_in_buff(option, &dq).is_some() {
+                if catch_in_buff(option, dq).is_some() {
                     return true;
                 }
             }
         } else {
             for option in &rule.options {
-                if catch_in_buff(option, &dq).is_some() {
+                if catch_in_buff(option, dq).is_some() {
                     let bypass_target = SocketAddr::from_str(&rule.target).unwrap();
                     if let Err(e) = handle_bypass_sync(dq, client_addr, bypass_target, udp).await {
                         println!("{e}");

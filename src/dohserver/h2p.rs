@@ -24,8 +24,7 @@ pub async fn serve_h2(
             if req.method() == http::Method::POST {
                 tokio::spawn(async move {
                     if let Some(Ok(body)) = req.body_mut().data().await {
-                        if let Err(e) =
-                        handle_dns_req_post(&mut resp, body, udp_socket_addrs).await
+                        if let Err(e) = handle_dns_req_post(&mut resp, body, udp_socket_addrs).await
                         {
                             resp.send_reset(Reason::INTERNAL_ERROR);
                             println!(
@@ -43,7 +42,9 @@ pub async fn serve_h2(
                 if let Some(bs4dns) = req.uri().query() {
                     if let Ok(dq) = DnsQuery::new(&bs4dns.as_bytes()[4..]) {
                         tokio::spawn(async move {
-                            if let Err(e) = handle_dns_req_get(&mut resp, dq, udp_socket_addrs).await {
+                            if let Err(e) =
+                                handle_dns_req_get(&mut resp, dq, udp_socket_addrs).await
+                            {
                                 resp.send_reset(Reason::INTERNAL_ERROR);
                                 println!(
                                     "DoH2 server<{}:stream(GET):{}>: {}",
@@ -57,7 +58,7 @@ pub async fn serve_h2(
                 } else {
                     resp.send_reset(Reason::PROTOCOL_ERROR);
                 }
-            }else {
+            } else {
                 resp.send_reset(Reason::PROTOCOL_ERROR);
             }
         } else {

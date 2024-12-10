@@ -17,7 +17,7 @@ use crate::{
     chttp::genrequrl,
     config::{self, Noise},
     rule::rulecheck,
-    utils::{Buffering, SNI},
+    utils::{Buffering, Sni},
 };
 
 pub async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise) -> quinn::Endpoint {
@@ -78,7 +78,7 @@ pub async fn udp_setup(
 }
 
 pub async fn http3(
-    sn: SNI,
+    sn: Sni,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
     quic_conf_file: config::Quic,
@@ -190,7 +190,13 @@ pub async fn http3(
             if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
                 // rule check
                 if arc_rule.is_some()
-                    && rulecheck(arc_rule.clone(), (dns_query, query_size), addr, udp.clone()).await
+                    && rulecheck(
+                        arc_rule.clone(),
+                        crate::rule::RuleDqt::Http(dns_query, query_size),
+                        addr,
+                        udp.clone(),
+                    )
+                    .await
                 {
                     continue;
                 }
@@ -215,7 +221,7 @@ pub async fn http3(
 }
 
 async fn send_request(
-    server_name: SNI,
+    server_name: Sni,
     mut h3: SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
     dns_query: ([u8; 512], usize),
     addr: SocketAddr,
@@ -226,14 +232,9 @@ async fn send_request(
     let query_bs4url = base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?;
     let mut url = [0; 1024];
     let mut b = Buffering(&mut url, 0);
-    let req = http::Request::get(genrequrl(
-        &mut b,
-        server_name.slice(),
-        query_bs4url,
-        cpath,
-    )?)
-    .header("Accept", "application/dns-message")
-    .body(())?;
+    let req = http::Request::get(genrequrl(&mut b, server_name.slice(), query_bs4url, cpath)?)
+        .header("Accept", "application/dns-message")
+        .body(())?;
 
     // Send HTTP request
     let mut reqs = h3.borrow_mut().send_request(req).await?;

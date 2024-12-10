@@ -67,14 +67,14 @@ async fn handle_req(
 
     if size > 5 {
         let mut temp = [0u8; 4096];
-        stream.write(
+        let _ = stream.write(
             Buffering(&mut temp, 0)
         .write(
             format!("HTTP/1.1 200 OK\r\nContent-Type: application/dns-message\r\nCache-Control: max-age=300\r\nContent-Length: {}\r\n\r\n", size).as_bytes()
         ).write(&buff[..size]).get()
         ).await?;
     } else {
-        stream.write(b"HTTP/1.1 404 Not Found\r\n\r\n").await?;
+        let _ = stream.write(b"HTTP/1.1 404 Not Found\r\n\r\n").await?;
     }
 
     Ok(())
@@ -97,8 +97,8 @@ impl Display for HTTP11Errors {
 }
 impl std::error::Error for HTTP11Errors {}
 enum Method {
-    GET(DnsQuery),
-    POST([u8; 512], usize),
+    Get(DnsQuery),
+    Post([u8; 512], usize),
 }
 struct HTTP11 {
     method: Method,
@@ -116,7 +116,7 @@ impl HTTP11 {
         if &buff[..3] == b"GET" {
             if let Some(query) = HTTP11::find_query(buff) {
                 Ok(Self {
-                    method: Method::GET(DnsQuery::new(query)?),
+                    method: Method::Get(DnsQuery::new(query)?),
                 })
             } else {
                 Err(Box::new(HTTP11Errors::NoDnsQuery))
@@ -135,11 +135,11 @@ impl HTTP11 {
                         dns[buff[body_pos.1..].len()..buff[body_pos.1..].len() + size]
                             .copy_from_slice(&b2[..size]);
                         Ok(Self {
-                            method: Method::POST(dns, buff[body_pos.1..].len() + size),
+                            method: Method::Post(dns, buff[body_pos.1..].len() + size),
                         })
                     } else {
                         Ok(Self {
-                            method: Method::POST(dns, buff[body_pos.1..].len()),
+                            method: Method::Post(dns, buff[body_pos.1..].len()),
                         })
                     }
                 }
@@ -153,8 +153,8 @@ impl HTTP11 {
 
     fn getbuff(&self) -> &[u8] {
         match &self.method {
-            Method::GET(dq) => dq.value(),
-            Method::POST(buff, size) => &buff[..*size],
+            Method::Get(dq) => dq.value(),
+            Method::Post(buff, size) => &buff[..*size],
         }
     }
 }

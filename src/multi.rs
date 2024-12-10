@@ -10,7 +10,7 @@ use crate::{
     config::{self, Connection},
     rule::rulecheck,
     tls::{self, tlsfragmenting},
-    utils::{tcp_connect_handle, Buffering, SNI},
+    utils::{tcp_connect_handle, Buffering, Sni},
 };
 
 type CrossContainer = (
@@ -20,7 +20,7 @@ type CrossContainer = (
 );
 
 pub async fn h1_multi(
-    sn: SNI,
+    sn: Sni,
     disable_domain_sni: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
@@ -143,7 +143,7 @@ pub async fn h1_multi(
             if arc_rule.is_some()
                 && rulecheck(
                     arc_rule.clone(),
-                    (dns_query, query_size),
+                    crate::rule::RuleDqt::Http(dns_query, query_size),
                     addr,
                     udp_arc.clone(),
                 )

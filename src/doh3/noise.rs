@@ -90,7 +90,7 @@ pub mod lsd {
         thread_rng, Rng,
     };
 
-    pub struct LSD<'a> {
+    pub struct Lsd<'a> {
         // [13u8, 10] after each part
         header: &'a str,
         host: String,
@@ -99,10 +99,10 @@ pub mod lsd {
         cookie: String, // [13u8, 10, 13u8, 10, 13u8, 10]
     }
 
-    impl LSD<'_> {
+    impl Lsd<'_> {
         pub fn new(target: SocketAddr) -> Self {
             let mut rng = thread_rng();
-            LSD {
+            Lsd {
                 header: "BT-SEARCH * HTTP/1.1",
                 host: format!("Host: {}", target),
                 port: format!("Port: {}", rng.gen::<u16>()),
@@ -181,7 +181,7 @@ pub async fn noiser(noise: Noise, target: SocketAddr, socket: &socket2::Socket) 
         }
         NoiseType::lsd => {
             if socket
-                .send_to(&lsd::LSD::new(target).into_buffer(), &target.into())
+                .send_to(&lsd::Lsd::new(target).into_buffer(), &target.into())
                 .unwrap_or(0)
                 == 0
             {
@@ -234,7 +234,7 @@ async fn continues_noise(noise: Noise, target: SocketAddr, socket: socket2::Sock
             }
             NoiseType::lsd => {
                 if socket
-                    .send_to(&lsd::LSD::new(target).into_buffer(), &target.into())
+                    .send_to(&lsd::Lsd::new(target).into_buffer(), &target.into())
                     .unwrap_or(0)
                     == 0
                 {

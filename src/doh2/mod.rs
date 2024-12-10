@@ -1,8 +1,7 @@
 use crate::chttp::genrequrl;
 use crate::rule::rulecheck;
 use crate::tls::tlsfragmenting;
-use crate::utils::Buffering;
-use crate::utils::SNI;
+use crate::utils::{Buffering, Sni};
 use core::str;
 use h2::client::SendRequest;
 use std::{net::SocketAddr, sync::Arc};
@@ -14,7 +13,7 @@ use crate::tls;
 use crate::utils::tcp_connect_handle;
 
 pub async fn http2(
-    sn: SNI,
+    sn: Sni,
     disable_domain_sni: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
@@ -107,7 +106,7 @@ pub async fn http2(
                 if arc_rule.is_some()
                     && rulecheck(
                         arc_rule.clone(),
-                        (dns_query, query_size),
+                        crate::rule::RuleDqt::Http(dns_query, query_size),
                         addr,
                         udp_arc.clone(),
                     )
@@ -139,7 +138,7 @@ pub async fn http2(
 }
 
 async fn send_req(
-    server_name: SNI,
+    server_name: Sni,
     dns_query: ([u8; 512], usize),
     mut h2_client: SendRequest<bytes::Bytes>,
     addr: SocketAddr,
@@ -151,14 +150,9 @@ async fn send_req(
     // HTTP Request
     let mut url = [0u8; 1024];
     let mut b = Buffering(&mut url, 0);
-    let req = http::Request::get(genrequrl(
-        &mut b,
-        server_name.slice(),
-        query_bs4url,
-        cpath,
-    )?)
-    .header("Accept", "application/dns-message")
-    .body(())?;
+    let req = http::Request::get(genrequrl(&mut b, server_name.slice(), query_bs4url, cpath)?)
+        .header("Accept", "application/dns-message")
+        .body(())?;
 
     // Sending request
     let resp = h2_client.send_request(req, true)?.0.await?;

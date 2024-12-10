@@ -47,13 +47,13 @@ pub async fn tcp_connect_handle(
 }
 
 #[derive(Clone, Copy)]
-pub struct SNI([u8; 255], usize);
-impl SNI {
+pub struct Sni([u8; 255], usize);
+impl Sni {
     pub fn new(server_name: String) -> Self {
         if server_name.len() > 255 {
             panic!("Error: The server name exceeds the maximum allowed length of 255 characters. Please provide a shorter server name.")
         }
-        let mut sni = SNI([0; 255], server_name.len());
+        let mut sni = Sni([0; 255], server_name.len());
         sni.0[..server_name.len()].copy_from_slice(server_name.as_bytes());
         sni
     }
@@ -67,7 +67,7 @@ impl SNI {
 }
 
 pub struct Buffering<'a>(pub &'a mut [u8], pub usize);
-impl<'a> Buffering<'a> {
+impl Buffering<'_> {
     pub fn write(&mut self, buff: &[u8]) -> &mut Self {
         self.0[self.1..self.1 + buff.len()].copy_from_slice(buff);
         self.1 += buff.len();

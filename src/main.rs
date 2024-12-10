@@ -24,7 +24,7 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     time::sleep,
 };
-use utils::{tcp_connect_handle, Buffering, SNI};
+use utils::{tcp_connect_handle, Buffering, Sni};
 
 #[tokio::main]
 async fn main() {
@@ -51,7 +51,7 @@ async fn main() {
             match v6.protocol {
                 config::Protocol::h1_multi => {
                     h1_multi(
-                        SNI::new(v6.server_name),
+                        Sni::new(v6.server_name),
                         v6.disable_domain_sni,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
@@ -64,7 +64,7 @@ async fn main() {
                 }
                 config::Protocol::h1 => {
                     http1(
-                        SNI::new(v6.server_name),
+                        Sni::new(v6.server_name),
                         v6.disable_domain_sni,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
@@ -77,7 +77,7 @@ async fn main() {
                 }
                 config::Protocol::h2 => {
                     doh2::http2(
-                        SNI::new(v6.server_name),
+                        Sni::new(v6.server_name),
                         v6.disable_domain_sni,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
@@ -91,7 +91,7 @@ async fn main() {
                 config::Protocol::h3 => {
                     let connecting_timeout_sec = quic_conf_file_v6.connecting_timeout_sec;
                     doh3::http3(
-                        SNI::new(v6.server_name),
+                        Sni::new(v6.server_name),
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
                         quic_conf_file_v6,
@@ -105,7 +105,7 @@ async fn main() {
                 }
                 config::Protocol::dot => {
                     dot::dot(
-                        SNI::new(v6.server_name),
+                        Sni::new(v6.server_name),
                         v6.disable_domain_sni,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
@@ -117,7 +117,7 @@ async fn main() {
                 }
                 config::Protocol::dot_nonblocking => {
                     dot::dot_nonblocking(
-                        SNI::new(v6.server_name),
+                        Sni::new(v6.server_name),
                         v6.disable_domain_sni,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
@@ -130,7 +130,7 @@ async fn main() {
                 config::Protocol::doq => {
                     let connecting_timeout_sec = quic_conf_file_v6.connecting_timeout_sec;
                     doq::doq(
-                        SNI::new(v6.server_name),
+                        Sni::new(v6.server_name),
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
                         quic_conf_file_v6,
@@ -148,7 +148,7 @@ async fn main() {
     match conf.protocol {
         config::Protocol::h1_multi => {
             h1_multi(
-                SNI::new(conf.server_name),
+                Sni::new(conf.server_name),
                 conf.disable_domain_sni,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
@@ -161,7 +161,7 @@ async fn main() {
         }
         config::Protocol::h1 => {
             http1(
-                SNI::new(conf.server_name),
+                Sni::new(conf.server_name),
                 conf.disable_domain_sni,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
@@ -174,7 +174,7 @@ async fn main() {
         }
         config::Protocol::h2 => {
             doh2::http2(
-                SNI::new(conf.server_name),
+                Sni::new(conf.server_name),
                 conf.disable_domain_sni,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
@@ -188,7 +188,7 @@ async fn main() {
         config::Protocol::h3 => {
             let connecting_timeout_sec = conf.quic.connecting_timeout_sec;
             doh3::http3(
-                SNI::new(conf.server_name),
+                Sni::new(conf.server_name),
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
                 conf.quic,
@@ -202,7 +202,7 @@ async fn main() {
         }
         config::Protocol::dot => {
             dot::dot(
-                SNI::new(conf.server_name),
+                Sni::new(conf.server_name),
                 conf.disable_domain_sni,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
@@ -214,7 +214,7 @@ async fn main() {
         }
         config::Protocol::dot_nonblocking => {
             dot::dot_nonblocking(
-                SNI::new(conf.server_name),
+                Sni::new(conf.server_name),
                 conf.disable_domain_sni,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
@@ -227,7 +227,7 @@ async fn main() {
         config::Protocol::doq => {
             let connecting_timeout_sec = conf.quic.connecting_timeout_sec;
             doq::doq(
-                SNI::new(conf.server_name),
+                Sni::new(conf.server_name),
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
                 conf.quic,
@@ -242,7 +242,7 @@ async fn main() {
 }
 
 async fn http1(
-    sn: SNI,
+    sn: Sni,
     disable_domain_sni: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
@@ -324,7 +324,8 @@ async fn http1(
             }
 
             let query_bs4url =
-                base64_url::encode_to_slice(&dns_query[..query_size], &mut base64_url_temp).unwrap();
+                base64_url::encode_to_slice(&dns_query[..query_size], &mut base64_url_temp)
+                    .unwrap();
             let mut b = Buffering(&mut url, 0);
             let http_req = genrequrlh1(&mut b, sn.slice(), query_bs4url, &cpath);
 

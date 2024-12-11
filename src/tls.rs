@@ -19,19 +19,21 @@ pub fn tlsfragmenting(
     if fragmenting.enable {
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
-                match fragmenting.method {
+                if let Err(e) = match fragmenting.method {
                     crate::config::FragMethod::linear => {
-                        crate::fragment::fragment_client_hello(tls, tcp).await
+                        crate::fragment::fragment_client_hello(tls, tcp, &fragmenting).await
                     }
                     crate::config::FragMethod::random => {
-                        crate::fragment::fragment_client_hello_rand(tls, tcp).await
+                        crate::fragment::fragment_client_hello_rand(tls, tcp, &fragmenting).await
                     }
                     crate::config::FragMethod::single => {
                         crate::fragment::fragment_client_hello_pack(tls, tcp).await
                     }
                     crate::config::FragMethod::jump => {
-                        crate::fragment::fragment_client_hello_jump(tls, tcp).await
+                        crate::fragment::fragment_client_hello_jump(tls, tcp, &fragmenting).await
                     }
+                } {
+                    println!("TLS Fragmenting: {e}");
                 }
             });
         });

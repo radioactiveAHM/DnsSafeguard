@@ -79,4 +79,8 @@ impl Buffering<'_> {
     pub fn str(&self) -> Result<&str, Utf8Error> {
         str::from_utf8(&self.0[..self.1])
     }
+    pub fn reset(&mut self) -> &mut Self {
+        self.1 = 0;
+        self
+    }
 }

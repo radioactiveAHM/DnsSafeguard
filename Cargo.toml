@@ -10,7 +10,7 @@ categories = ["network-programming"]
 
 [dependencies]
 webpki-roots = "0.26.7"
-serde = { version = "1.0.215", features = ["derive"] }
+serde = { version = "1.0.216", features = ["derive"] }
 serde_json = "1.0.133"
 rand = "0.8.5"
 quinn = "0.11.6"

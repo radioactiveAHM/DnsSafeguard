@@ -1,5 +1,5 @@
 {
-	"protocol": "h3",
+	"protocol": "h2",
 	"server_name": "cloudflare-dns.com",
 	"disable_domain_sni": false,
 	"socket_addrs": "1.1.1.1:443",
@@ -7,7 +7,9 @@
 	"custom_http_path": null,
 	"fragmenting": {
 		"enable": true,
-		"method": "single"
+		"method": "random",
+		"sleep_interval_min": 10,
+		"sleep_interval_max": 100
 	},
 	"noise": {
 		"enable": true,
@@ -28,7 +30,9 @@
 		"custom_http_path": null,
 		"fragmenting": {
 			"enable": false,
-			"method": "single"
+			"method": "single",
+			"sleep_interval_min": 10,
+			"sleep_interval_max": 100
 		},
 		"noise": {
 			"enable": false,

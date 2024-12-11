@@ -14,7 +14,7 @@ pub struct Fragmenting {
     pub enable: bool,
     pub method: FragMethod,
     pub sleep_interval_min: u64,
-    pub sleep_interval_max: u64
+    pub sleep_interval_max: u64,
 }
 
 #[derive(serde::Deserialize, Clone, Copy)]

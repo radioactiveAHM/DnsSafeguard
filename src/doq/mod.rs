@@ -150,7 +150,7 @@ async fn send_dq(
     mut dns_query: ([u8; 514], usize),
     addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), std::io::Error> {
     [dns_query.0[0], dns_query.0[1]] = convert_u16_to_two_u8s_be(dns_query.1 as u16);
 
     send.write(&dns_query.0[..dns_query.1 + 2]).await?;

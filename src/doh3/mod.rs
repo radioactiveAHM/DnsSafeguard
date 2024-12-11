@@ -208,7 +208,7 @@ pub async fn http3(
                     if let Err(e) =
                         send_request(sn, h3, (dns_query, query_size), addr, udp, cpath).await
                     {
-                        println!("{}", e);
+                        println!("{e}");
                         temp = true;
                     }
                     if temp {

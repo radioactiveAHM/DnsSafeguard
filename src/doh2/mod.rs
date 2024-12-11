@@ -123,8 +123,7 @@ pub async fn http2(
                     if let Err(e) =
                         send_req(sn, (dns_query, query_size), h2_client, addr, udp_arc, cpath).await
                     {
-                        let error = e.to_string();
-                        println!("{}", error);
+                        println!("{e}");
                         temp = true;
                         // for some weird reason if i try to lock dead_conn_arc here error occur
                     }

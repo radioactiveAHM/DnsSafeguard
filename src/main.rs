@@ -8,23 +8,16 @@ mod dohserver;
 mod doq;
 mod dot;
 mod fragment;
+mod h11;
 mod multi;
 mod rule;
 mod tls;
 mod utils;
 
-use core::str;
-use std::{net::SocketAddr, sync::Arc};
-
-use chttp::genrequrlh1;
+use h11::http1;
 use multi::h1_multi;
-use rule::{convert_rules, rulecheck_sync, Rules};
-use tls::tlsfragmenting;
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    time::sleep,
-};
-use utils::{tcp_connect_handle, Buffering, Sni};
+use rule::{convert_rules, Rules};
+use utils::Sni;
 
 #[tokio::main]
 async fn main() {
@@ -239,152 +232,4 @@ async fn main() {
             .await;
         }
     }
-}
-
-async fn http1(
-    sn: Sni,
-    disable_domain_sni: bool,
-    socket_addrs: SocketAddr,
-    udp_socket_addrs: SocketAddr,
-    fragmenting: &config::Fragmenting,
-    connection: config::Connection,
-    rule: Rules,
-    custom_http_path: Option<String>,
-) {
-    // TLS Client
-    let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()]);
-
-    let mut retry = 0u8;
-    loop {
-        // TCP socket for TLS
-        let tcp = tcp_connect_handle(socket_addrs, connection).await;
-        println!("New HTTP/1.1 connection");
-
-        let example_com = if disable_domain_sni {
-            (socket_addrs.ip()).into()
-        } else {
-            sn.string()
-                .to_string()
-                .try_into()
-                .expect("Invalid server name")
-        };
-        // Perform TLS Client Hello fragmenting
-        let tls_conn = tokio_rustls::TlsConnector::from(Arc::clone(&ctls))
-            .connect_with_stream(example_com, tcp, |tls, tcp| {
-                // Do fragmenting
-                if fragmenting.enable {
-                    tokio::task::block_in_place(|| {
-                        tokio::runtime::Handle::current().block_on(async {
-                            tlsfragmenting(fragmenting, tls, tcp);
-                        });
-                    });
-                }
-            })
-            .await;
-        if tls_conn.is_err() {
-            if retry == connection.max_reconnect {
-                println!(
-                    "Max retry reached. Sleeping for {}",
-                    connection.max_reconnect_sleep
-                );
-                sleep(std::time::Duration::from_secs(
-                    connection.max_reconnect_sleep,
-                ))
-                .await;
-                retry = 0;
-                continue;
-            }
-            println!("{}", tls_conn.unwrap_err());
-            retry += 1;
-            sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
-            continue;
-        }
-
-        println!("HTTP/1.1 Connection Established");
-        retry = 0;
-
-        let mut c = tls_conn.unwrap();
-        // UDP socket to listen for DNS query
-        let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
-        let cpath: Option<&str> = custom_http_path.as_deref();
-
-        let mut dns_query = [0u8; 512];
-        let mut base64_url_temp = [0u8; 512];
-        let mut url = [0; 1024];
-        let mut http_resp = [0; 4096];
-        loop {
-            let udp_ok = udp.recv_from(&mut dns_query).await;
-            if udp_ok.is_err() {
-                continue;
-            }
-            let (query_size, addr) = udp_ok.unwrap();
-            // rule check
-            if rule.is_some() && rulecheck_sync(&rule, &dns_query[..query_size], addr, &udp).await {
-                continue;
-            }
-
-            let query_bs4url =
-                base64_url::encode_to_slice(&dns_query[..query_size], &mut base64_url_temp)
-                    .unwrap();
-            let mut b = Buffering(&mut url, 0);
-            let http_req = genrequrlh1(&mut b, sn.slice(), query_bs4url, &cpath);
-
-            // Write http request
-            if c.write(http_req).await.is_err() {
-                println!("connection closed by peer");
-                break;
-            }
-
-            // Handle Reciving Data
-            let http_resp_size = c.read(&mut http_resp).await.unwrap_or(0);
-
-            // Break if failed to recv response
-            if http_resp_size == 0 {
-                break;
-            }
-
-            if let Some((x1, x2)) = catch_in_buff("\r\n\r\n".as_bytes(), &http_resp) {
-                let body = &http_resp[x2..http_resp_size];
-
-                let content_length = c_len(&http_resp[..x1]);
-                if content_length != 0 && content_length == body.len() {
-                    // Full body recved
-                    let _ = udp.send_to(body, addr).await;
-                } else if content_length != 0 && content_length > body.len() {
-                    // There is another chunk of body
-                    // We know it's not bigger than 512 bytes
-                    let mut merged_body = [0; 4096];
-                    merged_body[..body.len()].copy_from_slice(body);
-                    if let Ok(b2_len) = c.read(&mut merged_body[body.len()..]).await {
-                        let _ = udp.send_to(&merged_body[..body.len() + b2_len], addr).await;
-                    }
-                }
-            }
-        }
-    }
-}
-
-pub fn c_len(http_head: &[u8]) -> usize {
-    let content_length = b"content-length: ";
-    for line in http_head.split(|&b| b == b'\r' || b == b'\n') {
-        if let Some(pos) = line
-            .windows(content_length.len())
-            .position(|window| window.eq_ignore_ascii_case(content_length))
-        {
-            if let Ok(length) = std::str::from_utf8(&line[pos + content_length.len()..])
-                .unwrap_or("0")
-                .trim()
-                .parse::<usize>()
-            {
-                return length;
-            }
-        }
-    }
-    0
-}
-
-pub fn catch_in_buff(find: &[u8], buff: &[u8]) -> Option<(usize, usize)> {
-    buff.windows(find.len())
-        .position(|pre| pre == find)
-        .map(|a| (a, a + find.len()))
 }

@@ -84,3 +84,28 @@ impl Buffering<'_> {
         self
     }
 }
+
+pub fn c_len(http_head: &[u8]) -> usize {
+    let content_length = b"content-length: ";
+    for line in http_head.split(|&b| b == b'\r' || b == b'\n') {
+        if let Some(pos) = line
+            .windows(content_length.len())
+            .position(|window| window.eq_ignore_ascii_case(content_length))
+        {
+            if let Ok(length) = std::str::from_utf8(&line[pos + content_length.len()..])
+                .unwrap_or("0")
+                .trim()
+                .parse::<usize>()
+            {
+                return length;
+            }
+        }
+    }
+    0
+}
+
+pub fn catch_in_buff(find: &[u8], buff: &[u8]) -> Option<(usize, usize)> {
+    buff.windows(find.len())
+        .position(|pre| pre == find)
+        .map(|a| (a, a + find.len()))
+}

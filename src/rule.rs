@@ -2,7 +2,7 @@ use std::{net::SocketAddr, str::FromStr, sync::Arc, time::Duration};
 
 use tokio::time::timeout;
 
-use crate::catch_in_buff;
+use crate::utils::catch_in_buff;
 
 pub type Rules = Option<Vec<Rule>>;
 

@@ -145,16 +145,23 @@ async fn send_req(
     cpath: Option<Arc<str>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut temp = [0u8; 512];
-    let query_bs4url = base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?;
-    // HTTP Request
     let mut url = [0u8; 1024];
-    let mut b = Buffering(&mut url, 0);
-    let req = http::Request::get(genrequrl(&mut b, server_name.slice(), query_bs4url, cpath)?)
-        .header("Accept", "application/dns-message")
-        .body(())?;
 
     // Sending request
-    let resp = h2_client.send_request(req, true)?.0.await?;
+    let resp = h2_client
+        .send_request(
+            http::Request::get(genrequrl(
+                &mut Buffering(&mut url, 0),
+                server_name.slice(),
+                base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?,
+                cpath,
+            )?)
+            .header("Accept", "application/dns-message")
+            .body(())?,
+            true,
+        )?
+        .0
+        .await?;
 
     if resp.status() == http::status::StatusCode::OK {
         // Get body (dns query)

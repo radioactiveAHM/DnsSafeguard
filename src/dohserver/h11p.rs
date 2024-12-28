@@ -5,7 +5,7 @@ use tokio::{
     time::timeout,
 };
 
-use crate::{c_len, catch_in_buff, utils::Buffering};
+use crate::utils::{c_len, catch_in_buff, Buffering};
 
 use super::DnsQuery;
 

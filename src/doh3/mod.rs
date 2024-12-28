@@ -229,21 +229,24 @@ async fn send_request(
     cpath: Option<Arc<str>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut temp = [0u8; 512];
-    let query_bs4url = base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?;
     let mut url = [0; 1024];
-    let mut b = Buffering(&mut url, 0);
-    let req = http::Request::get(genrequrl(&mut b, server_name.slice(), query_bs4url, cpath)?)
-        .header("Accept", "application/dns-message")
-        .body(())?;
 
-    // Send HTTP request
-    let mut reqs = h3.borrow_mut().send_request(req).await?;
+    let mut reqs = h3
+        .borrow_mut()
+        .send_request(
+            http::Request::get(genrequrl(
+                &mut Buffering(&mut url, 0),
+                server_name.slice(),
+                base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?,
+                cpath,
+            )?)
+            .header("Accept", "application/dns-message")
+            .body(())?,
+        )
+        .await?;
     reqs.finish().await?;
 
-    // HTTP respones
-    let resp: http::Response<()> = reqs.recv_response().await?;
-
-    if resp.status() == http::status::StatusCode::OK {
+    if reqs.recv_response().await?.status() == http::status::StatusCode::OK {
         // get body
         if let Some(body) = reqs.recv_data().await? {
             let mut buff = [0; 4096];

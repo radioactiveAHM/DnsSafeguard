@@ -5,12 +5,11 @@ use tokio::{
 };
 
 use crate::{
-    c_len, catch_in_buff,
     chttp::genrequrlh1,
     config::{self, Connection},
     rule::rulecheck,
     tls::{self, tlsfragmenting},
-    utils::{tcp_connect_handle, Buffering, Sni},
+    utils::{c_len, catch_in_buff, tcp_connect_handle, Buffering, Sni},
 };
 
 type CrossContainer = (

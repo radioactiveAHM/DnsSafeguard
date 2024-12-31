@@ -1,15 +1,8 @@
 use std::{net::SocketAddr, sync::Arc};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    time::sleep,
-};
+use tokio::{io::{AsyncReadExt, AsyncWriteExt}, time::sleep};
 
 use crate::{
-    chttp::genrequrlh1,
-    config::{self, Connection},
-    rule::rulecheck,
-    tls::{self, tlsfragmenting},
-    utils::{c_len, catch_in_buff, tcp_connect_handle, Buffering, Sni},
+    chttp::genrequrlh1, config::{self, Connection}, rule::rulecheck, tls::{self, tls_conn_gen}, utils::{c_len, catch_in_buff, Buffering, Sni}
 };
 
 type CrossContainer = (
@@ -133,27 +126,24 @@ pub async fn h1_multi(
     }
 
     // Recv DNS queries and send to tasks using channel
+    let mut dns_query = [0u8; 512];
     loop {
-        let mut dns_query = [0u8; 512];
-        let udp_arc = udp.clone();
-
-        if let Ok((query_size, addr)) = udp_arc.recv_from(&mut dns_query).await {
+        if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
             // rule check
             if arc_rule.is_some()
                 && rulecheck(
                     arc_rule.clone(),
                     crate::rule::RuleDqt::Http(dns_query, query_size),
                     addr,
-                    udp_arc.clone(),
+                    udp.clone(),
                 )
                 .await
             {
                 continue;
             }
-
             tokio::task::block_in_place(|| {
                 if sender
-                    .send(((dns_query, query_size), addr, udp_arc))
+                    .send(((dns_query, query_size), addr, udp.clone()))
                     .is_err()
                 {
                     println!("Tasks are dead")
@@ -161,34 +151,4 @@ pub async fn h1_multi(
             });
         }
     }
-}
-
-pub async fn tls_conn_gen(
-    server_name: String,
-    disable_domain_sni: bool,
-    socket_addrs: SocketAddr,
-    fragmenting: config::Fragmenting,
-    ctls: Arc<tokio_rustls::rustls::ClientConfig>,
-    connection_cfg: Connection,
-) -> Result<tokio_rustls::client::TlsStream<tokio::net::TcpStream>, std::io::Error> {
-    let example_com = if disable_domain_sni {
-        (socket_addrs.ip()).into()
-    } else {
-        (server_name).try_into().expect("Invalid server name")
-    };
-
-    tokio_rustls::TlsConnector::from(ctls)
-        .connect_with_stream(
-            example_com,
-            tcp_connect_handle(socket_addrs, connection_cfg).await,
-            |tls, tcp| {
-                // Do fragmenting
-                if fragmenting.enable {
-                    tokio::task::block_in_place(|| {
-                        tlsfragmenting(&fragmenting, tls, tcp);
-                    });
-                }
-            },
-        )
-        .await
 }

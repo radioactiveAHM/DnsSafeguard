@@ -7,7 +7,7 @@ use tokio::time::{sleep, Instant};
 
 use crate::rule::rulecheck;
 use crate::utils::{convert_two_u8s_to_u16_be, Sni};
-use crate::{config, multi::tls_conn_gen, tls, utils::convert_u16_to_two_u8s_be};
+use crate::{config, tls, utils::convert_u16_to_two_u8s_be};
 
 pub async fn dot_nonblocking(
     sn: Sni,
@@ -25,7 +25,7 @@ pub async fn dot_nonblocking(
         if retry == 5 {
             panic!();
         }
-        let tls_conn = tls_conn_gen(
+        let tls_conn = tls::tls_conn_gen(
             sn.string().to_string(),
             disable_domain_sni,
             socket_addrs,

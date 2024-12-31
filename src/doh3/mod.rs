@@ -185,16 +185,14 @@ pub async fn http3(
             }
 
             // Recive dns query
-            let udp = arc_udp.clone();
-
-            if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
+            if let Ok((query_size, addr)) = arc_udp.recv_from(&mut dns_query).await {
                 // rule check
                 if arc_rule.is_some()
                     && rulecheck(
                         arc_rule.clone(),
                         crate::rule::RuleDqt::Http(dns_query, query_size),
                         addr,
-                        udp.clone(),
+                        arc_udp.clone(),
                     )
                     .await
                 {
@@ -203,6 +201,7 @@ pub async fn http3(
 
                 let h3 = h3.clone();
                 let cpath = cpath.clone();
+                let udp = arc_udp.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
                     if let Err(e) =

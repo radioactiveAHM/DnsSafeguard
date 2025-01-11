@@ -49,6 +49,10 @@ pub async fn rulecheck(
                                 }
                             }
                             None => {
+                                let resp = dq.slice_mut();
+                                resp[2] = 133;
+                                resp[3] = 128;
+                                let _ = udp.send_to(resp, client_addr).await;
                                 return true;
                             }
                         }
@@ -122,6 +126,9 @@ pub async fn rulecheck_sync(
                                 }
                             }
                             None => {
+                                dq[2] = 133;
+                                dq[3] = 128;
+                                let _ = udp.send_to(dq, client_addr).await;
                                 return true;
                             }
                         }

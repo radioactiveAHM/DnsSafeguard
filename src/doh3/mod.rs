@@ -187,14 +187,15 @@ pub async fn http3(
             // Recive dns query
             if let Ok((query_size, addr)) = arc_udp.recv_from(&mut dns_query).await {
                 // rule check
-                if arc_rule.is_some()
+                if (arc_rule.is_some()
                     && rulecheck(
                         arc_rule.clone(),
                         crate::rule::RuleDqt::Http(dns_query, query_size),
                         addr,
                         arc_udp.clone(),
                     )
-                    .await
+                    .await)
+                    || query_size < 12
                 {
                     continue;
                 }

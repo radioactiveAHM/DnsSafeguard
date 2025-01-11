@@ -59,8 +59,9 @@ pub async fn dot(
             // Recv dns query
             if let Ok((query_size, addr)) = udp.recv_from(&mut query[2..]).await {
                 // rule check
-                if rule.is_some()
-                    && rulecheck_sync(&rule, &query[2..query_size + 2], addr, &udp).await
+                if (rule.is_some()
+                    && rulecheck_sync(&rule, &query[2..query_size + 2], addr, &udp).await)
+                    || query_size < 12
                 {
                     continue;
                 }

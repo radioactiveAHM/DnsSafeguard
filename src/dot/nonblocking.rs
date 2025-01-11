@@ -115,14 +115,15 @@ pub async fn dot_nonblocking(
             // Recv dns query
             if let Ok((query_size, addr)) = udp.recv_from(&mut query[2..]).await {
                 // rule check
-                if arc_rule.is_some()
+                if (arc_rule.is_some()
                     && rulecheck(
                         arc_rule.clone(),
                         crate::rule::RuleDqt::Tls(query, query_size),
                         addr,
                         udp.clone(),
                     )
-                    .await
+                    .await)
+                    || query_size < 12
                 {
                     continue;
                 }

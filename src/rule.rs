@@ -1,8 +1,8 @@
-use std::{net::SocketAddr, str::FromStr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use tokio::time::timeout;
 
-use crate::utils::catch_in_buff;
+use crate::{config::TargetType, utils::catch_in_buff};
 
 pub type Rules = Option<Vec<Rule>>;
 
@@ -26,22 +26,34 @@ pub async fn rulecheck(
     udp: Arc<tokio::net::UdpSocket>,
 ) -> bool {
     for rule in rules.as_deref().unwrap() {
-        if rule.target == "block" {
-            for option in &rule.options {
-                if catch_in_buff(option, dq.slice()).is_some() {
-                    return true;
+        match &rule.target {
+            TargetType::block(t) => {
+                for option in &rule.options {
+                    if catch_in_buff(option, dq.slice()).is_some() {
+                        match t {
+                            Some(tv) => {
+                                let dq_size = dq.slice().len();
+                                let dq_type = &dq.slice()[dq_size - 4..dq_size - 2];
+                                return tv.iter().any(|target| target.octets() == dq_type);
+                            }
+                            None => {
+                                return true;
+                            }
+                        }
+                    }
                 }
             }
-        } else {
-            for option in &rule.options {
-                if catch_in_buff(option, dq.slice()).is_some() {
-                    let bypass_target = SocketAddr::from_str(&rule.target).unwrap();
-                    tokio::spawn(async move {
-                        if let Err(e) = handle_bypass(dq, client_addr, bypass_target, udp).await {
-                            println!("{e}");
-                        };
-                    });
-                    return true;
+            TargetType::dns(dns_server) => {
+                for option in &rule.options {
+                    if catch_in_buff(option, dq.slice()).is_some() {
+                        let dns_server = *dns_server;
+                        tokio::spawn(async move {
+                            if let Err(e) = handle_bypass(dq, client_addr, dns_server, udp).await {
+                                println!("{e}");
+                            };
+                        });
+                        return true;
+                    }
                 }
             }
         }
@@ -83,20 +95,31 @@ pub async fn rulecheck_sync(
     udp: &tokio::net::UdpSocket,
 ) -> bool {
     for rule in rules.as_deref().unwrap() {
-        if rule.target == "block" {
-            for option in &rule.options {
-                if catch_in_buff(option, dq).is_some() {
-                    return true;
+        match &rule.target {
+            TargetType::block(t) => {
+                for option in &rule.options {
+                    if catch_in_buff(option, dq).is_some() {
+                        match t {
+                            Some(tv) => {
+                                let dq_type = &dq[dq.len() - 4..dq.len() - 2];
+                                return tv.iter().any(|target| target.octets() == dq_type);
+                            }
+                            None => {
+                                return true;
+                            }
+                        }
+                    }
                 }
             }
-        } else {
-            for option in &rule.options {
-                if catch_in_buff(option, dq).is_some() {
-                    let bypass_target = SocketAddr::from_str(&rule.target).unwrap();
-                    if let Err(e) = handle_bypass_sync(dq, client_addr, bypass_target, udp).await {
-                        println!("{e}");
-                    };
-                    return true;
+            TargetType::dns(dns_server) => {
+                for option in &rule.options {
+                    if catch_in_buff(option, dq).is_some() {
+                        if let Err(e) = handle_bypass_sync(dq, client_addr, *dns_server, udp).await
+                        {
+                            println!("{e}");
+                        };
+                        return true;
+                    }
                 }
             }
         }
@@ -134,7 +157,7 @@ async fn handle_bypass_sync(
 #[derive(Clone)]
 pub struct Rule {
     pub options: Vec<Vec<u8>>,
-    pub target: String,
+    pub target: TargetType,
 }
 pub fn convert_rules(config_rules: Option<Vec<crate::config::Rule>>) -> Option<Vec<Rule>> {
     if let Some(cr) = config_rules {
@@ -176,5 +199,108 @@ pub fn convert_rules(config_rules: Option<Vec<crate::config::Rule>>) -> Option<V
         }
     } else {
         None
+    }
+}
+
+#[derive(Debug, serde::Deserialize, Clone)]
+pub enum Targets {
+    ALL,
+    A,
+    AAAA,
+    AFSDB,
+    APL,
+    CAA,
+    CDNSKEY,
+    CDS,
+    CERT,
+    CNAME,
+    CSYNC,
+    DHCID,
+    DNAME,
+    DNSKEY,
+    DS,
+    EUI48,
+    EUI64,
+    HINFO,
+    HIP,
+    HTTPS,
+    IPSECKEY,
+    KEY,
+    KX,
+    LOC,
+    MX,
+    NAPTR,
+    NS,
+    NSEC,
+    NSEC3,
+    NSEC3PARAM,
+    OPENPGPKEY,
+    PTR,
+    RP,
+    RRSIG,
+    SIG,
+    SMIMEA,
+    SOA,
+    SRV,
+    SSHFP,
+    SVCB,
+    TKEY,
+    TLSA,
+    TSIG,
+    TXT,
+    URI,
+    ZONEMD,
+}
+
+impl Targets {
+    fn octets(&self) -> [u8; 2] {
+        match self {
+            Self::ALL => [0, 255],
+            Self::A => [0, 1],
+            Self::AAAA => [0, 28],
+            Self::AFSDB => [0, 18],
+            Self::APL => [0, 42],
+            Self::CAA => [1, 1],
+            Self::CDNSKEY => [0, 60],
+            Self::CDS => [0, 59],
+            Self::CERT => [0, 37],
+            Self::CNAME => [0, 5],
+            Self::CSYNC => [0, 62],
+            Self::DHCID => [0, 49],
+            Self::DNAME => [0, 39],
+            Self::DNSKEY => [0, 48],
+            Self::DS => [0, 43],
+            Self::EUI48 => [0, 108],
+            Self::EUI64 => [0, 109],
+            Self::HINFO => [0, 13],
+            Self::HIP => [0, 55],
+            Self::HTTPS => [0, 65],
+            Self::IPSECKEY => [0, 45],
+            Self::KEY => [0, 25],
+            Self::KX => [0, 36],
+            Self::LOC => [0, 29],
+            Self::MX => [0, 15],
+            Self::NAPTR => [0, 35],
+            Self::NS => [0, 2],
+            Self::NSEC => [0, 47],
+            Self::NSEC3 => [0, 50],
+            Self::NSEC3PARAM => [0, 51],
+            Self::OPENPGPKEY => [0, 61],
+            Self::PTR => [0, 12],
+            Self::RP => [0, 17],
+            Self::RRSIG => [0, 46],
+            Self::SIG => [0, 24],
+            Self::SMIMEA => [0, 53],
+            Self::SOA => [0, 6],
+            Self::SRV => [0, 33],
+            Self::SSHFP => [0, 44],
+            Self::SVCB => [0, 64],
+            Self::TKEY => [0, 249],
+            Self::TLSA => [0, 52],
+            Self::TSIG => [0, 250],
+            Self::TXT => [0, 16],
+            Self::URI => [1, 0],
+            Self::ZONEMD => [0, 63],
+        }
     }
 }

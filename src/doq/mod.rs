@@ -105,14 +105,15 @@ pub async fn doq(
             // Recive dns query
             if let Ok((query_size, addr)) = arc_udp.recv_from(&mut dns_query[2..]).await {
                 // rule check
-                if arc_rule.is_some()
+                if (arc_rule.is_some()
                     && rulecheck(
                         arc_rule.clone(),
                         crate::rule::RuleDqt::Tls(dns_query, query_size),
                         addr,
                         arc_udp.clone(),
                     )
-                    .await
+                    .await)
+                    || query_size < 12
                 {
                     continue;
                 }

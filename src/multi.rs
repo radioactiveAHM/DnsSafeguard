@@ -1,8 +1,15 @@
 use std::{net::SocketAddr, sync::Arc};
-use tokio::{io::{AsyncReadExt, AsyncWriteExt}, time::sleep};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    time::sleep,
+};
 
 use crate::{
-    chttp::genrequrlh1, config::{self, Connection}, rule::rulecheck, tls::{self, tls_conn_gen}, utils::{c_len, catch_in_buff, Buffering, Sni}
+    chttp::genrequrlh1,
+    config::{self, Connection},
+    rule::rulecheck,
+    tls::{self, tls_conn_gen},
+    utils::{c_len, catch_in_buff, Buffering, Sni},
 };
 
 type CrossContainer = (
@@ -130,14 +137,15 @@ pub async fn h1_multi(
     loop {
         if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
             // rule check
-            if arc_rule.is_some()
+            if (arc_rule.is_some()
                 && rulecheck(
                     arc_rule.clone(),
                     crate::rule::RuleDqt::Http(dns_query, query_size),
                     addr,
                     udp.clone(),
                 )
-                .await
+                .await)
+                || query_size < 12
             {
                 continue;
             }

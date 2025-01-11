@@ -85,8 +85,9 @@ pub async fn http1(
         loop {
             if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
                 // rule check
-                if rule.is_some()
-                    && rulecheck_sync(&rule, &dns_query[..query_size], addr, &udp).await
+                if (rule.is_some()
+                    && rulecheck_sync(&rule, &dns_query[..query_size], addr, &udp).await)
+                    || query_size < 12
                 {
                     continue;
                 }

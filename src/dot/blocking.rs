@@ -60,7 +60,7 @@ pub async fn dot(
             if let Ok((query_size, addr)) = udp.recv_from(&mut query[2..]).await {
                 // rule check
                 if (rule.is_some()
-                    && rulecheck_sync(&rule, &query[2..query_size + 2], addr, &udp).await)
+                    && rulecheck_sync(&rule, &mut query[2..query_size + 2], addr, &udp).await)
                     || query_size < 12
                 {
                     continue;

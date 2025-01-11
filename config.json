@@ -73,9 +73,7 @@
 				"analytic",
 				"googletagmanager"
 			],
-			"target": {
-				"block": null
-			}
+			"target": null
 		}
 	]
 }

@@ -17,11 +17,17 @@ impl RuleDqt {
             Self::Tls(dq, size) => &dq[2..*size + 2],
         }
     }
+    fn slice_mut(&mut self) -> &mut [u8] {
+        match self {
+            Self::Http(dq, size) => &mut dq[..*size],
+            Self::Tls(dq, size) => &mut dq[2..*size + 2],
+        }
+    }
 }
 
 pub async fn rulecheck(
     rules: Arc<Option<Vec<Rule>>>,
-    dq: RuleDqt,
+    mut dq: RuleDqt,
     client_addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
 ) -> bool {
@@ -34,7 +40,13 @@ pub async fn rulecheck(
                             Some(tv) => {
                                 let dq_size = dq.slice().len();
                                 let dq_type = &dq.slice()[dq_size - 4..dq_size - 2];
-                                return tv.iter().any(|target| target.octets() == dq_type);
+                                if tv.iter().any(|target| target.octets() == dq_type) {
+                                    let resp = dq.slice_mut();
+                                    resp[2] = 133;
+                                    resp[3] = 128;
+                                    let _ = udp.send_to(resp, client_addr).await;
+                                    return true;
+                                }
                             }
                             None => {
                                 return true;
@@ -90,7 +102,7 @@ async fn handle_bypass(
 
 pub async fn rulecheck_sync(
     rules: &Option<Vec<Rule>>,
-    dq: &[u8],
+    dq: &mut [u8],
     client_addr: SocketAddr,
     udp: &tokio::net::UdpSocket,
 ) -> bool {
@@ -102,7 +114,12 @@ pub async fn rulecheck_sync(
                         match t {
                             Some(tv) => {
                                 let dq_type = &dq[dq.len() - 4..dq.len() - 2];
-                                return tv.iter().any(|target| target.octets() == dq_type);
+                                if tv.iter().any(|target| target.octets() == dq_type) {
+                                    dq[2] = 133;
+                                    dq[3] = 128;
+                                    let _ = udp.send_to(dq, client_addr).await;
+                                    return true;
+                                }
                             }
                             None => {
                                 return true;

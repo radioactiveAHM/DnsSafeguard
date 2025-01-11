@@ -88,14 +88,14 @@ pub struct Connection {
     pub max_reconnect_sleep: u64,
 }
 
-#[derive(Debug, serde::Deserialize, Clone)]
+#[derive(serde::Deserialize, Clone)]
 #[allow(non_camel_case_types)]
 pub enum TargetType {
     dns(SocketAddr),
     block(Option<Vec<crate::rule::Targets>>),
 }
 
-#[derive(Debug, serde::Deserialize, Clone)]
+#[derive(serde::Deserialize, Clone)]
 pub struct Rule {
     pub options: Vec<String>,
     pub target: TargetType,

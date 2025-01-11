@@ -202,7 +202,7 @@ pub fn convert_rules(config_rules: Option<Vec<crate::config::Rule>>) -> Option<V
     }
 }
 
-#[derive(Debug, serde::Deserialize, Clone)]
+#[derive(serde::Deserialize, Clone)]
 pub enum Targets {
     ALL,
     A,

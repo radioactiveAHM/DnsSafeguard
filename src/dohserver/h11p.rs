@@ -2,10 +2,9 @@ use std::{fmt::Display, net::SocketAddr};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::UdpSocket,
-    time::timeout,
 };
 
-use crate::utils::{c_len, catch_in_buff, Buffering};
+use crate::utils::{c_len, catch_in_buff, recv_timeout, Buffering};
 
 use super::DnsQuery;
 
@@ -13,22 +12,31 @@ pub async fn serve_http11(
     mut stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     udp_socket_addrs: SocketAddr,
     log: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> std::io::Result<()> {
     let peer = stream.get_ref().0.peer_addr()?;
     let agent = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
     agent.connect(udp_socket_addrs).await?;
 
     let mut deadloop = 0u8;
+    let mut buff = [0; 1024];
+    let mut respbuff = [0; 4096];
     loop {
         if deadloop == 20 {
             break;
         }
-
-        let mut buff = [0; 1024];
         if let Ok(size) = stream.read(&mut buff).await {
-            if size > 5 {
+            if size > 39 {
                 deadloop = 0;
-                if let Err(e) = handle_req(&mut stream, &buff[..size], &agent).await {
+                if let Err(e) = handle_req(
+                    &mut stream,
+                    &buff[..size],
+                    &agent,
+                    &mut respbuff,
+                    log,
+                    &peer,
+                )
+                .await
+                {
                     if log {
                         println!("DoH1.1 server<{}:stream>: {}", peer, e);
                     }
@@ -47,35 +55,44 @@ async fn handle_req(
     stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     buff: &[u8],
     agent: &UdpSocket,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let req = HTTP11::parse(buff, stream).await?;
+    respbuff: &mut [u8],
+    log: bool,
+    peer: &SocketAddr,
+) -> std::io::Result<()> {
+    let req = {
+        match HTTP11::parse(buff, stream).await {
+            Ok(h) => h,
+            Err(e) => {
+                if log {
+                    println!("DoH1.1 server<{}:stream>: {}", peer, e);
+                }
+                return Ok(());
+            }
+        }
+    };
     let dqbuff = req.getbuff();
 
     agent.send(dqbuff).await?;
 
-    let mut buff = [0; 4096];
     let size: usize;
-    if let Ok(v) = timeout(std::time::Duration::from_secs(5), async {
-        agent.recv(&mut buff).await
-    })
-    .await
-    {
-        size = v?;
+    if let Ok(v) = recv_timeout(agent, respbuff, 5).await {
+        size = v;
+    } else if let Ok(v) = recv_timeout(agent, respbuff, 10).await {
+        size = v;
     } else {
-        size = agent.recv(&mut buff).await?;
+        let _ = stream
+            .write(b"HTTP/1.1 408 Request Timeout\r\n\r\n")
+            .await?;
+        return Err(std::io::Error::from(std::io::ErrorKind::TimedOut));
     }
 
-    if size > 5 {
-        let mut temp = [0u8; 4096];
-        let _ = stream.write(
-            Buffering(&mut temp, 0)
-        .write(
-            format!("HTTP/1.1 200 OK\r\nContent-Type: application/dns-message\r\nCache-Control: max-age=300\r\nContent-Length: {}\r\n\r\n", size).as_bytes()
-        ).write(&buff[..size]).get()
-        ).await?;
-    } else {
-        let _ = stream.write(b"HTTP/1.1 404 Not Found\r\n\r\n").await?;
-    }
+    let mut temp = [0u8; 4096];
+    let _ = stream.write(
+        Buffering(&mut temp, 0)
+    .write(
+        format!("HTTP/1.1 200 OK\r\nContent-Type: application/dns-message\r\nCache-Control: max-age=300\r\nContent-Length: {}\r\n\r\n", size).as_bytes()
+    ).write(&respbuff[..size]).get()
+    ).await?;
 
     Ok(())
 }

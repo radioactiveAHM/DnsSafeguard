@@ -3,16 +3,23 @@ use h2::server::SendResponse;
 use h2::Reason;
 use http::Response;
 use std::net::SocketAddr;
-use tokio::time::timeout;
+
+use crate::utils::recv_timeout;
 
 use super::DnsQuery;
 
 pub async fn serve_h2(
     stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     udp_socket_addrs: SocketAddr,
-) -> Result<(), Box<dyn std::error::Error>> {
+    log: bool,
+) -> std::io::Result<()> {
     let peer = stream.get_ref().0.peer_addr()?;
-    let mut conn = h2::server::handshake(stream).await?;
+    let mut conn = {
+        match h2::server::handshake(stream).await {
+            Ok(c) => c,
+            Err(e) => return Err(std::io::Error::other(e)),
+        }
+    };
     let mut deadloop: u8 = 0;
     loop {
         if deadloop == 20 {
@@ -26,13 +33,14 @@ pub async fn serve_h2(
                     if let Some(Ok(body)) = req.body_mut().data().await {
                         if let Err(e) = handle_dns_req_post(&mut resp, body, udp_socket_addrs).await
                         {
-                            resp.send_reset(Reason::INTERNAL_ERROR);
-                            println!(
-                                "DoH2 server<{}:stream(POST):{}>: {}",
-                                peer,
-                                resp.stream_id().as_u32(),
-                                e
-                            );
+                            if log {
+                                println!(
+                                    "DoH2 server<{}:stream(POST):{}>: {}",
+                                    peer,
+                                    resp.stream_id().as_u32(),
+                                    e
+                                );
+                            }
                         }
                     } else {
                         resp.send_reset(Reason::PROTOCOL_ERROR);
@@ -45,13 +53,14 @@ pub async fn serve_h2(
                             if let Err(e) =
                                 handle_dns_req_get(&mut resp, dq, udp_socket_addrs).await
                             {
-                                resp.send_reset(Reason::INTERNAL_ERROR);
-                                println!(
-                                    "DoH2 server<{}:stream(GET):{}>: {}",
-                                    peer,
-                                    resp.stream_id().as_u32(),
-                                    e
-                                );
+                                if log {
+                                    println!(
+                                        "DoH2 server<{}:stream(GET):{}>: {}",
+                                        peer,
+                                        resp.stream_id().as_u32(),
+                                        e
+                                    );
+                                }
                             }
                         });
                     }
@@ -73,36 +82,27 @@ async fn handle_dns_req_post(
     resp: &mut SendResponse<Bytes>,
     body: Bytes,
     udp_socket_addrs: SocketAddr,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> std::io::Result<()> {
     let agent = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
     agent.connect(udp_socket_addrs).await?;
     agent.send(&body).await?;
 
     let mut buff = [0; 4096];
     let size: usize;
-    if let Ok(v) = timeout(std::time::Duration::from_secs(5), async {
-        agent.recv(&mut buff).await
-    })
-    .await
-    {
-        size = v?;
+    if let Ok(v) = recv_timeout(&agent, &mut buff, 5).await {
+        size = v;
+    } else if let Ok(v) = recv_timeout(&agent, &mut buff, 10).await {
+        size = v;
     } else {
-        size = agent.recv(&mut buff).await?;
+        resp.send_reset(Reason::SETTINGS_TIMEOUT);
+        return Err(std::io::Error::from(std::io::ErrorKind::TimedOut));
     }
 
-    if size > 5 {
-        let rto = timeout(std::time::Duration::from_secs(5), async {
-            handle_resp(resp, &buff, size).await
-        })
-        .await;
-
-        if let Ok(inside) = rto {
-            inside?;
-        } else {
-            resp.send_reset(Reason::SETTINGS_TIMEOUT);
-        }
-    } else {
-        resp.send_reset(Reason::INTERNAL_ERROR);
+    if let Err(e) = handle_resp(resp, &buff, size).await {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            e.to_string(),
+        ));
     }
 
     Ok(())
@@ -112,60 +112,51 @@ async fn handle_dns_req_get(
     resp: &mut SendResponse<Bytes>,
     dq: DnsQuery,
     udp_socket_addrs: SocketAddr,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> std::io::Result<()> {
     let agent = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
     agent.connect(udp_socket_addrs).await?;
     agent.send(dq.value()).await?;
 
     let mut buff = [0; 4096];
     let size: usize;
-    if let Ok(v) = timeout(std::time::Duration::from_secs(5), async {
-        agent.recv(&mut buff).await
-    })
-    .await
-    {
-        size = v?;
+    if let Ok(v) = recv_timeout(&agent, &mut buff, 5).await {
+        size = v;
+    } else if let Ok(v) = recv_timeout(&agent, &mut buff, 10).await {
+        size = v;
     } else {
-        size = agent.recv(&mut buff).await?;
+        resp.send_reset(Reason::SETTINGS_TIMEOUT);
+        return Err(std::io::Error::from(std::io::ErrorKind::TimedOut));
     }
 
-    if size > 5 {
-        let rto = timeout(std::time::Duration::from_secs(5), async {
-            handle_resp(resp, &buff, size).await
-        })
-        .await;
-
-        if let Ok(inside) = rto {
-            inside?;
-        } else {
-            resp.send_reset(Reason::SETTINGS_TIMEOUT);
-        }
-    } else {
-        resp.send_reset(Reason::INTERNAL_ERROR);
-    }
-
-    Ok(())
+    handle_resp(resp, &buff, size).await
 }
 
 async fn handle_resp(
     resp: &mut SendResponse<Bytes>,
     buff: &[u8],
     size: usize,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let dq_resp = Bytes::copy_from_slice(&buff[..size]);
-    let pending = resp.send_response(
-        Response::builder()
-            .status(200)
-            .header("Content-Type", "application/dns-message")
-            .header("Cache-Control", "max-age=300")
-            .header("Content-Length", size)
-            .body(())?,
-        false,
-    );
+) -> std::io::Result<()> {
+    if let Ok(heads) = Response::builder()
+        .status(200)
+        .header("Content-Type", "application/dns-message")
+        .header("Cache-Control", "max-age=300")
+        .header("Content-Length", size)
+        .body(())
+    {
+        let dq_resp = Bytes::copy_from_slice(&buff[..size]);
+        let pending = resp.send_response(heads, false);
 
-    if let Ok(mut p) = pending {
-        p.reserve_capacity(size);
-        let _ = p.send_data(dq_resp, true);
+        match pending {
+            Ok(mut p) => {
+                p.reserve_capacity(size);
+                if let Err(e) = p.send_data(dq_resp, true) {
+                    return Err(std::io::Error::other(e));
+                }
+            }
+            Err(e) => {
+                return Err(std::io::Error::other(e));
+            }
+        }
     }
 
     Ok(())

@@ -33,7 +33,7 @@ pub async fn fragment_client_hello<IO: AsyncWriteExt + std::marker::Unpin>(
     c: &mut ClientConnection,
     tcp: &mut IO,
     fragmenting: &crate::config::Fragmenting,
-) -> Result<(), std::io::Error> {
+) -> std::io::Result<()> {
     let mut mr_randy = rand::rngs::OsRng;
     // Buffer to store TLS Client Hello
     let mut buff = TlsHello {
@@ -96,7 +96,7 @@ pub async fn fragment_client_hello_rand<IO: AsyncWriteExt + std::marker::Unpin>(
     c: &mut ClientConnection,
     tcp: &mut IO,
     fragmenting: &crate::config::Fragmenting,
-) -> Result<(), std::io::Error> {
+) -> std::io::Result<()> {
     // Buffer to store TLS Client Hello
     let mut buff = TlsHello {
         buff: [0; 1024 * 4],
@@ -157,7 +157,7 @@ pub async fn fragment_client_hello_rand<IO: AsyncWriteExt + std::marker::Unpin>(
 pub async fn fragment_client_hello_pack<IO: AsyncWriteExt + std::marker::Unpin>(
     c: &mut ClientConnection,
     tcp: &mut IO,
-) -> Result<(), std::io::Error> {
+) -> std::io::Result<()> {
     // Buffer to store TLS Client Hello
     let mut b = TlsHello {
         buff: [0; 1024 * 4],
@@ -182,7 +182,7 @@ pub async fn fragment_client_hello_jump<IO: AsyncWriteExt + std::marker::Unpin>(
     c: &mut ClientConnection,
     tcp: &mut IO,
     fragmenting: &crate::config::Fragmenting,
-) -> Result<(), std::io::Error> {
+) -> std::io::Result<()> {
     let mut mr_randy = rand::rngs::OsRng;
     // Buffer to store TLS Client Hello
     let mut tlshello = TlsHello {

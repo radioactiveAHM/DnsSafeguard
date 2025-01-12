@@ -146,12 +146,15 @@ pub async fn handler(
     http_resp: &mut [u8],
     query_size: &usize,
     addr: &SocketAddr,
-) -> Result<(), std::io::Error> {
-    let query_bs4url = {
-        if let Ok(qbs4) = base64_url::encode_to_slice(&dns_query[..*query_size], base64_url_temp) {
-            qbs4
-        } else {
-            return Err(std::io::ErrorKind::InvalidData.into());
+) -> std::io::Result<()> {
+    let query_bs4url = match base64_url::encode_to_slice(&dns_query[..*query_size], base64_url_temp)
+    {
+        Ok(bs4) => bs4,
+        Err(e) => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                e.to_string(),
+            ));
         }
     };
     let mut b = Buffering(url, 0);

@@ -109,3 +109,19 @@ pub fn catch_in_buff(find: &[u8], buff: &[u8]) -> Option<(usize, usize)> {
         .position(|pre| pre == find)
         .map(|a| (a, a + find.len()))
 }
+
+pub async fn recv_timeout(
+    udp: &tokio::net::UdpSocket,
+    buff: &mut [u8],
+    timeout_sec: u64,
+) -> tokio::io::Result<usize> {
+    if let Ok(v) = tokio::time::timeout(std::time::Duration::from_secs(timeout_sec), async {
+        udp.recv(buff).await
+    })
+    .await
+    {
+        v
+    } else {
+        Err(std::io::Error::from(std::io::ErrorKind::TimedOut))
+    }
+}

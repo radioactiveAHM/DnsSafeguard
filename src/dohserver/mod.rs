@@ -1,7 +1,6 @@
 mod h11p;
 mod h2p;
 
-use core::str;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::net::SocketAddr;
@@ -95,20 +94,16 @@ pub async fn doh_server(dsc: DohServer, udp_socket_addrs: SocketAddr) {
     }
 }
 
-async fn tc_handler(
-    tc: Tc,
-    udp_socket_addrs: SocketAddr,
-    log: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn tc_handler(tc: Tc, udp_socket_addrs: SocketAddr, log: bool) -> std::io::Result<()> {
     let mut stream = tc.accept().await?;
 
     if let Some(alpn) = stream.get_ref().1.alpn_protocol() {
-        match str::from_utf8(alpn)? {
-            "h2" => h2p::serve_h2(stream, udp_socket_addrs).await?,
-            "http/1.1" => h11p::serve_http11(stream, udp_socket_addrs, log).await?,
+        match alpn {
+            b"h2" => h2p::serve_h2(stream, udp_socket_addrs, log).await?,
+            b"http/1.1" => h11p::serve_http11(stream, udp_socket_addrs, log).await?,
             _ => {
                 stream.get_mut().1.send_close_notify();
-                return Err(Box::new(rustls::Error::NoApplicationProtocol));
+                return Err(std::io::Error::other(rustls::Error::NoApplicationProtocol));
             }
         }
     } else {

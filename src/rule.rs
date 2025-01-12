@@ -2,7 +2,7 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use tokio::time::timeout;
 
-use crate::{config::TargetType, utils::catch_in_buff};
+use crate::{config::TargetType, utils::{catch_in_buff, recv_timeout}};
 
 pub type Rules = Option<Vec<Rule>>;
 
@@ -83,23 +83,14 @@ async fn handle_bypass(
     client_addr: SocketAddr,
     bypass_target: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // stage 1: send udp query to dns server
+) -> std::io::Result<()> {
     let agent = tokio::net::UdpSocket::bind("0.0.0.0:0").await?;
     agent.connect(bypass_target).await?;
     agent.send(dq.slice()).await?;
 
-    // stage 2: recv udp query from dns server
     let mut buff = [0; 4096];
-    let dq_resp_size = timeout(Duration::from_secs(5), async {
-        agent.recv(&mut buff).await.unwrap_or(0)
-    })
-    .await;
-    if let Ok(size) = dq_resp_size {
-        udp.send_to(&buff[..size], client_addr).await?;
-    } else {
-        return Err(Box::new(std::io::Error::from(std::io::ErrorKind::TimedOut)));
-    }
+    let size = recv_timeout(udp.as_ref(), &mut buff, 10).await?;
+    udp.send_to(&buff[..size], client_addr).await?;
 
     Ok(())
 }
@@ -157,7 +148,7 @@ async fn handle_bypass_sync(
     client_addr: SocketAddr,
     bypass_target: SocketAddr,
     udp: &tokio::net::UdpSocket,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> std::io::Result<()> {
     // stage 1: send udp query to dns server
     let agent = tokio::net::UdpSocket::bind("0.0.0.0:0").await?;
     agent.connect(bypass_target).await?;
@@ -172,7 +163,7 @@ async fn handle_bypass_sync(
     if let Ok(size) = dq_resp_size {
         udp.send_to(&buff[..size], client_addr).await?;
     } else {
-        return Err(Box::new(std::io::Error::from(std::io::ErrorKind::TimedOut)));
+        return Err(std::io::Error::from(std::io::ErrorKind::TimedOut));
     }
 
     Ok(())

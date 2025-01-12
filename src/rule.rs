@@ -1,6 +1,4 @@
-use std::{net::SocketAddr, sync::Arc, time::Duration};
-
-use tokio::time::timeout;
+use std::{net::SocketAddr, sync::Arc};
 
 use crate::{config::TargetType, utils::{catch_in_buff, recv_timeout}};
 
@@ -65,7 +63,7 @@ pub async fn rulecheck(
                         let dns_server = *dns_server;
                         tokio::spawn(async move {
                             if let Err(e) = handle_bypass(dq, client_addr, dns_server, udp).await {
-                                println!("{e}");
+                                println!("Bypass<{dns_server}>: {e}");
                             };
                         });
                         return true;
@@ -89,7 +87,7 @@ async fn handle_bypass(
     agent.send(dq.slice()).await?;
 
     let mut buff = [0; 4096];
-    let size = recv_timeout(udp.as_ref(), &mut buff, 10).await?;
+    let size = recv_timeout(&agent, &mut buff, 10).await?;
     udp.send_to(&buff[..size], client_addr).await?;
 
     Ok(())
@@ -156,15 +154,8 @@ async fn handle_bypass_sync(
 
     // stage 2: recv udp query from dns server
     let mut buff = [0; 4096];
-    let dq_resp_size = timeout(Duration::from_secs(5), async {
-        agent.recv(&mut buff).await.unwrap_or(0)
-    })
-    .await;
-    if let Ok(size) = dq_resp_size {
-        udp.send_to(&buff[..size], client_addr).await?;
-    } else {
-        return Err(std::io::Error::from(std::io::ErrorKind::TimedOut));
-    }
+    let size = recv_timeout(&agent, &mut buff, 10).await?;
+    udp.send_to(&buff[..size], client_addr).await?;
 
     Ok(())
 }

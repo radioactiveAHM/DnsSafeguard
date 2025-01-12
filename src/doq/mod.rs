@@ -26,8 +26,10 @@ pub async fn doq(
     let arc_rule = Arc::new(rule);
     let mut endpoint = udp_setup(socket_addrs, noise.clone(), quic_conf_file.clone(), "doq").await;
 
-    let mut retry = 0u8;
+    let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
+    let dead_conn = Arc::new(Mutex::new(false));
 
+    let mut retry = 0u8;
     loop {
         if retry == connection.max_reconnect {
             println!(
@@ -88,9 +90,6 @@ pub async fn doq(
 
         // QUIC Connection Established
         retry = 0;
-
-        let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
-        let dead_conn = Arc::new(Mutex::new(false));
 
         let mut dns_query = [0u8; 514];
         loop {

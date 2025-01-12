@@ -16,6 +16,8 @@ pub async fn dot(
     rule: crate::Rules,
 ) {
     let ctls = tls::tlsconf(vec![b"dot".to_vec()]);
+    let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
+    let mut tank: Option<(Box<[u8; 514]>, usize, SocketAddr)> = None;
     let mut retry = 0u8;
     loop {
         let tls_conn = tls::tls_conn_gen(
@@ -50,12 +52,27 @@ pub async fn dot(
 
         // Tls Client
         let mut conn = tls_conn.unwrap();
-        // UDP Server to recv dns query
-        let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
 
         let mut query = [0; 514];
         let mut resp_dot_query = [0; 4096];
         loop {
+            if let Some((query, query_size, addr)) = &tank {
+                if handler(
+                    &mut conn,
+                    &udp,
+                    query.as_ref(),
+                    &mut resp_dot_query,
+                    query_size,
+                    addr,
+                )
+                .await
+                .is_ok()
+                {
+                    tank = None;
+                }
+
+                continue;
+            }
             // Recv dns query
             if let Ok((query_size, addr)) = udp.recv_from(&mut query[2..]).await {
                 // rule check
@@ -80,6 +97,7 @@ pub async fn dot(
                 .await
                 {
                     println!("DoT: {e}");
+                    tank = Some((Box::new(query), query_size, addr));
                     break;
                 }
             }

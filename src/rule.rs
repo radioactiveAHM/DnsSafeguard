@@ -227,6 +227,7 @@ pub fn convert_rules(config_rules: Option<Vec<crate::config::Rule>>) -> Option<V
 }
 
 #[derive(serde::Deserialize, Clone)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum Targets {
     ALL,
     A,

@@ -25,6 +25,14 @@ pub async fn http2(
     let arc_rule = Arc::new(rule);
     // TLS Conf
     let h2tls = tls::tlsconf(vec![b"h2".to_vec()]);
+
+    let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
+    let cpath: Option<Arc<str>> = if custom_http_path.is_some() {
+        Some(custom_http_path.clone().unwrap().into())
+    } else {
+        None
+    };
+
     let mut retry = 0u8;
     loop {
         // TCP Connection
@@ -80,15 +88,6 @@ pub async fn http2(
                 println!("GOT ERR={:?}", e);
             }
         });
-
-        // UDP socket to listen for DNS query
-        // prepare atomic
-        let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
-        let cpath: Option<Arc<str>> = if custom_http_path.is_some() {
-            Some(custom_http_path.clone().unwrap().into())
-        } else {
-            None
-        };
 
         let mut dns_query = [0u8; 512];
         loop {

@@ -1,5 +1,3 @@
-use std::net::SocketAddr;
-
 #[derive(serde::Deserialize, Clone, Copy)]
 #[allow(non_camel_case_types)]
 pub enum FragMethod {
@@ -55,8 +53,8 @@ pub struct Ipv6 {
     pub protocol: Protocol,
     pub server_name: String,
     pub disable_domain_sni: bool,
-    pub socket_addrs: SocketAddr,
-    pub udp_socket_addrs: SocketAddr,
+    pub socket_addrs: std::net::SocketAddr,
+    pub udp_socket_addrs: std::net::SocketAddr,
     pub custom_http_path: Option<String>,
     pub fragmenting: Fragmenting,
     pub noise: Noise,
@@ -91,7 +89,7 @@ pub struct Connection {
 #[derive(serde::Deserialize, Clone)]
 #[allow(non_camel_case_types)]
 pub enum TargetType {
-    dns(SocketAddr),
+    dns(std::net::SocketAddr),
     block(Option<Vec<crate::rule::Targets>>),
 }
 
@@ -105,7 +103,7 @@ pub struct Rule {
 pub struct DohServer {
     pub enable: bool,
     pub alpn: Vec<String>,
-    pub listen_address: SocketAddr,
+    pub listen_address: std::net::SocketAddr,
     pub certificate: String,
     pub key: String,
     pub log_errors: bool,
@@ -116,8 +114,8 @@ pub struct Config {
     pub protocol: Protocol,
     pub server_name: String,
     pub disable_domain_sni: bool,
-    pub socket_addrs: SocketAddr,
-    pub udp_socket_addrs: SocketAddr,
+    pub socket_addrs: std::net::SocketAddr,
+    pub udp_socket_addrs: std::net::SocketAddr,
     pub custom_http_path: Option<String>,
     pub fragmenting: Fragmenting,
     pub noise: Noise,

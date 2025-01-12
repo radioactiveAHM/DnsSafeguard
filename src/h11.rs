@@ -23,7 +23,10 @@ pub async fn http1(
 ) {
     // TLS Client
     let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()]);
+    let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
 
+    let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
+    let cpath: Option<&str> = custom_http_path.as_deref();
     let mut retry = 0u8;
     loop {
         // TCP socket for TLS
@@ -74,15 +77,32 @@ pub async fn http1(
         retry = 0;
 
         let mut c = tls_conn.unwrap();
-        // UDP socket to listen for DNS query
-        let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
-        let cpath: Option<&str> = custom_http_path.as_deref();
 
         let mut dns_query = [0u8; 512];
         let mut base64_url_temp = [0u8; 512];
         let mut url = [0; 1024];
         let mut http_resp = [0; 4096];
         loop {
+            if let Some((dns_query, query_size, addr)) = &tank {
+                if handler(
+                    &mut c,
+                    &udp,
+                    &cpath,
+                    &sn,
+                    dns_query.as_ref(),
+                    &mut base64_url_temp,
+                    &mut url,
+                    &mut http_resp,
+                    query_size,
+                    addr,
+                )
+                .await
+                .is_ok()
+                {
+                    tank = None;
+                }
+                continue;
+            }
             if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
                 // rule check
                 if (rule.is_some()
@@ -107,6 +127,7 @@ pub async fn http1(
                 .await
                 {
                     println!("HTTP/1.1: {e}");
+                    tank = Some((Box::new(dns_query), query_size, addr));
                     break;
                 }
             }

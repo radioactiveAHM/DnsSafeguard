@@ -91,6 +91,13 @@ pub async fn http3(
     let arc_rule = Arc::new(rule);
     let mut endpoint = udp_setup(socket_addrs, noise.clone(), quic_conf_file.clone(), "h3").await;
 
+    let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
+    let cpath: Option<Arc<str>> = if custom_http_path.is_some() {
+        Some(custom_http_path.clone().unwrap().into())
+    } else {
+        None
+    };
+
     let mut retry = 0u8;
     loop {
         if retry == connection.max_reconnect {
@@ -165,15 +172,6 @@ pub async fn http3(
         };
 
         tokio::spawn(drive);
-
-        // UDP socket to listen for DNS query
-        // prepare for atomic
-        let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
-        let cpath: Option<Arc<str>> = if custom_http_path.is_some() {
-            Some(custom_http_path.clone().unwrap().into())
-        } else {
-            None
-        };
 
         let mut dns_query = [0u8; 512];
         loop {

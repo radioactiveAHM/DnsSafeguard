@@ -98,6 +98,8 @@ pub async fn http3(
         None
     };
 
+    let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
+
     let mut retry = 0u8;
     loop {
         if retry == connection.max_reconnect {
@@ -178,8 +180,26 @@ pub async fn http3(
             // Check if Connection is dead
             // quic_conn_dead will be passed to task if connection alive
             let quic_conn_dead = dead_conn.clone();
-            if *quic_conn_dead.lock().await {
-                break;
+
+            if let Some((dns_query, query_size, addr)) = tank {
+                let h3 = h3.clone();
+                let cpath = cpath.clone();
+                let udp = arc_udp.clone();
+                tokio::spawn(async move {
+                    let mut temp = false;
+                    if let Err(e) =
+                        send_request(sn, h3, (*dns_query, query_size), addr, udp, cpath).await
+                    {
+                        println!("{e}");
+                        temp = true;
+                    }
+                    if temp {
+                        *(quic_conn_dead.lock().await) = true;
+                    }
+                });
+
+                tank = None;
+                continue;
             }
 
             // Recive dns query
@@ -196,6 +216,11 @@ pub async fn http3(
                     || query_size < 12
                 {
                     continue;
+                }
+
+                if *quic_conn_dead.lock().await {
+                    tank = Some((Box::new(dns_query), query_size, addr));
+                    break;
                 }
 
                 let h3 = h3.clone();

@@ -33,6 +33,8 @@ pub async fn http2(
         None
     };
 
+    let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
+
     let mut retry = 0u8;
     loop {
         // TCP Connection
@@ -93,10 +95,28 @@ pub async fn http2(
         loop {
             // Check if Connection is dead
             let h2_conn_dead = dead_conn.clone();
-            if *h2_conn_dead.lock().await {
-                break;
-            }
 
+            if let Some((dns_query, query_size, addr)) = tank {
+                let h2_client = client.clone();
+                let cpath = cpath.clone();
+                let udp_arc = arc_udp.clone();
+                tokio::spawn(async move {
+                    let mut temp = false;
+                    if let Err(e) =
+                        send_req(sn, (*dns_query, query_size), h2_client, addr, udp_arc, cpath).await
+                    {
+                        println!("{e}");
+                        temp = true;
+                        // for some weird reason if i try to lock dead_conn_arc here error occur
+                    }
+                    if temp {
+                        *(h2_conn_dead.lock().await) = true;
+                    }
+                });
+                
+                tank = None;
+                continue;
+            }
             // Recive dns query
             if let Ok((query_size, addr)) = arc_udp.recv_from(&mut dns_query).await {
                 // rule check
@@ -111,6 +131,11 @@ pub async fn http2(
                     || query_size < 12
                 {
                     continue;
+                }
+
+                if *h2_conn_dead.lock().await {
+                    tank = Some((Box::new(dns_query), query_size, addr));
+                    break;
                 }
 
                 // Base64url dns query

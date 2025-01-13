@@ -29,6 +29,8 @@ pub async fn doq(
     let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
     let dead_conn = Arc::new(Mutex::new(false));
 
+    let mut tank: Option<(Box<[u8; 514]>, usize, SocketAddr)> = None;
+
     let mut retry = 0u8;
     loop {
         if retry == connection.max_reconnect {
@@ -96,9 +98,34 @@ pub async fn doq(
             // Check if Connection is dead
             // quic_conn_dead will be passed to task if connection alive
             let dead = dead_conn.clone();
-            if *dead.lock().await || quic.close_reason().is_some() {
-                println!("{}", quic.close_reason().unwrap());
-                break;
+
+            if tank.is_some() {
+                match quic.open_bi().await {
+                    Ok(bistream) => {
+                        let udp = arc_udp.clone();
+                        let (dns_query, query_size, addr) = tank.unwrap();
+                        tokio::spawn(async move {
+                            let mut temp = false;
+                            if let Err(e) =
+                                send_dq(bistream, (*dns_query, query_size), addr, udp).await
+                            {
+                                let e_str = e.to_string();
+                                println!("{}", e_str);
+                                temp = true;
+                            }
+                            if temp {
+                                *(dead.lock().await) = true;
+                            }
+                        });
+                    }
+                    Err(conn_e) => {
+                        println!("{conn_e}");
+                        break;
+                    }
+                }
+
+                tank = None;
+                continue;
             }
 
             // Recive dns query
@@ -115,6 +142,12 @@ pub async fn doq(
                     || query_size < 12
                 {
                     continue;
+                }
+
+                if *dead.lock().await || quic.close_reason().is_some() {
+                    println!("{}", quic.close_reason().unwrap());
+                    tank = Some((Box::new(dns_query), query_size, addr));
+                    break;
                 }
 
                 match quic.open_bi().await {

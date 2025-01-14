@@ -81,7 +81,7 @@ async fn handle_req(
         size = v;
     } else {
         let _ = stream
-            .write(b"HTTP/1.1 408 Request Timeout\r\n\r\n")
+            .write(b"HTTP/1.1 503 Service Unavailable\r\n\r\n")
             .await?;
         return Err(std::io::Error::from(std::io::ErrorKind::TimedOut));
     }

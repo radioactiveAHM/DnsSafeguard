@@ -94,8 +94,10 @@ async fn handle_dns_req_post(
     } else if let Ok(v) = recv_timeout(&agent, &mut buff, 10).await {
         size = v;
     } else {
-        resp.send_reset(Reason::SETTINGS_TIMEOUT);
-        return Err(std::io::Error::from(std::io::ErrorKind::TimedOut));
+        match resp.send_response(Response::builder().status(503).version(http::Version::HTTP_2).body(()).unwrap(), true) {
+            Ok(_) => return Ok(()),
+            Err(e) => return Err(std::io::Error::other(e))
+        };
     }
 
     if let Err(e) = handle_resp(resp, &buff, size).await {
@@ -124,8 +126,10 @@ async fn handle_dns_req_get(
     } else if let Ok(v) = recv_timeout(&agent, &mut buff, 10).await {
         size = v;
     } else {
-        resp.send_reset(Reason::SETTINGS_TIMEOUT);
-        return Err(std::io::Error::from(std::io::ErrorKind::TimedOut));
+        match resp.send_response(Response::builder().status(503).version(http::Version::HTTP_2).body(()).unwrap(), true) {
+            Ok(_) => return Ok(()),
+            Err(e) => return Err(std::io::Error::other(e))
+        };
     }
 
     handle_resp(resp, &buff, size).await
@@ -138,6 +142,7 @@ async fn handle_resp(
 ) -> std::io::Result<()> {
     if let Ok(heads) = Response::builder()
         .status(200)
+        .version(http::Version::HTTP_2)
         .header("Content-Type", "application/dns-message")
         .header("Cache-Control", "max-age=300")
         .header("Content-Length", size)

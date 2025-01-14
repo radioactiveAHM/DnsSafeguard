@@ -150,31 +150,33 @@ async fn handle_dns_req_get(
 }
 
 async fn handle_resp(
-    resp: &mut SendResponse<Bytes>,
+    rframe: &mut SendResponse<Bytes>,
     buff: &[u8],
     size: usize,
 ) -> std::io::Result<()> {
-    if let Ok(heads) = Response::builder()
+    let t = chrono::Utc::now()
+        .format("%a, %d %b %Y %H:%M:%S GMT")
+        .to_string();
+    let heads = Response::builder()
         .version(http::Version::HTTP_2)
         .status(http::status::StatusCode::OK)
         .header("Content-Type", "application/dns-message")
-        .header("Cache-Control", "max-age=300")
-        .header("Content-Length", size)
+        .header("Date", &t)
+        .header("Expires", &t)
+        .header("Cache-Control", "no-cache")
+        .header("Access-Control-Allow-Origin", "*")
+        .header("Server", "HTTP server")
+        .header("X-Content-Type-Options", "nosniff")
+        .header("X-Frame-Options", "SAMEORIGIN")
+        .header("X-Xss-Protection", "0")
+        .header("content-length", size)
         .body(())
-    {
-        let dq_resp = Bytes::copy_from_slice(&buff[..size]);
-        let pending = resp.send_response(heads, false);
+        .unwrap();
 
-        match pending {
-            Ok(mut p) => {
-                p.reserve_capacity(size);
-                if let Err(e) = p.send_data(dq_resp, true) {
-                    return Err(std::io::Error::other(e));
-                }
-            }
-            Err(e) => {
-                return Err(std::io::Error::other(e));
-            }
+    if let Ok(mut bframe) = rframe.send_response(heads, false) {
+        bframe.reserve_capacity(size);
+        if let Err(e) = bframe.send_data(Bytes::copy_from_slice(&buff[..size]), true) {
+            return Err(std::io::Error::other(e));
         }
     }
 

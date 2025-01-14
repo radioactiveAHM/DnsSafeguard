@@ -28,6 +28,7 @@ h2 = "0.4.7"
 tokio-rustls = { git = "https://github.com/radioactiveAHM/tokio-rustls.git", default-features = false, features = ["ring"] }
 crossbeam-channel = "0.5.14"
 socket2 = "0.5.8"
+chrono = "0.4.39"
 
 [profile.release]
 panic = "abort"

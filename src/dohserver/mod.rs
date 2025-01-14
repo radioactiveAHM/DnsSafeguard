@@ -33,13 +33,14 @@ impl Tc {
     }
 }
 
-pub struct DnsQuery([u8; 512], usize);
+pub struct DnsQuery([u8; 768], usize);
 impl DnsQuery {
     pub fn new(bs4dns: &[u8]) -> Result<Self, base64_url::base64::DecodeSliceError> {
-        let mut buff = [0; 512];
+        // (512*4)/3=683
+        let mut buff = [0; 768];
         match base64_url::decode_to_slice(bs4dns, &mut buff) {
             Ok(b) => {
-                let mut dq = Self([0; 512], b.len());
+                let mut dq = Self([0; 768], b.len());
                 dq.0[..b.len()].clone_from_slice(b);
                 Ok(dq)
             }
@@ -62,7 +63,6 @@ pub async fn doh_server(dsc: DohServer, udp_socket_addrs: SocketAddr) {
         .with_no_client_auth()
         .with_single_cert(certs, key)
         .unwrap();
-    config.send_tls13_tickets = 0;
     config.alpn_protocols = dsc
         .alpn
         .iter()

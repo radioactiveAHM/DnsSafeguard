@@ -12,12 +12,12 @@ pub async fn serve_h2(
     stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     udp_socket_addrs: SocketAddr,
     log: bool,
-) -> std::io::Result<()> {
+) -> tokio::io::Result<()> {
     let peer = stream.get_ref().0.peer_addr()?;
     let mut conn = {
         match h2::server::handshake(stream).await {
             Ok(c) => c,
-            Err(e) => return Err(std::io::Error::other(e)),
+            Err(e) => return Err(tokio::io::Error::other(e)),
         }
     };
     let mut deadloop: u8 = 0;
@@ -82,7 +82,7 @@ async fn handle_dns_req_post(
     resp: &mut SendResponse<Bytes>,
     body: Bytes,
     udp_socket_addrs: SocketAddr,
-) -> std::io::Result<()> {
+) -> tokio::io::Result<()> {
     let agent = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
     agent.connect(udp_socket_addrs).await?;
     agent.send(&body).await?;
@@ -103,13 +103,13 @@ async fn handle_dns_req_post(
             true,
         ) {
             Ok(_) => return Ok(()),
-            Err(e) => return Err(std::io::Error::other(e)),
+            Err(e) => return Err(tokio::io::Error::other(e)),
         };
     }
 
     if let Err(e) = handle_resp(resp, &buff, size).await {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        return Err(tokio::io::Error::new(
+            tokio::io::ErrorKind::Other,
             e.to_string(),
         ));
     }
@@ -121,7 +121,7 @@ async fn handle_dns_req_get(
     resp: &mut SendResponse<Bytes>,
     dq: DnsQuery,
     udp_socket_addrs: SocketAddr,
-) -> std::io::Result<()> {
+) -> tokio::io::Result<()> {
     let agent = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
     agent.connect(udp_socket_addrs).await?;
     agent.send(dq.value()).await?;
@@ -142,7 +142,7 @@ async fn handle_dns_req_get(
             true,
         ) {
             Ok(_) => return Ok(()),
-            Err(e) => return Err(std::io::Error::other(e)),
+            Err(e) => return Err(tokio::io::Error::other(e)),
         };
     }
 
@@ -153,7 +153,7 @@ async fn handle_resp(
     rframe: &mut SendResponse<Bytes>,
     buff: &[u8],
     size: usize,
-) -> std::io::Result<()> {
+) -> tokio::io::Result<()> {
     let t = chrono::Utc::now()
         .format("%a, %d %b %Y %H:%M:%S GMT")
         .to_string();
@@ -176,7 +176,7 @@ async fn handle_resp(
     if let Ok(mut bframe) = rframe.send_response(heads, false) {
         bframe.reserve_capacity(size);
         if let Err(e) = bframe.send_data(Bytes::copy_from_slice(&buff[..size]), true) {
-            return Err(std::io::Error::other(e));
+            return Err(tokio::io::Error::other(e));
         }
     }
 

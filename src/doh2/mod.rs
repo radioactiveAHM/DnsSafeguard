@@ -187,6 +187,7 @@ async fn send_req(
                 base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?,
                 cpath,
             )?)
+            .version(http::Version::HTTP_2)
             .header("Accept", "application/dns-message")
             .body(())?,
             true,

@@ -51,7 +51,7 @@ pub async fn tls_conn_gen(
     fragmenting: config::Fragmenting,
     ctls: Arc<tokio_rustls::rustls::ClientConfig>,
     connection_cfg: config::Connection,
-) -> Result<tokio_rustls::client::TlsStream<tokio::net::TcpStream>, std::io::Error> {
+) -> tokio::io::Result<tokio_rustls::client::TlsStream<tokio::net::TcpStream>> {
     let example_com = if disable_domain_sni {
         (socket_addrs.ip()).into()
     } else {

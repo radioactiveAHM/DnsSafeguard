@@ -112,7 +112,7 @@ async fn handler(
     resp_dot_query: &mut [u8],
     query_size: &usize,
     addr: &SocketAddr,
-) -> std::io::Result<()> {
+) -> tokio::io::Result<()> {
     // Send DOT query
     let _ = conn.write(&query[..query_size + 2]).await?;
 

@@ -146,13 +146,13 @@ pub async fn handler(
     http_resp: &mut [u8],
     query_size: &usize,
     addr: &SocketAddr,
-) -> std::io::Result<()> {
+) -> tokio::io::Result<()> {
     let query_bs4url = match base64_url::encode_to_slice(&dns_query[..*query_size], base64_url_temp)
     {
         Ok(bs4) => bs4,
         Err(e) => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            return Err(tokio::io::Error::new(
+                tokio::io::ErrorKind::Other,
                 e.to_string(),
             ));
         }

@@ -12,7 +12,7 @@ pub async fn serve_http11(
     mut stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     udp_socket_addrs: SocketAddr,
     log: bool,
-) -> std::io::Result<()> {
+) -> tokio::io::Result<()> {
     let peer = stream.get_ref().0.peer_addr()?;
     let agent = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
     agent.connect(udp_socket_addrs).await?;
@@ -58,7 +58,7 @@ async fn handle_req(
     respbuff: &mut [u8],
     log: bool,
     peer: &SocketAddr,
-) -> std::io::Result<()> {
+) -> tokio::io::Result<()> {
     let req = {
         match HTTP11::parse(buff, stream).await {
             Ok(h) => h,
@@ -83,7 +83,7 @@ async fn handle_req(
         let _ = stream
             .write(b"HTTP/1.1 503 Service Unavailable\r\n\r\n")
             .await?;
-        return Err(std::io::Error::from(std::io::ErrorKind::TimedOut));
+        return Err(tokio::io::Error::from(tokio::io::ErrorKind::TimedOut));
     }
 
     let mut temp = [0u8; 4096];
@@ -137,20 +137,20 @@ impl HTTP11 {
     async fn parse(
         buff: &[u8],
         stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> tokio::io::Result<Self> {
         if &buff[..3] == b"GET" {
             if let Some(query) = HTTP11::find_query(buff) {
                 Ok(Self {
                     method: Method::Get(DnsQuery::new(query)?),
                 })
             } else {
-                Err(Box::new(HTTP11Errors::NoDnsQuery))
+                Err(tokio::io::Error::other(HTTP11Errors::NoDnsQuery))
             }
         } else if &buff[..4] == b"POST" {
             if let Some(body_pos) = catch_in_buff(b"\r\n\r\n", buff) {
                 let content_length = c_len(&buff[..body_pos.0]);
                 if content_length == 0 {
-                    Err(Box::new(HTTP11Errors::MalformedHttp))
+                    Err(tokio::io::Error::other(HTTP11Errors::MalformedHttp))
                 } else {
                     let mut dns = [0u8; 512];
                     dns[..buff[body_pos.1..].len()].copy_from_slice(&buff[body_pos.1..]);
@@ -169,10 +169,10 @@ impl HTTP11 {
                     }
                 }
             } else {
-                Err(Box::new(HTTP11Errors::MalformedHttp))
+                Err(tokio::io::Error::other(HTTP11Errors::MalformedHttp))
             }
         } else {
-            Err(Box::new(HTTP11Errors::InvalidMethod))
+            Err(tokio::io::Error::other(HTTP11Errors::InvalidMethod))
         }
     }
 

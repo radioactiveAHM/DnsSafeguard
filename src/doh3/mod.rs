@@ -33,7 +33,7 @@ pub async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise) ->
     noise::noiser(noise, target, &socket).await;
 
     let runtime = quinn::default_runtime()
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "no async runtime found"))
+        .ok_or_else(|| tokio::io::Error::new(tokio::io::ErrorKind::Other, "no async runtime found"))
         .unwrap();
     quinn::Endpoint::new_with_abstract_socket(
         quinn::EndpointConfig::default(),
@@ -170,7 +170,7 @@ pub async fn http3(
         let drive = async move {
             future::poll_fn(|cx| driver.poll_close(cx)).await?;
             *(deriver_dead_conn.lock().await) = true;
-            Ok::<(), Box<dyn std::error::Error + Send>>(())
+            Ok::<(), h3::Error>(())
         };
 
         tokio::spawn(drive);
@@ -263,6 +263,7 @@ async fn send_request(
                 base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?,
                 cpath,
             )?)
+            .version(http::Version::HTTP_3)
             .header("Accept", "application/dns-message")
             .body(())?,
         )

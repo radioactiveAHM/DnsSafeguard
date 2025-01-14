@@ -122,6 +122,6 @@ pub async fn recv_timeout(
     {
         v
     } else {
-        Err(std::io::Error::from(std::io::ErrorKind::TimedOut))
+        Err(tokio::io::Error::from(tokio::io::ErrorKind::TimedOut))
     }
 }

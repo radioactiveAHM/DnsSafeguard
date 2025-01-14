@@ -84,7 +84,7 @@ async fn handle_bypass(
     client_addr: SocketAddr,
     bypass_target: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
-) -> std::io::Result<()> {
+) -> tokio::io::Result<()> {
     let agent = tokio::net::UdpSocket::bind("0.0.0.0:0").await?;
     agent.connect(bypass_target).await?;
     agent.send(dq.slice()).await?;
@@ -149,7 +149,7 @@ async fn handle_bypass_sync(
     client_addr: SocketAddr,
     bypass_target: SocketAddr,
     udp: &tokio::net::UdpSocket,
-) -> std::io::Result<()> {
+) -> tokio::io::Result<()> {
     // stage 1: send udp query to dns server
     let agent = tokio::net::UdpSocket::bind("0.0.0.0:0").await?;
     agent.connect(bypass_target).await?;

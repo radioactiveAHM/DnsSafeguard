@@ -19,8 +19,8 @@ pub struct Tc {
 impl Tc {
     pub fn new(
         acceptor: TlsAcceptor,
-        stream: Result<(tokio::net::TcpStream, std::net::SocketAddr), std::io::Error>,
-    ) -> Result<Self, std::io::Error> {
+        stream: Result<(tokio::net::TcpStream, std::net::SocketAddr), tokio::io::Error>,
+    ) -> Result<Self, tokio::io::Error> {
         Ok(Self {
             acceptor,
             stream: stream?,
@@ -28,14 +28,14 @@ impl Tc {
     }
     pub async fn accept(
         self,
-    ) -> Result<tokio_rustls::server::TlsStream<tokio::net::TcpStream>, std::io::Error> {
+    ) -> Result<tokio_rustls::server::TlsStream<tokio::net::TcpStream>, tokio::io::Error> {
         self.acceptor.accept(self.stream.0).await
     }
 }
 
 pub struct DnsQuery([u8; 768], usize);
 impl DnsQuery {
-    pub fn new(bs4dns: &[u8]) -> Result<Self, base64_url::base64::DecodeSliceError> {
+    pub fn new(bs4dns: &[u8]) -> tokio::io::Result<Self> {
         // (512*4)/3=683
         let mut buff = [0; 768];
         match base64_url::decode_to_slice(bs4dns, &mut buff) {
@@ -44,7 +44,7 @@ impl DnsQuery {
                 dq.0[..b.len()].clone_from_slice(b);
                 Ok(dq)
             }
-            Err(e) => Err(e),
+            Err(e) => Err(tokio::io::Error::other(e)),
         }
     }
     pub fn value(&self) -> &[u8] {
@@ -94,7 +94,7 @@ pub async fn doh_server(dsc: DohServer, udp_socket_addrs: SocketAddr) {
     }
 }
 
-async fn tc_handler(tc: Tc, udp_socket_addrs: SocketAddr, log: bool) -> std::io::Result<()> {
+async fn tc_handler(tc: Tc, udp_socket_addrs: SocketAddr, log: bool) -> tokio::io::Result<()> {
     let mut stream = tc.accept().await?;
 
     if let Some(alpn) = stream.get_ref().1.alpn_protocol() {
@@ -103,7 +103,7 @@ async fn tc_handler(tc: Tc, udp_socket_addrs: SocketAddr, log: bool) -> std::io:
             b"http/1.1" => h11p::serve_http11(stream, udp_socket_addrs, log).await?,
             _ => {
                 stream.get_mut().1.send_close_notify();
-                return Err(std::io::Error::other(rustls::Error::NoApplicationProtocol));
+                return Err(tokio::io::Error::other(rustls::Error::NoApplicationProtocol));
             }
         }
     } else {

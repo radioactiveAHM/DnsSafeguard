@@ -17,13 +17,13 @@ impl std::io::Write for TlsHello {
     }
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         if buf.len() > self.buff.len() {
-            Err(std::io::Error::from(std::io::ErrorKind::StorageFull))
+            Err(tokio::io::Error::from(tokio::io::ErrorKind::StorageFull))
         } else {
             self.buff[..buf.len()].copy_from_slice(buf);
             Ok(buf.len())
         }
     }
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> tokio::io::Result<()> {
         Ok(())
     }
 }
@@ -33,7 +33,7 @@ pub async fn fragment_client_hello<IO: AsyncWriteExt + std::marker::Unpin>(
     c: &mut ClientConnection,
     tcp: &mut IO,
     fragmenting: &crate::config::Fragmenting,
-) -> std::io::Result<()> {
+) -> tokio::io::Result<()> {
     let mut mr_randy = rand::rngs::OsRng;
     // Buffer to store TLS Client Hello
     let mut buff = TlsHello {
@@ -96,7 +96,7 @@ pub async fn fragment_client_hello_rand<IO: AsyncWriteExt + std::marker::Unpin>(
     c: &mut ClientConnection,
     tcp: &mut IO,
     fragmenting: &crate::config::Fragmenting,
-) -> std::io::Result<()> {
+) -> tokio::io::Result<()> {
     // Buffer to store TLS Client Hello
     let mut buff = TlsHello {
         buff: [0; 1024 * 4],
@@ -157,7 +157,7 @@ pub async fn fragment_client_hello_rand<IO: AsyncWriteExt + std::marker::Unpin>(
 pub async fn fragment_client_hello_pack<IO: AsyncWriteExt + std::marker::Unpin>(
     c: &mut ClientConnection,
     tcp: &mut IO,
-) -> std::io::Result<()> {
+) -> tokio::io::Result<()> {
     // Buffer to store TLS Client Hello
     let mut b = TlsHello {
         buff: [0; 1024 * 4],
@@ -182,7 +182,7 @@ pub async fn fragment_client_hello_jump<IO: AsyncWriteExt + std::marker::Unpin>(
     c: &mut ClientConnection,
     tcp: &mut IO,
     fragmenting: &crate::config::Fragmenting,
-) -> std::io::Result<()> {
+) -> tokio::io::Result<()> {
     let mut mr_randy = rand::rngs::OsRng;
     // Buffer to store TLS Client Hello
     let mut tlshello = TlsHello {

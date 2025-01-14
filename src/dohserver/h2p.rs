@@ -94,9 +94,16 @@ async fn handle_dns_req_post(
     } else if let Ok(v) = recv_timeout(&agent, &mut buff, 10).await {
         size = v;
     } else {
-        match resp.send_response(Response::builder().status(503).version(http::Version::HTTP_2).body(()).unwrap(), true) {
+        match resp.send_response(
+            Response::builder()
+                .version(http::Version::HTTP_2)
+                .status(http::status::StatusCode::SERVICE_UNAVAILABLE)
+                .body(())
+                .unwrap(),
+            true,
+        ) {
             Ok(_) => return Ok(()),
-            Err(e) => return Err(std::io::Error::other(e))
+            Err(e) => return Err(std::io::Error::other(e)),
         };
     }
 
@@ -126,9 +133,16 @@ async fn handle_dns_req_get(
     } else if let Ok(v) = recv_timeout(&agent, &mut buff, 10).await {
         size = v;
     } else {
-        match resp.send_response(Response::builder().status(503).version(http::Version::HTTP_2).body(()).unwrap(), true) {
+        match resp.send_response(
+            Response::builder()
+                .version(http::Version::HTTP_2)
+                .status(http::status::StatusCode::SERVICE_UNAVAILABLE)
+                .body(())
+                .unwrap(),
+            true,
+        ) {
             Ok(_) => return Ok(()),
-            Err(e) => return Err(std::io::Error::other(e))
+            Err(e) => return Err(std::io::Error::other(e)),
         };
     }
 
@@ -141,8 +155,8 @@ async fn handle_resp(
     size: usize,
 ) -> std::io::Result<()> {
     if let Ok(heads) = Response::builder()
-        .status(200)
         .version(http::Version::HTTP_2)
+        .status(http::status::StatusCode::OK)
         .header("Content-Type", "application/dns-message")
         .header("Cache-Control", "max-age=300")
         .header("Content-Length", size)

@@ -102,8 +102,15 @@ pub async fn http2(
                 let udp_arc = arc_udp.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
-                    if let Err(e) =
-                        send_req(sn, (*dns_query, query_size), h2_client, addr, udp_arc, cpath).await
+                    if let Err(e) = send_req(
+                        sn,
+                        (*dns_query, query_size),
+                        h2_client,
+                        addr,
+                        udp_arc,
+                        cpath,
+                    )
+                    .await
                     {
                         println!("{e}");
                         temp = true;
@@ -113,7 +120,7 @@ pub async fn http2(
                         *(h2_conn_dead.lock().await) = true;
                     }
                 });
-                
+
                 tank = None;
                 continue;
             }

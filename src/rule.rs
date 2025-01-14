@@ -1,6 +1,9 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use crate::{config::TargetType, utils::{catch_in_buff, recv_timeout}};
+use crate::{
+    config::TargetType,
+    utils::{catch_in_buff, recv_timeout},
+};
 
 pub type Rules = Option<Vec<Rule>>;
 

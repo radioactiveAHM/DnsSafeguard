@@ -19,7 +19,7 @@ use multi::h1_multi;
 use rule::{convert_rules, Rules};
 use utils::Sni;
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() {
     tokio_rustls::rustls::crypto::ring::default_provider()
         .install_default()

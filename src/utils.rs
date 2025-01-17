@@ -83,6 +83,10 @@ impl Buffering<'_> {
         self.1 = 0;
         self
     }
+    pub fn mutate(&mut self, indx: usize, value: u8) -> &mut Self {
+        self.0[indx] = value;
+        self
+    }
 }
 
 pub fn c_len(http_head: &[u8]) -> usize {

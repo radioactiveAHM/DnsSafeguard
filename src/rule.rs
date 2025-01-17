@@ -1,8 +1,8 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr}, sync::Arc};
 
 use crate::{
     config::TargetType,
-    utils::{catch_in_buff, recv_timeout},
+    utils::{catch_in_buff, recv_timeout, Buffering},
 };
 
 pub type Rules = Option<Vec<Rule>>;
@@ -72,6 +72,32 @@ pub async fn rulecheck(
                         return true;
                     }
                 }
+            },
+            TargetType::ip(ip) => {
+                for option in &rule.options {
+                    if catch_in_buff(option, dq.slice()).is_some() {
+                        let mut temp = [0; 1024];
+                        let mut resp =  Buffering(&mut temp, 0);
+                        match ip {
+                            IpAddr::V4(ipv4) => {
+                                if gen_resp_v4(dq.slice(), &mut resp, ipv4) {
+                                    let _ = udp.send_to(resp.get(), client_addr).await;
+                                    return true;
+                                } else {
+                                    return false;
+                                }
+                            },
+                            IpAddr::V6(ipv6) => {
+                                if gen_resp_v6(dq.slice(), &mut resp, ipv6) {
+                                    let _ = udp.send_to(resp.get(), client_addr).await;
+                                    return true;
+                                } else {
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -135,6 +161,32 @@ pub async fn rulecheck_sync(
                             println!("{e}");
                         };
                         return true;
+                    }
+                }
+            },
+            TargetType::ip(ip) => {
+                for option in &rule.options {
+                    if catch_in_buff(option, dq).is_some() {
+                        let mut temp = [0; 1024];
+                        let mut resp =  Buffering(&mut temp, 0);
+                        match ip {
+                            IpAddr::V4(ipv4) => {
+                                if gen_resp_v4(dq, &mut resp, ipv4) {
+                                    let _ = udp.send_to(resp.get(), client_addr).await;
+                                    return true;
+                                } else {
+                                    return false;
+                                }
+                            },
+                            IpAddr::V6(ipv6) => {
+                                if gen_resp_v6(dq, &mut resp, ipv6) {
+                                    let _ = udp.send_to(resp.get(), client_addr).await;
+                                    return true;
+                                } else {
+                                    return false;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -313,4 +365,30 @@ impl Targets {
             Self::ZONEMD => [0, 63],
         }
     }
+}
+
+fn gen_resp_v4(buff: &[u8], resp: &mut Buffering, ip: &Ipv4Addr) -> bool {
+    if &buff[2..12]==[1,0,0,1,0,0,0,0,0,0] && &buff[buff.len()-4..buff.len()-2]==[0,1] {
+        resp.write(buff).mutate(7, 1).mutate(2, 133).write(
+            &buff[12..]
+        ).write(
+            &[0,0,0,20,0, 4]
+        ).write(&ip.octets());
+        
+        return true;
+    }
+    false
+}
+
+fn gen_resp_v6(buff: &[u8], resp: &mut Buffering, ip: &Ipv6Addr) -> bool {
+    if &buff[2..12]==[1,0,0,1,0,0,0,0,0,0] && &buff[buff.len()-4..buff.len()-2]==[0,28] {
+        resp.write(buff).mutate(7, 1).mutate(2, 133).write(
+            &buff[12..]
+        ).write(
+            &[0,0,0,20,0, 16]
+        ).write(&ip.octets());
+        
+        return true;
+    }
+    false
 }

@@ -23,7 +23,11 @@ pub async fn doq(
     connection: config::Connection,
     rule: crate::Rules,
 ) {
-    let arc_rule = Arc::new(rule);
+    let arc_rule: Option<Arc<Vec<crate::rule::Rule>>> = if rule.is_some() {
+        Some(Arc::new(rule.unwrap()))
+    } else {
+        None
+    };
     let mut endpoint = udp_setup(socket_addrs, noise.clone(), quic_conf_file.clone(), "doq").await;
 
     let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());

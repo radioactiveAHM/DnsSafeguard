@@ -28,7 +28,11 @@ pub async fn h1_multi(
     rule: crate::Rules,
     custom_http_path: Option<String>,
 ) {
-    let arc_rule = Arc::new(rule);
+    let arc_rule: Option<Arc<Vec<crate::rule::Rule>>> = if rule.is_some() {
+        Some(Arc::new(rule.unwrap()))
+    } else {
+        None
+    };
     // TLS Client Config
     let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()]);
 

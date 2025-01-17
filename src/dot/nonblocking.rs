@@ -18,7 +18,11 @@ pub async fn dot_nonblocking(
     connection: config::Connection,
     rule: crate::Rules,
 ) {
-    let arc_rule = Arc::new(rule);
+    let arc_rule: Option<Arc<Vec<crate::rule::Rule>>> = if rule.is_some() {
+        Some(Arc::new(rule.unwrap()))
+    } else {
+        None
+    };
     let ctls = tls::tlsconf(vec![b"dot".to_vec()]);
     let mut retry = 0u8;
     loop {

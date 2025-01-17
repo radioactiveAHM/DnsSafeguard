@@ -22,7 +22,11 @@ pub async fn http2(
     rule: crate::Rules,
     custom_http_path: Option<String>,
 ) {
-    let arc_rule = Arc::new(rule);
+    let arc_rule: Option<Arc<Vec<crate::rule::Rule>>> = if rule.is_some() {
+        Some(Arc::new(rule.unwrap()))
+    } else {
+        None
+    };
     // TLS Conf
     let h2tls = tls::tlsconf(vec![b"h2".to_vec()]);
 

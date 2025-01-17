@@ -27,7 +27,7 @@ impl RuleDqt {
 }
 
 pub async fn rulecheck(
-    rules: Arc<Option<Vec<Rule>>>,
+    rules: Option<Arc<Vec<crate::rule::Rule>>>,
     mut dq: RuleDqt,
     client_addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,

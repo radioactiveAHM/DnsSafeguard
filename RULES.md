@@ -2,7 +2,7 @@
 
 ## Rules Object
 
-The `rules` object can either be null or a list of rule objects.
+The `rules` object can either be `null` or a list of rule objects.
 
 ```json
 "rules": null
@@ -19,7 +19,7 @@ OR
 A rule object consists of two main components:
 
 - `options`: A list of keywords or domains.
-- `target`: Can either be a `block` or a `dns` object.
+- `target`: Can either be a `block`, `dns`, or `ip` object.
 
 Example:
 
@@ -56,13 +56,23 @@ Example:
 "dns": "1.1.1.1:53"
 ```
 
+### IP Object
+
+The `ip` object responds to the DNS query with the provided IP. The value must be a valid IP, both IPv4 and IPv6 are supported.
+
+Example:
+
+```json
+"ip": "192.168.2.1"
+```
+
 ## Example Configuration
 
 Here's an example configuration for the `rules` object:
 
 ```json
 "rules": [
-    // Block all DNS queries containing keywords in options object
+  // Block all DNS queries containing keywords in the options object
   {
     "options": [
       "googlesyndication",
@@ -73,7 +83,7 @@ Here's an example configuration for the `rules` object:
       "block": null
     }
   },
-  // Block only AAAA (IPv6) DNS queries containing domains in options object
+  // Block only AAAA (IPv6) DNS queries containing domains in the options object
   {
     "options": [
       "google.com",
@@ -83,7 +93,7 @@ Here's an example configuration for the `rules` object:
       "block": ["AAAA"]
     }
   },
-  // Bypass DNS queries containing domains in options object to 8.8.8.8:53 (Google plaintext DNS server)
+  // Bypass DNS queries containing domains in the options object to 8.8.8.8:53 (Google plaintext DNS server)
   {
     "options": [
       "rust-lang.org",
@@ -91,6 +101,15 @@ Here's an example configuration for the `rules` object:
     ],
     "target": {
       "dns": "8.8.8.8:53"
+    }
+  },
+  // Respond to DNS queries containing domains in the options object with the IP 192.168.2.1
+  {
+    "options": [
+      "router.com"
+    ],
+    "target": {
+      "ip": "192.168.2.1"
     }
   }
 ]

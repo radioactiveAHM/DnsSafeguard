@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::net::SocketAddr;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     time::sleep,
@@ -9,35 +9,31 @@ use crate::{
     config::{self, Connection},
     rule::rulecheck,
     tls::{self, tls_conn_gen},
-    utils::{c_len, catch_in_buff, Buffering, Sni},
+    utils::{c_len, catch_in_buff, unsafe_staticref, Buffering},
 };
 
 type CrossContainer = (
     ([u8; 512], usize),
     std::net::SocketAddr,
-    Arc<tokio::net::UdpSocket>,
+    &'static tokio::net::UdpSocket,
 );
 
 pub async fn h1_multi(
-    sn: Sni,
+    sn: &'static str,
     disable_domain_sni: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
     fragmenting: &config::Fragmenting,
     connection: Connection,
-    rule: crate::Rules,
-    custom_http_path: Option<String>,
+    rules: &Option<Vec<crate::rule::Rule>>,
+    ucpath: &'static Option<String>,
 ) {
-    let arc_rule: Option<Arc<Vec<crate::rule::Rule>>> = if rule.is_some() {
-        Some(Arc::new(rule.unwrap()))
-    } else {
-        None
-    };
     // TLS Client Config
     let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()]);
 
     // UDP Socket for DNS Query
-    let udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
+    let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
+    let uudp = unsafe_staticref(&udp);
 
     // Channels to send DNS query to one of task with http/1.1 connection
     let (sender, recver) = crossbeam_channel::bounded(connection.h1_multi_connections as usize);
@@ -47,13 +43,12 @@ pub async fn h1_multi(
         let recver_cln: crossbeam_channel::Receiver<CrossContainer> = recver.clone();
         let tls_config = ctls.clone();
         let frag = (*fragmenting).clone();
-        let custom_http_path = custom_http_path.clone();
         tokio::spawn(async move {
             let task_rcv = recver_cln;
             let mut retry = 0u8;
             loop {
                 let tls_conn = tls_conn_gen(
-                    sn.string().to_string(),
+                    sn.to_string(),
                     disable_domain_sni,
                     socket_addrs,
                     frag.clone(),
@@ -82,7 +77,6 @@ pub async fn h1_multi(
                 println!("HTTP/1.1 Connection {} Established", conn_i);
                 retry = 0;
                 let mut c = tls_conn.unwrap();
-                let cpath: Option<&str> = custom_http_path.as_deref();
                 loop {
                     let mut package = Result::Err(crossbeam_channel::RecvError);
                     tokio::task::block_in_place(|| {
@@ -95,7 +89,7 @@ pub async fn h1_multi(
                             base64_url::encode_to_slice(&query.0[..query.1], &mut temp).unwrap();
                         let mut url = [0; 4096];
                         let mut b = Buffering(&mut url, 0);
-                        let http_req = genrequrlh1(&mut b, sn.slice(), query_bs4url, &cpath);
+                        let http_req = genrequrlh1(&mut b, sn.as_bytes(), query_bs4url, ucpath);
 
                         // Send HTTP Req
                         if c.write(http_req).await.is_err() {
@@ -141,12 +135,12 @@ pub async fn h1_multi(
     loop {
         if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
             // rule check
-            if (arc_rule.is_some()
+            if (rules.is_some()
                 && rulecheck(
-                    arc_rule.clone(),
+                    rules,
                     crate::rule::RuleDqt::Http(dns_query, query_size),
                     addr,
-                    udp.clone(),
+                    uudp,
                 )
                 .await)
                 || query_size < 12
@@ -154,10 +148,7 @@ pub async fn h1_multi(
                 continue;
             }
             tokio::task::block_in_place(|| {
-                if sender
-                    .send(((dns_query, query_size), addr, udp.clone()))
-                    .is_err()
-                {
+                if sender.send(((dns_query, query_size), addr, uudp)).is_err() {
                     println!("Tasks are dead")
                 }
             });

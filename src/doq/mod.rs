@@ -10,27 +10,23 @@ use crate::{
     config::{self, Noise},
     doh3::udp_setup,
     rule::rulecheck,
-    utils::{convert_u16_to_two_u8s_be, Sni},
+    utils::{convert_u16_to_two_u8s_be, unsafe_staticref},
 };
 
 pub async fn doq(
-    sn: Sni,
+    sn: &'static str,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
     quic_conf_file: config::Quic,
     noise: Noise,
-    connecting_timeout_sec: u64,
     connection: config::Connection,
-    rule: crate::Rules,
+    rules: &Option<Vec<crate::rule::Rule>>,
 ) {
-    let arc_rule: Option<Arc<Vec<crate::rule::Rule>>> = if rule.is_some() {
-        Some(Arc::new(rule.unwrap()))
-    } else {
-        None
-    };
     let mut endpoint = udp_setup(socket_addrs, noise.clone(), quic_conf_file.clone(), "doq").await;
 
-    let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
+    let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
+    let uudp = unsafe_staticref(&udp);
+
     let dead_conn = Arc::new(Mutex::new(false));
 
     let mut tank: Option<(Box<[u8; 514]>, usize, SocketAddr)> = None;
@@ -54,11 +50,11 @@ pub async fn doq(
 
         println!("QUIC Connecting");
         // Connect to dns server
-        let connecting = endpoint.connect(socket_addrs, sn.string()).unwrap();
+        let connecting = endpoint.connect(socket_addrs, sn).unwrap();
 
         let conn = {
             let timing = timeout(
-                std::time::Duration::from_secs(connecting_timeout_sec),
+                std::time::Duration::from_secs(quic_conf_file.connecting_timeout_sec),
                 async {
                     let connecting = connecting.into_0rtt();
                     if let Ok((conn, rtt)) = connecting {
@@ -66,7 +62,7 @@ pub async fn doq(
                         println!("QUIC 0RTT Connection Established");
                         Ok(conn)
                     } else {
-                        let conn = endpoint.connect(socket_addrs, sn.string()).unwrap().await;
+                        let conn = endpoint.connect(socket_addrs, sn).unwrap().await;
                         if conn.is_ok() {
                             println!("QUIC Connection Established");
                         }
@@ -106,12 +102,11 @@ pub async fn doq(
             if tank.is_some() {
                 match quic.open_bi().await {
                     Ok(bistream) => {
-                        let udp = arc_udp.clone();
                         let (dns_query, query_size, addr) = tank.unwrap();
                         tokio::spawn(async move {
                             let mut temp = false;
                             if let Err(e) =
-                                send_dq(bistream, (*dns_query, query_size), addr, udp).await
+                                send_dq(bistream, (*dns_query, query_size), addr, uudp).await
                             {
                                 let e_str = e.to_string();
                                 println!("{}", e_str);
@@ -133,14 +128,14 @@ pub async fn doq(
             }
 
             // Recive dns query
-            if let Ok((query_size, addr)) = arc_udp.recv_from(&mut dns_query[2..]).await {
+            if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query[2..]).await {
                 // rule check
-                if (arc_rule.is_some()
+                if (rules.is_some()
                     && rulecheck(
-                        arc_rule.clone(),
+                        rules,
                         crate::rule::RuleDqt::Tls(dns_query, query_size),
                         addr,
-                        arc_udp.clone(),
+                        uudp,
                     )
                     .await)
                     || query_size < 12
@@ -156,7 +151,7 @@ pub async fn doq(
 
                 match quic.open_bi().await {
                     Ok(bistream) => {
-                        let udp = arc_udp.clone();
+                        let udp = uudp;
                         tokio::spawn(async move {
                             let mut temp = false;
                             if let Err(e) =
@@ -185,7 +180,7 @@ async fn send_dq(
     (mut send, mut recv): (SendStream, RecvStream),
     mut dns_query: ([u8; 514], usize),
     addr: SocketAddr,
-    udp: Arc<tokio::net::UdpSocket>,
+    udp: &'static tokio::net::UdpSocket,
 ) -> tokio::io::Result<()> {
     [dns_query.0[0], dns_query.0[1]] = convert_u16_to_two_u8s_be(dns_query.1 as u16);
 

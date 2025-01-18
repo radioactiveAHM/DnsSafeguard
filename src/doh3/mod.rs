@@ -17,7 +17,7 @@ use crate::{
     chttp::genrequrl,
     config::{self, Noise},
     rule::rulecheck,
-    utils::{Buffering, Sni},
+    utils::{unsafe_staticref, Buffering},
 };
 
 pub async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise) -> quinn::Endpoint {
@@ -78,29 +78,19 @@ pub async fn udp_setup(
 }
 
 pub async fn http3(
-    sn: Sni,
+    sn: &'static str,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
     quic_conf_file: config::Quic,
     noise: Noise,
-    connecting_timeout_sec: u64,
     connection: config::Connection,
-    rule: crate::Rules,
-    custom_http_path: Option<String>,
+    rules: &Option<Vec<crate::rule::Rule>>,
+    ucpath: &'static Option<String>,
 ) {
-    let arc_rule: Option<Arc<Vec<crate::rule::Rule>>> = if rule.is_some() {
-        Some(Arc::new(rule.unwrap()))
-    } else {
-        None
-    };
     let mut endpoint = udp_setup(socket_addrs, noise.clone(), quic_conf_file.clone(), "h3").await;
 
-    let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
-    let cpath: Option<Arc<str>> = if custom_http_path.is_some() {
-        Some(custom_http_path.clone().unwrap().into())
-    } else {
-        None
-    };
+    let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
+    let uudp = unsafe_staticref(&udp);
 
     let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
 
@@ -123,11 +113,11 @@ pub async fn http3(
 
         println!("QUIC Connecting");
         // Connect to dns server
-        let connecting = endpoint.connect(socket_addrs, sn.string()).unwrap();
+        let connecting = endpoint.connect(socket_addrs, sn).unwrap();
 
         let conn = {
             let timing = timeout(
-                std::time::Duration::from_secs(connecting_timeout_sec),
+                std::time::Duration::from_secs(quic_conf_file.connecting_timeout_sec),
                 async {
                     let connecting = connecting.into_0rtt();
                     if let Ok((conn, rtt)) = connecting {
@@ -135,7 +125,7 @@ pub async fn http3(
                         println!("QUIC 0RTT Connection Established");
                         Ok(conn)
                     } else {
-                        let conn = endpoint.connect(socket_addrs, sn.string()).unwrap().await;
+                        let conn = endpoint.connect(socket_addrs, sn).unwrap().await;
                         if conn.is_ok() {
                             println!("QUIC Connection Established");
                         }
@@ -187,12 +177,10 @@ pub async fn http3(
 
             if let Some((dns_query, query_size, addr)) = tank {
                 let h3 = h3.clone();
-                let cpath = cpath.clone();
-                let udp = arc_udp.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
                     if let Err(e) =
-                        send_request(sn, h3, (*dns_query, query_size), addr, udp, cpath).await
+                        send_request(sn, h3, (*dns_query, query_size), addr, uudp, ucpath).await
                     {
                         println!("{e}");
                         temp = true;
@@ -207,14 +195,14 @@ pub async fn http3(
             }
 
             // Recive dns query
-            if let Ok((query_size, addr)) = arc_udp.recv_from(&mut dns_query).await {
+            if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
                 // rule check
-                if (arc_rule.is_some()
+                if (rules.is_some()
                     && rulecheck(
-                        arc_rule.clone(),
+                        rules,
                         crate::rule::RuleDqt::Http(dns_query, query_size),
                         addr,
-                        arc_udp.clone(),
+                        uudp,
                     )
                     .await)
                     || query_size < 12
@@ -228,12 +216,10 @@ pub async fn http3(
                 }
 
                 let h3 = h3.clone();
-                let cpath = cpath.clone();
-                let udp = arc_udp.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
                     if let Err(e) =
-                        send_request(sn, h3, (dns_query, query_size), addr, udp, cpath).await
+                        send_request(sn, h3, (dns_query, query_size), addr, uudp, ucpath).await
                     {
                         println!("{e}");
                         temp = true;
@@ -248,12 +234,12 @@ pub async fn http3(
 }
 
 async fn send_request(
-    server_name: Sni,
+    server_name: &'static str,
     mut h3: SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
     dns_query: ([u8; 512], usize),
     addr: SocketAddr,
-    udp: Arc<tokio::net::UdpSocket>,
-    cpath: Option<Arc<str>>,
+    udp: &'static tokio::net::UdpSocket,
+    cpath: &'static Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut temp = [0u8; 512];
     let mut url = [0; 1024];
@@ -263,7 +249,7 @@ async fn send_request(
         .send_request(
             http::Request::get(genrequrl(
                 &mut Buffering(&mut url, 0),
-                server_name.slice(),
+                server_name.as_bytes(),
                 base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?,
                 cpath,
             )?)

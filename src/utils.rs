@@ -46,26 +46,6 @@ pub async fn tcp_connect_handle(
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct Sni([u8; 255], usize);
-impl Sni {
-    pub fn new(server_name: String) -> Self {
-        if server_name.len() > 255 {
-            panic!("Error: The server name exceeds the maximum allowed length of 255 characters. Please provide a shorter server name.")
-        }
-        let mut sni = Sni([0; 255], server_name.len());
-        sni.0[..server_name.len()].copy_from_slice(server_name.as_bytes());
-        sni
-    }
-    pub fn slice(&self) -> &[u8] {
-        &self.0[..self.1]
-    }
-
-    pub fn string(&self) -> &str {
-        str::from_utf8(&self.0[..self.1]).expect("Error: Invalid UTF-8 sequence")
-    }
-}
-
 pub struct Buffering<'a>(pub &'a mut [u8], pub usize);
 impl Buffering<'_> {
     pub fn write(&mut self, buff: &[u8]) -> &mut Self {
@@ -128,4 +108,8 @@ pub async fn recv_timeout(
     } else {
         Err(tokio::io::Error::from(tokio::io::ErrorKind::TimedOut))
     }
+}
+
+pub fn unsafe_staticref<'a, T: ?Sized>(r: &'a T) -> &'static T {
+    unsafe { std::mem::transmute::<&'a T, &'static T>(r) }
 }

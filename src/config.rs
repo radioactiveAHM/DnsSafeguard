@@ -93,7 +93,7 @@ pub struct Connection {
 pub enum TargetType {
     dns(std::net::SocketAddr),
     block(Option<Vec<crate::rule::Targets>>),
-    ip(IpAddr)
+    ip(IpAddr),
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -135,7 +135,8 @@ pub fn load_config() -> Config {
             let c = p.join("config.json");
             if c.exists() {
                 let config_file = std::fs::read(c).expect("Can not read config file");
-                let conf: Config = serde_json::from_slice(&config_file).expect("Malformed config file");
+                let conf: Config =
+                    serde_json::from_slice(&config_file).expect("Malformed config file");
                 return conf;
             }
         }

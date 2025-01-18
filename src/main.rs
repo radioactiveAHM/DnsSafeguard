@@ -17,7 +17,7 @@ mod utils;
 use h11::http1;
 use multi::h1_multi;
 use rule::{convert_rules, Rules};
-use utils::Sni;
+use utils::unsafe_staticref;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
@@ -30,6 +30,12 @@ async fn main() {
     // Convert rules to adjust domains like dns query and improve performance
     let rules = convert_rules(conf.rules);
 
+    // unsafe values
+    // since values all avalible during application lifetime
+    let urules = unsafe_staticref(&rules);
+    let usn = unsafe_staticref(conf.server_name.as_str());
+    let ucpath = unsafe_staticref(&conf.custom_http_path);
+
     if conf.doh_server.enable {
         tokio::spawn(async move {
             dohserver::doh_server(conf.doh_server, conf.udp_socket_addrs).await;
@@ -37,6 +43,12 @@ async fn main() {
     }
 
     let v6 = conf.ipv6;
+
+    // unsafe values
+    // since values all avalible during application lifetime
+    let usn6 = unsafe_staticref(v6.server_name.as_str());
+    let ucpath6 = unsafe_staticref(&v6.custom_http_path);
+
     let quic_conf_file_v6 = conf.quic.clone();
     let v6rules = rules.clone();
     tokio::spawn(async move {
@@ -44,61 +56,59 @@ async fn main() {
             match v6.protocol {
                 config::Protocol::h1_multi => {
                     h1_multi(
-                        Sni::new(v6.server_name),
+                        usn6,
                         v6.disable_domain_sni,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
-                        v6rules,
-                        v6.custom_http_path,
+                        urules,
+                        ucpath6,
                     )
                     .await
                 }
                 config::Protocol::h1 => {
                     http1(
-                        Sni::new(v6.server_name),
+                        usn6,
                         v6.disable_domain_sni,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
                         v6rules,
-                        v6.custom_http_path,
+                        ucpath6,
                     )
                     .await
                 }
                 config::Protocol::h2 => {
                     doh2::http2(
-                        Sni::new(v6.server_name),
+                        usn6,
                         v6.disable_domain_sni,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
-                        v6rules,
-                        v6.custom_http_path,
+                        urules,
+                        ucpath6,
                     )
                     .await
                 }
                 config::Protocol::h3 => {
-                    let connecting_timeout_sec = quic_conf_file_v6.connecting_timeout_sec;
                     doh3::http3(
-                        Sni::new(v6.server_name),
+                        usn6,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
                         quic_conf_file_v6,
                         v6.noise,
-                        connecting_timeout_sec,
                         conf.connection,
-                        v6rules,
-                        v6.custom_http_path,
+                        urules,
+                        ucpath6,
                     )
                     .await
                 }
                 config::Protocol::dot => {
                     dot::dot(
-                        Sni::new(v6.server_name),
+                        usn6,
                         v6.disable_domain_sni,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
@@ -110,27 +120,25 @@ async fn main() {
                 }
                 config::Protocol::dot_nonblocking => {
                     dot::dot_nonblocking(
-                        Sni::new(v6.server_name),
+                        usn6,
                         v6.disable_domain_sni,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
                         &v6.fragmenting,
                         conf.connection,
-                        v6rules,
+                        urules,
                     )
                     .await;
                 }
                 config::Protocol::doq => {
-                    let connecting_timeout_sec = quic_conf_file_v6.connecting_timeout_sec;
                     doq::doq(
-                        Sni::new(v6.server_name),
+                        usn6,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
                         quic_conf_file_v6,
                         v6.noise,
-                        connecting_timeout_sec,
                         conf.connection,
-                        v6rules,
+                        urules,
                     )
                     .await;
                 }
@@ -141,61 +149,59 @@ async fn main() {
     match conf.protocol {
         config::Protocol::h1_multi => {
             h1_multi(
-                Sni::new(conf.server_name),
+                usn,
                 conf.disable_domain_sni,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
-                rules,
-                conf.custom_http_path,
+                urules,
+                ucpath,
             )
             .await
         }
         config::Protocol::h1 => {
             http1(
-                Sni::new(conf.server_name),
+                usn,
                 conf.disable_domain_sni,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
                 rules,
-                conf.custom_http_path,
+                ucpath,
             )
             .await
         }
         config::Protocol::h2 => {
             doh2::http2(
-                Sni::new(conf.server_name),
+                usn,
                 conf.disable_domain_sni,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
-                rules,
-                conf.custom_http_path,
+                urules,
+                ucpath,
             )
             .await
         }
         config::Protocol::h3 => {
-            let connecting_timeout_sec = conf.quic.connecting_timeout_sec;
             doh3::http3(
-                Sni::new(conf.server_name),
+                usn,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
                 conf.quic,
                 conf.noise,
-                connecting_timeout_sec,
                 conf.connection,
-                rules,
-                conf.custom_http_path,
+                urules,
+                ucpath,
             )
             .await
         }
         config::Protocol::dot => {
             dot::dot(
-                Sni::new(conf.server_name),
+                usn,
                 conf.disable_domain_sni,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
@@ -207,27 +213,25 @@ async fn main() {
         }
         config::Protocol::dot_nonblocking => {
             dot::dot_nonblocking(
-                Sni::new(conf.server_name),
+                usn,
                 conf.disable_domain_sni,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
                 &conf.fragmenting,
                 conf.connection,
-                rules,
+                urules,
             )
             .await;
         }
         config::Protocol::doq => {
-            let connecting_timeout_sec = conf.quic.connecting_timeout_sec;
             doq::doq(
-                Sni::new(conf.server_name),
+                usn,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
                 conf.quic,
                 conf.noise,
-                connecting_timeout_sec,
                 conf.connection,
-                rules,
+                urules,
             )
             .await;
         }

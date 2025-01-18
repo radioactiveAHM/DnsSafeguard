@@ -103,7 +103,9 @@ async fn tc_handler(tc: Tc, udp_socket_addrs: SocketAddr, log: bool) -> tokio::i
             b"http/1.1" => h11p::serve_http11(stream, udp_socket_addrs, log).await?,
             _ => {
                 stream.get_mut().1.send_close_notify();
-                return Err(tokio::io::Error::other(rustls::Error::NoApplicationProtocol));
+                return Err(tokio::io::Error::other(
+                    rustls::Error::NoApplicationProtocol,
+                ));
             }
         }
     } else {

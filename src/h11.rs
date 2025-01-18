@@ -5,28 +5,27 @@ use crate::chttp::genrequrlh1;
 use crate::config::{Connection, Fragmenting};
 use crate::rule::{rulecheck_sync, Rules};
 use crate::tls::{self, tlsfragmenting};
-use crate::utils::{c_len, catch_in_buff, tcp_connect_handle, Buffering, Sni};
+use crate::utils::{c_len, catch_in_buff, tcp_connect_handle, Buffering};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     time::sleep,
 };
 
 pub async fn http1(
-    sn: Sni,
+    sn: &'static str,
     disable_domain_sni: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
     fragmenting: &Fragmenting,
     connection: Connection,
     rule: Rules,
-    custom_http_path: Option<String>,
+    ucpath: &'static Option<String>,
 ) {
     // TLS Client
     let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()]);
     let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
 
     let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
-    let cpath: Option<&str> = custom_http_path.as_deref();
     let mut retry = 0u8;
     loop {
         // TCP socket for TLS
@@ -36,10 +35,7 @@ pub async fn http1(
         let example_com = if disable_domain_sni {
             (socket_addrs.ip()).into()
         } else {
-            sn.string()
-                .to_string()
-                .try_into()
-                .expect("Invalid server name")
+            sn.to_string().try_into().expect("Invalid server name")
         };
         // Perform TLS Client Hello fragmenting
         let tls_conn = tokio_rustls::TlsConnector::from(Arc::clone(&ctls))
@@ -87,8 +83,8 @@ pub async fn http1(
                 if handler(
                     &mut c,
                     &udp,
-                    &cpath,
-                    &sn,
+                    ucpath,
+                    sn,
                     dns_query.as_ref(),
                     &mut base64_url_temp,
                     &mut url,
@@ -115,8 +111,8 @@ pub async fn http1(
                 if let Err(e) = handler(
                     &mut c,
                     &udp,
-                    &cpath,
-                    &sn,
+                    ucpath,
+                    sn,
                     &dns_query,
                     &mut base64_url_temp,
                     &mut url,
@@ -138,8 +134,8 @@ pub async fn http1(
 pub async fn handler(
     c: &mut tokio_rustls::client::TlsStream<tokio::net::TcpStream>,
     udp: &tokio::net::UdpSocket,
-    cpath: &Option<&str>,
-    sn: &Sni,
+    ucpath: &'static Option<String>,
+    sn: &'static str,
     dns_query: &[u8],
     base64_url_temp: &mut [u8],
     url: &mut [u8],
@@ -158,7 +154,7 @@ pub async fn handler(
         }
     };
     let mut b = Buffering(url, 0);
-    let http_req = genrequrlh1(&mut b, sn.slice(), query_bs4url, cpath);
+    let http_req = genrequrlh1(&mut b, sn.as_bytes(), query_bs4url, ucpath);
 
     // Write http request
     let _ = c.write(http_req).await?;

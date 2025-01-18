@@ -1,7 +1,8 @@
 use crate::chttp::genrequrl;
 use crate::rule::rulecheck;
 use crate::tls::tlsfragmenting;
-use crate::utils::{Buffering, Sni};
+use crate::utils::unsafe_staticref;
+use crate::utils::Buffering;
 use core::str;
 use h2::client::SendRequest;
 use std::{net::SocketAddr, sync::Arc};
@@ -13,29 +14,20 @@ use crate::tls;
 use crate::utils::tcp_connect_handle;
 
 pub async fn http2(
-    sn: Sni,
+    sn: &'static str,
     disable_domain_sni: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
     fragmenting: &config::Fragmenting,
     connection: config::Connection,
-    rule: crate::Rules,
-    custom_http_path: Option<String>,
+    rules: &Option<Vec<crate::rule::Rule>>,
+    ucpath: &'static Option<String>,
 ) {
-    let arc_rule: Option<Arc<Vec<crate::rule::Rule>>> = if rule.is_some() {
-        Some(Arc::new(rule.unwrap()))
-    } else {
-        None
-    };
     // TLS Conf
     let h2tls = tls::tlsconf(vec![b"h2".to_vec()]);
 
-    let arc_udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
-    let cpath: Option<Arc<str>> = if custom_http_path.is_some() {
-        Some(custom_http_path.clone().unwrap().into())
-    } else {
-        None
-    };
+    let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
+    let uudp = unsafe_staticref(&udp);
 
     let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
 
@@ -49,10 +41,7 @@ pub async fn http2(
         let example_com = if disable_domain_sni {
             (socket_addrs.ip()).into()
         } else {
-            sn.string()
-                .to_string()
-                .try_into()
-                .expect("Invalid server name")
+            sn.to_string().try_into().expect("Invalid server name")
         };
         // TLS Client
         let tls_conn = tokio_rustls::TlsConnector::from(Arc::clone(&h2tls))
@@ -102,19 +91,10 @@ pub async fn http2(
 
             if let Some((dns_query, query_size, addr)) = tank {
                 let h2_client = client.clone();
-                let cpath = cpath.clone();
-                let udp_arc = arc_udp.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
-                    if let Err(e) = send_req(
-                        sn,
-                        (*dns_query, query_size),
-                        h2_client,
-                        addr,
-                        udp_arc,
-                        cpath,
-                    )
-                    .await
+                    if let Err(e) =
+                        send_req(sn, (*dns_query, query_size), h2_client, addr, uudp, ucpath).await
                     {
                         println!("{e}");
                         temp = true;
@@ -129,14 +109,14 @@ pub async fn http2(
                 continue;
             }
             // Recive dns query
-            if let Ok((query_size, addr)) = arc_udp.recv_from(&mut dns_query).await {
+            if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
                 // rule check
-                if (arc_rule.is_some()
+                if (rules.is_some()
                     && rulecheck(
-                        arc_rule.clone(),
+                        rules,
                         crate::rule::RuleDqt::Http(dns_query, query_size),
                         addr,
-                        arc_udp.clone(),
+                        uudp,
                     )
                     .await)
                     || query_size < 12
@@ -151,12 +131,10 @@ pub async fn http2(
 
                 // Base64url dns query
                 let h2_client = client.clone();
-                let cpath = cpath.clone();
-                let udp_arc = arc_udp.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
                     if let Err(e) =
-                        send_req(sn, (dns_query, query_size), h2_client, addr, udp_arc, cpath).await
+                        send_req(sn, (dns_query, query_size), h2_client, addr, uudp, ucpath).await
                     {
                         println!("{e}");
                         temp = true;
@@ -172,12 +150,12 @@ pub async fn http2(
 }
 
 async fn send_req(
-    server_name: Sni,
+    server_name: &'static str,
     dns_query: ([u8; 512], usize),
     mut h2_client: SendRequest<bytes::Bytes>,
     addr: SocketAddr,
-    udp: Arc<tokio::net::UdpSocket>,
-    cpath: Option<Arc<str>>,
+    udp: &'static tokio::net::UdpSocket,
+    ucpath: &'static Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut temp = [0u8; 512];
     let mut url = [0u8; 1024];
@@ -187,9 +165,9 @@ async fn send_req(
         .send_request(
             http::Request::get(genrequrl(
                 &mut Buffering(&mut url, 0),
-                server_name.slice(),
+                server_name.as_bytes(),
                 base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?,
-                cpath,
+                ucpath,
             )?)
             .version(http::Version::HTTP_2)
             .header("Accept", "application/dns-message")

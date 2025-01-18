@@ -1,12 +1,12 @@
 use crate::utils::Buffering;
 use core::str;
-use std::{str::Utf8Error, sync::Arc};
+use std::str::Utf8Error;
 
 pub fn genrequrl<'a>(
     url: &'a mut Buffering,
     server_name: &[u8],
     query_bs4url: &[u8],
-    path: Option<Arc<str>>,
+    path: &'static Option<String>,
 ) -> Result<&'a str, Utf8Error> {
     if let Some(cpath) = path {
         url.write(b"https://")
@@ -28,7 +28,7 @@ pub fn genrequrlh1<'a>(
     url: &'a mut Buffering,
     server_name: &[u8],
     query_bs4url: &[u8],
-    path: &Option<&str>,
+    path: &'static Option<String>,
 ) -> &'a [u8] {
     let main = b"GET /dns-query?dns=";
     let main_end = b" HTTP/1.1\r\nHost: ";

@@ -6,31 +6,30 @@ use tokio::sync::Mutex;
 use tokio::time::{sleep, Instant};
 
 use crate::rule::rulecheck;
-use crate::utils::{convert_two_u8s_to_u16_be, Sni};
+use crate::utils::{convert_two_u8s_to_u16_be, unsafe_staticref};
 use crate::{config, tls, utils::convert_u16_to_two_u8s_be};
 
 pub async fn dot_nonblocking(
-    sn: Sni,
+    sn: &'static str,
     disable_domain_sni: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
     fragmenting: &config::Fragmenting,
     connection: config::Connection,
-    rule: crate::Rules,
+    rules: &Option<Vec<crate::rule::Rule>>,
 ) {
-    let arc_rule: Option<Arc<Vec<crate::rule::Rule>>> = if rule.is_some() {
-        Some(Arc::new(rule.unwrap()))
-    } else {
-        None
-    };
     let ctls = tls::tlsconf(vec![b"dot".to_vec()]);
+
+    let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
+    let uudp = unsafe_staticref(&udp);
+
     let mut retry = 0u8;
     loop {
         if retry == 5 {
             panic!();
         }
         let tls_conn = tls::tls_conn_gen(
-            sn.string().to_string(),
+            sn.to_string(),
             disable_domain_sni,
             socket_addrs,
             fragmenting.clone(),
@@ -59,7 +58,6 @@ pub async fn dot_nonblocking(
         // Tls Client
         let (mut conn_r, mut conn_w) = tokio::io::split(tls_conn.unwrap());
         // UDP Server to recv dns query
-        let udp = Arc::new(tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap());
 
         // Hold dns message ID with it's dns resolver Addr to match
         let waiters: Arc<Mutex<Vec<(u16, std::net::SocketAddr, Instant)>>> =
@@ -67,10 +65,8 @@ pub async fn dot_nonblocking(
 
         // Task to Recv from DOT
         let arc_waiters = Arc::clone(&waiters);
-        let arc_udp = udp.clone();
         let task = tokio::spawn(async move {
             let waiters = arc_waiters;
-            let udp = arc_udp;
             loop {
                 // Recv DOT query
                 let mut resp_dot_query = [0; 4096];
@@ -85,7 +81,9 @@ pub async fn dot_nonblocking(
                         if let Some(waiter) = waiters_lock.iter().position(|waiter| {
                             waiter.0 == convert_two_u8s_to_u16_be([query[0], query[1]])
                         }) {
-                            let _ = udp.send_to(query, waiters_lock.swap_remove(waiter).1).await;
+                            let _ = uudp
+                                .send_to(query, waiters_lock.swap_remove(waiter).1)
+                                .await;
                         }
                     }
                 } else {
@@ -119,12 +117,12 @@ pub async fn dot_nonblocking(
             // Recv dns query
             if let Ok((query_size, addr)) = udp.recv_from(&mut query[2..]).await {
                 // rule check
-                if (arc_rule.is_some()
+                if (rules.is_some()
                     && rulecheck(
-                        arc_rule.clone(),
+                        rules,
                         crate::rule::RuleDqt::Tls(query, query_size),
                         addr,
-                        udp.clone(),
+                        uudp,
                     )
                     .await)
                     || query_size < 12

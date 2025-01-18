@@ -3,11 +3,11 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::time::sleep;
 
 use crate::rule::rulecheck_sync;
-use crate::utils::{convert_two_u8s_to_u16_be, Sni};
+use crate::utils::convert_two_u8s_to_u16_be;
 use crate::{config, tls, utils::convert_u16_to_two_u8s_be};
 
 pub async fn dot(
-    sn: Sni,
+    sn: &'static str,
     disable_domain_sni: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
@@ -21,7 +21,7 @@ pub async fn dot(
     let mut retry = 0u8;
     loop {
         let tls_conn = tls::tls_conn_gen(
-            sn.string().to_string(),
+            sn.to_string(),
             disable_domain_sni,
             socket_addrs,
             fragmenting.clone(),

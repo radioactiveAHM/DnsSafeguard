@@ -1,4 +1,4 @@
-use std::{net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr}, sync::Arc};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
 use crate::{
     config::TargetType,
@@ -27,10 +27,10 @@ impl RuleDqt {
 }
 
 pub async fn rulecheck(
-    rules: Option<Arc<Vec<crate::rule::Rule>>>,
+    rules: &Option<Vec<crate::rule::Rule>>,
     mut dq: RuleDqt,
     client_addr: SocketAddr,
-    udp: Arc<tokio::net::UdpSocket>,
+    udp: &'static tokio::net::UdpSocket,
 ) -> bool {
     for rule in rules.as_deref().unwrap() {
         match &rule.target {
@@ -72,12 +72,12 @@ pub async fn rulecheck(
                         return true;
                     }
                 }
-            },
+            }
             TargetType::ip(ip) => {
                 for option in &rule.options {
                     if catch_in_buff(option, dq.slice()).is_some() {
                         let mut temp = [0; 1024];
-                        let mut resp =  Buffering(&mut temp, 0);
+                        let mut resp = Buffering(&mut temp, 0);
                         match ip {
                             IpAddr::V4(ipv4) => {
                                 if gen_resp_v4(dq.slice(), &mut resp, ipv4) {
@@ -86,7 +86,7 @@ pub async fn rulecheck(
                                 } else {
                                     return false;
                                 }
-                            },
+                            }
                             IpAddr::V6(ipv6) => {
                                 if gen_resp_v6(dq.slice(), &mut resp, ipv6) {
                                     let _ = udp.send_to(resp.get(), client_addr).await;
@@ -109,7 +109,7 @@ async fn handle_bypass(
     dq: RuleDqt,
     client_addr: SocketAddr,
     bypass_target: SocketAddr,
-    udp: Arc<tokio::net::UdpSocket>,
+    udp: &'static tokio::net::UdpSocket,
 ) -> tokio::io::Result<()> {
     let agent = tokio::net::UdpSocket::bind("0.0.0.0:0").await?;
     agent.connect(bypass_target).await?;
@@ -163,12 +163,12 @@ pub async fn rulecheck_sync(
                         return true;
                     }
                 }
-            },
+            }
             TargetType::ip(ip) => {
                 for option in &rule.options {
                     if catch_in_buff(option, dq).is_some() {
                         let mut temp = [0; 1024];
-                        let mut resp =  Buffering(&mut temp, 0);
+                        let mut resp = Buffering(&mut temp, 0);
                         match ip {
                             IpAddr::V4(ipv4) => {
                                 if gen_resp_v4(dq, &mut resp, ipv4) {
@@ -177,7 +177,7 @@ pub async fn rulecheck_sync(
                                 } else {
                                     return false;
                                 }
-                            },
+                            }
                             IpAddr::V6(ipv6) => {
                                 if gen_resp_v6(dq, &mut resp, ipv6) {
                                     let _ = udp.send_to(resp.get(), client_addr).await;
@@ -368,26 +368,32 @@ impl Targets {
 }
 
 fn gen_resp_v4(buff: &[u8], resp: &mut Buffering, ip: &Ipv4Addr) -> bool {
-    if &buff[2..12]==[1,0,0,1,0,0,0,0,0,0] && &buff[buff.len()-4..buff.len()-2]==[0,1] {
-        resp.write(buff).mutate(7, 1).mutate(2, 133).write(
-            &buff[12..]
-        ).write(
-            &[0,0,0,20,0, 4]
-        ).write(&ip.octets());
-        
+    if buff[2..12] == [1, 0, 0, 1, 0, 0, 0, 0, 0, 0]
+        && buff[buff.len() - 4..buff.len() - 2] == [0, 1]
+    {
+        resp.write(buff)
+            .mutate(7, 1)
+            .mutate(2, 133)
+            .write(&buff[12..])
+            .write(&[0, 0, 0, 20, 0, 4])
+            .write(&ip.octets());
+
         return true;
     }
     false
 }
 
 fn gen_resp_v6(buff: &[u8], resp: &mut Buffering, ip: &Ipv6Addr) -> bool {
-    if &buff[2..12]==[1,0,0,1,0,0,0,0,0,0] && &buff[buff.len()-4..buff.len()-2]==[0,28] {
-        resp.write(buff).mutate(7, 1).mutate(2, 133).write(
-            &buff[12..]
-        ).write(
-            &[0,0,0,20,0, 16]
-        ).write(&ip.octets());
-        
+    if buff[2..12] == [1, 0, 0, 1, 0, 0, 0, 0, 0, 0]
+        && buff[buff.len() - 4..buff.len() - 2] == [0, 28]
+    {
+        resp.write(buff)
+            .mutate(7, 1)
+            .mutate(2, 133)
+            .write(&buff[12..])
+            .write(&[0, 0, 0, 20, 0, 16])
+            .write(&ip.octets());
+
         return true;
     }
     false

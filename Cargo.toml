@@ -15,7 +15,7 @@ categories = [
 [dependencies]
 webpki-roots = "0.26.7"
 serde = { version = "1.0.217", features = ["derive"] }
-serde_json = "1.0.135"
+serde_json = "1.0.136"
 rand = "0.8.5"
 quinn = "0.11.6"
 tokio = { version = "1.43.0", features = ["rt-multi-thread", "net", "macros"] }
@@ -29,6 +29,7 @@ tokio-rustls = { git = "https://github.com/radioactiveAHM/tokio-rustls.git", def
 crossbeam-channel = "0.5.14"
 socket2 = "0.5.8"
 chrono = "0.4.39"
+futures = "0.3.31"
 
 [profile.release]
 panic = "abort"

@@ -154,6 +154,7 @@ async fn handle_resp(
     buff: &[u8],
     size: usize,
 ) -> tokio::io::Result<()> {
+    let waker = futures::task::noop_waker();
     let t = chrono::Utc::now()
         .format("%a, %d %b %Y %H:%M:%S GMT")
         .to_string();
@@ -173,11 +174,58 @@ async fn handle_resp(
         .body(())
         .unwrap();
 
-    if let Ok(mut bframe) = rframe.send_response(heads, false) {
-        bframe.reserve_capacity(size);
-        if let Err(e) = bframe.send_data(Bytes::copy_from_slice(&buff[..size]), true) {
+    let mut cx = std::task::Context::from_waker(&waker);
+    let pending = match rframe.poll_reset(&mut cx) {
+        std::task::Poll::Ready(Ok(_)) => {
+            return Ok(());
+        },
+        std::task::Poll::Ready(Err(e)) => {
             return Err(tokio::io::Error::other(e));
+        },
+        std::task::Poll::Pending => {
+            rframe.send_response(heads, false)
         }
+    };
+
+    if let Ok(mut bframe) = pending {
+        bframe.reserve_capacity(size);
+        let mut cx = std::task::Context::from_waker(&waker);
+        let mut written = 0;
+        loop {
+            match bframe.poll_capacity(&mut cx) {
+                std::task::Poll::Ready(Some(Ok(capacity))) => {
+                    if capacity>=size {
+                        if let Err(e) = bframe.send_data(Bytes::copy_from_slice(&buff[..size]), true) {
+                            return Err(tokio::io::Error::other(e));
+                        }
+                        break;
+                    } else {
+                        if written+capacity >= size {
+                            if let Err(e) = bframe.send_data(Bytes::copy_from_slice(&buff[written..written+capacity]), false) {
+                                return Err(tokio::io::Error::other(e));
+                            } 
+                        }else {
+                            if let Err(e) = bframe.send_data(Bytes::copy_from_slice(&buff[written..size]), false) {
+                                return Err(tokio::io::Error::other(e));
+                            } 
+                        }
+
+                        written += capacity;
+                    }
+                }
+                std::task::Poll::Ready(Some(Err(e))) => {
+                    return Err(tokio::io::Error::other(e));
+                }
+                std::task::Poll::Ready(None) => {
+                    return Err(tokio::io::Error::from(tokio::io::ErrorKind::ConnectionReset));
+                }
+                std::task::Poll::Pending => {
+                    continue;
+                }
+            }
+        }
+    } else {
+        return Err(tokio::io::Error::other(pending.unwrap_err()));
     }
 
     Ok(())

@@ -121,6 +121,8 @@ impl Display for HTTP11Errors {
     }
 }
 impl std::error::Error for HTTP11Errors {}
+
+#[allow(clippy::large_enum_variant)]
 enum Method {
     Get(DnsQuery),
     Post([u8; 512], usize),

@@ -9,13 +9,14 @@ use crate::{config, tls, utils::convert_u16_to_two_u8s_be};
 pub async fn dot(
     sn: &'static str,
     disable_domain_sni: bool,
+    dcv: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
     fragmenting: &config::Fragmenting,
     connection: config::Connection,
     rule: crate::Rules,
 ) {
-    let ctls = tls::tlsconf(vec![b"dot".to_vec()]);
+    let ctls = tls::tlsconf(vec![b"dot".to_vec()], dcv);
     let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
     let mut tank: Option<(Box<[u8; 514]>, usize, SocketAddr)> = None;
     let mut retry = 0u8;

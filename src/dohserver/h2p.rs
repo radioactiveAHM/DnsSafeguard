@@ -178,13 +178,11 @@ async fn handle_resp(
     let pending = match rframe.poll_reset(&mut cx) {
         std::task::Poll::Ready(Ok(_)) => {
             return Ok(());
-        },
+        }
         std::task::Poll::Ready(Err(e)) => {
             return Err(tokio::io::Error::other(e));
-        },
-        std::task::Poll::Pending => {
-            rframe.send_response(heads, false)
         }
+        std::task::Poll::Pending => rframe.send_response(heads, false),
     };
 
     if let Ok(mut bframe) = pending {
@@ -194,20 +192,25 @@ async fn handle_resp(
         loop {
             match bframe.poll_capacity(&mut cx) {
                 std::task::Poll::Ready(Some(Ok(capacity))) => {
-                    if capacity>=size {
-                        if let Err(e) = bframe.send_data(Bytes::copy_from_slice(&buff[..size]), true) {
+                    if capacity >= size {
+                        if let Err(e) =
+                            bframe.send_data(Bytes::copy_from_slice(&buff[..size]), true)
+                        {
                             return Err(tokio::io::Error::other(e));
                         }
                         break;
                     } else {
-                        if written+capacity >= size {
-                            if let Err(e) = bframe.send_data(Bytes::copy_from_slice(&buff[written..written+capacity]), false) {
+                        if written + capacity >= size {
+                            if let Err(e) = bframe.send_data(
+                                Bytes::copy_from_slice(&buff[written..written + capacity]),
+                                false,
+                            ) {
                                 return Err(tokio::io::Error::other(e));
-                            } 
-                        }else {
-                            if let Err(e) = bframe.send_data(Bytes::copy_from_slice(&buff[written..size]), false) {
-                                return Err(tokio::io::Error::other(e));
-                            } 
+                            }
+                        } else if let Err(e) =
+                            bframe.send_data(Bytes::copy_from_slice(&buff[written..size]), false)
+                        {
+                            return Err(tokio::io::Error::other(e));
                         }
 
                         written += capacity;
@@ -217,7 +220,9 @@ async fn handle_resp(
                     return Err(tokio::io::Error::other(e));
                 }
                 std::task::Poll::Ready(None) => {
-                    return Err(tokio::io::Error::from(tokio::io::ErrorKind::ConnectionReset));
+                    return Err(tokio::io::Error::from(
+                        tokio::io::ErrorKind::ConnectionReset,
+                    ));
                 }
                 std::task::Poll::Pending => {
                     continue;

@@ -16,6 +16,7 @@ use crate::utils::tcp_connect_handle;
 pub async fn http2(
     sn: &'static str,
     disable_domain_sni: bool,
+    dcv: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
     fragmenting: &config::Fragmenting,
@@ -24,7 +25,7 @@ pub async fn http2(
     ucpath: &'static Option<String>,
 ) {
     // TLS Conf
-    let h2tls = tls::tlsconf(vec![b"h2".to_vec()]);
+    let h2tls = tls::tlsconf(vec![b"h2".to_vec()], dcv);
 
     let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
     let uudp = unsafe_staticref(&udp);

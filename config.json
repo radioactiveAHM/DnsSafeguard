@@ -2,12 +2,13 @@
 	"protocol": "h2",
 	"server_name": "cloudflare-dns.com",
 	"disable_domain_sni": false,
+	"disable_certificate_validation": true,
 	"socket_addrs": "1.1.1.1:443",
 	"udp_socket_addrs": "127.0.0.1:53",
 	"custom_http_path": null,
 	"fragmenting": {
 		"enable": true,
-		"method": "random",
+		"method": "single",
 		"sleep_interval_min": 10,
 		"sleep_interval_max": 100
 	},
@@ -25,6 +26,7 @@
 		"protocol": "h2",
 		"server_name": "cloudflare-dns.com",
 		"disable_domain_sni": false,
+		"disable_certificate_validation": true,
 		"socket_addrs": "[2001:4860:4860::8888]:443",
 		"udp_socket_addrs": "[::1]:53",
 		"custom_http_path": null,

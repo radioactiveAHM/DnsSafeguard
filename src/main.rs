@@ -58,6 +58,7 @@ async fn main() {
                     h1_multi(
                         usn6,
                         v6.disable_domain_sni,
+                        v6.disable_certificate_validation,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
                         &v6.fragmenting,
@@ -71,6 +72,7 @@ async fn main() {
                     http1(
                         usn6,
                         v6.disable_domain_sni,
+                        v6.disable_certificate_validation,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
                         &v6.fragmenting,
@@ -84,6 +86,7 @@ async fn main() {
                     doh2::http2(
                         usn6,
                         v6.disable_domain_sni,
+                        v6.disable_certificate_validation,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
                         &v6.fragmenting,
@@ -110,6 +113,7 @@ async fn main() {
                     dot::dot(
                         usn6,
                         v6.disable_domain_sni,
+                        v6.disable_certificate_validation,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
                         &v6.fragmenting,
@@ -122,6 +126,7 @@ async fn main() {
                     dot::dot_nonblocking(
                         usn6,
                         v6.disable_domain_sni,
+                        v6.disable_certificate_validation,
                         v6.socket_addrs,
                         v6.udp_socket_addrs,
                         &v6.fragmenting,
@@ -151,6 +156,7 @@ async fn main() {
             h1_multi(
                 usn,
                 conf.disable_domain_sni,
+                conf.disable_certificate_validation,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
                 &conf.fragmenting,
@@ -164,6 +170,7 @@ async fn main() {
             http1(
                 usn,
                 conf.disable_domain_sni,
+                conf.disable_certificate_validation,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
                 &conf.fragmenting,
@@ -177,6 +184,7 @@ async fn main() {
             doh2::http2(
                 usn,
                 conf.disable_domain_sni,
+                conf.disable_certificate_validation,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
                 &conf.fragmenting,
@@ -203,6 +211,7 @@ async fn main() {
             dot::dot(
                 usn,
                 conf.disable_domain_sni,
+                conf.disable_certificate_validation,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
                 &conf.fragmenting,
@@ -215,6 +224,7 @@ async fn main() {
             dot::dot_nonblocking(
                 usn,
                 conf.disable_domain_sni,
+                conf.disable_certificate_validation,
                 conf.socket_addrs,
                 conf.udp_socket_addrs,
                 &conf.fragmenting,

@@ -14,6 +14,7 @@ use tokio::{
 pub async fn http1(
     sn: &'static str,
     disable_domain_sni: bool,
+    dcv: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
     fragmenting: &Fragmenting,
@@ -22,7 +23,7 @@ pub async fn http1(
     ucpath: &'static Option<String>,
 ) {
     // TLS Client
-    let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()]);
+    let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()], dcv);
     let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
 
     let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();

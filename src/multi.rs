@@ -21,6 +21,7 @@ type CrossContainer = (
 pub async fn h1_multi(
     sn: &'static str,
     disable_domain_sni: bool,
+    dcv: bool,
     socket_addrs: SocketAddr,
     udp_socket_addrs: SocketAddr,
     fragmenting: &config::Fragmenting,
@@ -29,7 +30,7 @@ pub async fn h1_multi(
     ucpath: &'static Option<String>,
 ) {
     // TLS Client Config
-    let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()]);
+    let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()], dcv);
 
     // UDP Socket for DNS Query
     let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();

@@ -37,4 +37,3 @@ lto = true
 opt-level = 3
 strip = true
 debug = false
-rpath = false

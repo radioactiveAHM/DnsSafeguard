@@ -93,6 +93,7 @@ The configuration file is structured in JSON format and includes the following s
   - `doq`: DoQ Connection (DNS over QUIC).
 - `Server Name`: The domain name of the DNS server.
 - `Disable Domain SNI`: When enabled, the server name is not used as SNI, which can be a good alternative to the fragmenting method. Some public DNS servers, like Google, support this. Supported protocols include H1, H2, DoT, DoT_nonblocking, and H1_multi.
+- `Disable Certificate Validation`: This option ignores certificate server name matching, enabling the use of domain fronting. For example, you can use `www.google.com` as the server name, which is not blocked by the Great Firewall (GFW). Many DNS servers, such as Google, Quad9, and NextDNS, support this option. However, Cloudflare does not, as it uses SNI guard. This is the best option for bypassing the GFW. **Disable Fragmenting**.
 - `Socket Addresses`: The IP address and port for the DNS server connection.
 - `UDP Socket Addresses`: Local UDP address and port for DNS queries.
 - `Custom Http Path`: Specify a custom HTTP path for HTTP-based protocols such as H1, H2, and H3. Use `null` for default which is the standard DoH path.

@@ -155,15 +155,10 @@ async fn handle_resp(
     size: usize,
 ) -> tokio::io::Result<()> {
     let waker = futures::task::noop_waker();
-    let t = chrono::Utc::now()
-        .format("%a, %d %b %Y %H:%M:%S GMT")
-        .to_string();
     let heads = Response::builder()
         .version(http::Version::HTTP_2)
         .status(http::status::StatusCode::OK)
         .header("Content-Type", "application/dns-message")
-        .header("Date", &t)
-        .header("Expires", &t)
         .header("Cache-Control", "no-cache")
         .header("Access-Control-Allow-Origin", "*")
         .header("Server", "HTTP server")

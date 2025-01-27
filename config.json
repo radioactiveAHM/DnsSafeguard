@@ -2,7 +2,7 @@
 	"protocol": "h2",
 	"server_name": "cloudflare-dns.com",
 	"disable_domain_sni": false,
-	"disable_certificate_validation": true,
+	"disable_certificate_validation": false,
 	"socket_addrs": "1.1.1.1:443",
 	"udp_socket_addrs": "127.0.0.1:53",
 	"custom_http_path": null,
@@ -26,8 +26,8 @@
 		"protocol": "h2",
 		"server_name": "cloudflare-dns.com",
 		"disable_domain_sni": false,
-		"disable_certificate_validation": true,
-		"socket_addrs": "[2001:4860:4860::8888]:443",
+		"disable_certificate_validation": false,
+		"socket_addrs": "[2606:4700:4700::1111]:443",
 		"udp_socket_addrs": "[::1]:53",
 		"custom_http_path": null,
 		"fragmenting": {
@@ -38,11 +38,11 @@
 		},
 		"noise": {
 			"enable": false,
-			"ntype": "rand",
+			"ntype": "dns",
 			"content": "google.com",
 			"packet_length": 1,
-			"packets": 3,
-			"sleep": 500,
+			"packets": 1,
+			"sleep": 1000,
 			"continues": false
 		}
 	},
@@ -58,7 +58,7 @@
 		"dot_nonblocking_dns_query_lifetime": 5,
 		"reconnect_sleep": 1,
 		"max_reconnect": 5,
-		"max_reconnect_sleep": 30
+		"max_reconnect_sleep": 2
 	},
 	"doh_server": {
 		"enable": false,

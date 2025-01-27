@@ -108,7 +108,9 @@ impl tokio_rustls::rustls::client::danger::ServerCertVerifier for NoCertificateV
         tokio_rustls::rustls::client::danger::HandshakeSignatureValid,
         tokio_rustls::rustls::Error,
     > {
-        Err(tokio_rustls::rustls::Error::General("tls1.2 not supported".to_string()))
+        Err(tokio_rustls::rustls::Error::General(
+            "tls1.2 not supported".to_string(),
+        ))
     }
     fn verify_tls13_signature(
         &self,

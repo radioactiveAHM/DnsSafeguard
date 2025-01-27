@@ -87,16 +87,11 @@ async fn handle_req(
     }
 
     let mut temp = [0u8; 4096];
-    let t = chrono::Utc::now()
-        .format("%a, %d %b %Y %H:%M:%S GMT")
-        .to_string();
     let _ = stream.write(
         Buffering(&mut temp, 0)
     .write(
         format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/dns-message\r\nCache-Control: no-cache\r\nDate: {}\r\nExpires: {}\r\nAccess-Control-Allow-Origin: *\r\nServer: HTTP server\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: SAMEORIGIN\r\nX-Xss-Protection: 0\r\ncontent-length: {}\r\n\r\n",
-            &t,
-            &t,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/dns-message\r\nCache-Control: no-cache\r\nAccess-Control-Allow-Origin: *\r\nServer: HTTP server\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: SAMEORIGIN\r\nX-Xss-Protection: 0\r\ncontent-length: {}\r\n\r\n",
             size
         ).as_bytes()
     ).write(&respbuff[..size]).get()

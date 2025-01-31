@@ -12,6 +12,7 @@ pub async fn serve_http11(
     mut stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     udp_socket_addrs: SocketAddr,
     log: bool,
+    cache_control: &'static String
 ) -> tokio::io::Result<()> {
     let peer = stream.get_ref().0.peer_addr()?;
     let agent = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
@@ -34,6 +35,7 @@ pub async fn serve_http11(
                     &mut respbuff,
                     log,
                     &peer,
+                    cache_control
                 )
                 .await
                 {
@@ -58,6 +60,7 @@ async fn handle_req(
     respbuff: &mut [u8],
     log: bool,
     peer: &SocketAddr,
+    cache_control: &'static String
 ) -> tokio::io::Result<()> {
     let req = {
         match HTTP11::parse(buff, stream).await {
@@ -91,8 +94,7 @@ async fn handle_req(
         Buffering(&mut temp, 0)
     .write(
         format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/dns-message\r\nCache-Control: no-cache\r\nAccess-Control-Allow-Origin: *\r\nServer: HTTP server\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: SAMEORIGIN\r\ncontent-length: {}\r\n\r\n",
-            size
+            "HTTP/1.1 200 OK\r\nContent-Type: application/dns-message\r\nCache-Control: {cache_control}\r\nAccess-Control-Allow-Origin: *\r\nServer: HTTP server\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: SAMEORIGIN\r\ncontent-length: {size}\r\n\r\n"
         ).as_bytes()
     ).write(&respbuff[..size]).get()
     ).await?;

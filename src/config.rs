@@ -111,6 +111,7 @@ pub struct DohServer {
     pub listen_address: std::net::SocketAddr,
     pub certificate: String,
     pub key: String,
+    pub cache_control: String,
     pub log_errors: bool,
 }
 

@@ -11,6 +11,7 @@ use tokio::time::sleep;
 use tokio_rustls::{rustls, TlsAcceptor};
 
 use crate::config::DohServer;
+use crate::utils::unsafe_staticref;
 
 pub struct Tc {
     pub acceptor: TlsAcceptor,
@@ -74,11 +75,13 @@ pub async fn doh_server(dsc: DohServer, udp_socket_addrs: SocketAddr) {
 
     println!("DoH server Listening on {}", dsc.listen_address);
 
+    let cache_control: &'static String = unsafe_staticref(&dsc.cache_control);
+
     loop {
         match Tc::new(acceptor.clone(), listener.accept().await) {
             Ok(tc) => {
                 tokio::spawn(async move {
-                    if let Err(e) = tc_handler(tc, udp_socket_addrs, dsc.log_errors).await {
+                    if let Err(e) = tc_handler(tc, udp_socket_addrs, dsc.log_errors, cache_control).await {
                         if dsc.log_errors {
                             println!("DoH server<TLS>: {e}")
                         }
@@ -94,13 +97,13 @@ pub async fn doh_server(dsc: DohServer, udp_socket_addrs: SocketAddr) {
     }
 }
 
-async fn tc_handler(tc: Tc, udp_socket_addrs: SocketAddr, log: bool) -> tokio::io::Result<()> {
+async fn tc_handler(tc: Tc, udp_socket_addrs: SocketAddr, log: bool, cache_control: &'static String) -> tokio::io::Result<()> {
     let mut stream = tc.accept().await?;
 
     if let Some(alpn) = stream.get_ref().1.alpn_protocol() {
         match alpn {
-            b"h2" => h2p::serve_h2(stream, udp_socket_addrs, log).await?,
-            b"http/1.1" => h11p::serve_http11(stream, udp_socket_addrs, log).await?,
+            b"h2" => h2p::serve_h2(stream, udp_socket_addrs, log, cache_control).await?,
+            b"http/1.1" => h11p::serve_http11(stream, udp_socket_addrs, log, cache_control).await?,
             _ => {
                 stream.get_mut().1.send_close_notify();
                 return Err(tokio::io::Error::other(
@@ -109,7 +112,7 @@ async fn tc_handler(tc: Tc, udp_socket_addrs: SocketAddr, log: bool) -> tokio::i
             }
         }
     } else {
-        h11p::serve_http11(stream, udp_socket_addrs, log).await?
+        h11p::serve_http11(stream, udp_socket_addrs, log, cache_control).await?
     }
 
     Ok(())

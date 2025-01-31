@@ -164,7 +164,6 @@ async fn handle_resp(
         .header("Server", "HTTP server")
         .header("X-Content-Type-Options", "nosniff")
         .header("X-Frame-Options", "SAMEORIGIN")
-        .header("X-Xss-Protection", "0")
         .header("content-length", size)
         .body(())
         .unwrap();

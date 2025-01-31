@@ -1,4 +1,3 @@
-use rand::Rng;
 use std::time::Duration;
 use tokio::{io::AsyncWriteExt, time::sleep};
 use tokio_rustls::rustls::ClientConnection;
@@ -28,66 +27,29 @@ impl std::io::Write for TlsHello {
     }
 }
 
-/// 3 TCP segments with TLS client hello pack
-pub async fn fragment_client_hello<IO: AsyncWriteExt + std::marker::Unpin>(
-    c: &mut ClientConnection,
+async fn segmentation<IO: AsyncWriteExt + std::marker::Unpin>(
     tcp: &mut IO,
     fragmenting: &crate::config::Fragmenting,
+    fragment: &[u8],
 ) -> tokio::io::Result<()> {
-    let mut mr_randy = rand::rngs::OsRng;
-    // Buffer to store TLS Client Hello
-    let mut buff = TlsHello {
-        buff: [0; 1024 * 4],
-    };
-    let l = c.write_tls(&mut buff)?;
+    let packet = fragment.len() / fragmenting.segments;
+    let mut written = 0;
 
-    // Split TLS Client Hello into 3 parts
-    let packs = (l - 5) / 3;
+    loop {
+        if written + packet >= fragment.len() {
+            let _ = tcp.write(&fragment[written..]).await?;
+            tcp.flush().await?;
+            break;
+        }
+        let _ = tcp.write(&fragment[written..written + packet]).await?;
+        tcp.flush().await?;
+        written += packet;
 
-    let mut fragmented_tls_hello_buf = [0; 512];
-    let mut fragmented_tls_hello = Buffering(&mut fragmented_tls_hello_buf, 0);
-    // Send TLS Client Hello with 3 steps
-    // #1
-    let _ = tcp
-        .write(
-            fragmented_tls_hello
-                .write(&[22, 3, 1, 0, buff.buff[5..packs].len() as u8])
-                .write(&buff.buff[5..packs])
-                .get(),
-        )
-        .await?;
-    tcp.flush().await?;
-    sleep(Duration::from_millis(mr_randy.gen_range(
-        fragmenting.sleep_interval_min..fragmenting.sleep_interval_max,
-    )))
-    .await;
-    // #2
-    let _ = tcp
-        .write(
-            fragmented_tls_hello
-                .reset()
-                .write(&[22, 3, 1, 0, buff.buff[packs..packs * 2].len() as u8])
-                .write(&buff.buff[packs..packs * 2])
-                .get(),
-        )
-        .await?;
-    tcp.flush().await?;
-    sleep(Duration::from_millis(mr_randy.gen_range(
-        fragmenting.sleep_interval_min..fragmenting.sleep_interval_max,
-    )))
-    .await;
-    // #3
-    let _ = tcp
-        .write(
-            fragmented_tls_hello
-                .reset()
-                .write(&[22, 3, 1, 0, buff.buff[packs * 2..l].len() as u8])
-                .write(&buff.buff[packs * 2..l])
-                .get(),
-        )
-        .await?;
-    tcp.flush().await?;
-
+        sleep(Duration::from_millis(rand::random_range(
+            fragmenting.sleep_interval_min..fragmenting.sleep_interval_max,
+        )))
+        .await;
+    }
     Ok(())
 }
 
@@ -105,48 +67,36 @@ pub async fn fragment_client_hello_rand<IO: AsyncWriteExt + std::marker::Unpin>(
     let l = c.write_tls(&mut buff)?;
 
     // Split TLS Client Hello into chunks
-    let mut mr_randy = rand::rngs::OsRng;
     let mut written = 5;
 
     let mut fragmented_tls_hello_buf = [0; 512];
     let mut fragmented_tls_hello = Buffering(&mut fragmented_tls_hello_buf, 0);
     // Send TLS Client Hello with random chunks
     loop {
-        let chunck_size = mr_randy.gen_range(10..l);
+        let chunck_size =
+            rand::random_range(fragmenting.fragment_size_min..fragmenting.fragment_size_max);
         if chunck_size + written >= l {
-            let _ = tcp
-                .write(
-                    fragmented_tls_hello
-                        .reset()
-                        .write(&[22, 3, 1, 0, buff.buff[written..l].len() as u8])
-                        .write(&buff.buff[written..l])
-                        .get(),
-                )
-                .await?;
-            tcp.flush().await?;
+            let fragment = fragmented_tls_hello
+                .reset()
+                .write(&[22, 3, 1, 0, buff.buff[written..l].len() as u8])
+                .write(&buff.buff[written..l])
+                .get();
+            segmentation(tcp, fragmenting, fragment).await?;
             break;
         } else {
-            let _ = tcp
-                .write(
-                    fragmented_tls_hello
-                        .reset()
-                        .write(&[
-                            22,
-                            3,
-                            1,
-                            0,
-                            buff.buff[written..(chunck_size + written)].len() as u8,
-                        ])
-                        .write(&buff.buff[written..(chunck_size + written)])
-                        .get(),
-                )
-                .await?;
-            tcp.flush().await?;
+            let fragment = fragmented_tls_hello
+                .reset()
+                .write(&[
+                    22,
+                    3,
+                    1,
+                    0,
+                    buff.buff[written..(chunck_size + written)].len() as u8,
+                ])
+                .write(&buff.buff[written..(chunck_size + written)])
+                .get();
+            segmentation(tcp, fragmenting, fragment).await?;
             written += chunck_size;
-            sleep(Duration::from_millis(mr_randy.gen_range(
-                fragmenting.sleep_interval_min..fragmenting.sleep_interval_max,
-            )))
-            .await;
         }
     }
 
@@ -157,6 +107,7 @@ pub async fn fragment_client_hello_rand<IO: AsyncWriteExt + std::marker::Unpin>(
 pub async fn fragment_client_hello_pack<IO: AsyncWriteExt + std::marker::Unpin>(
     c: &mut ClientConnection,
     tcp: &mut IO,
+    fragmenting: &crate::config::Fragmenting,
 ) -> tokio::io::Result<()> {
     // Buffer to store TLS Client Hello
     let mut b = TlsHello {
@@ -164,72 +115,26 @@ pub async fn fragment_client_hello_pack<IO: AsyncWriteExt + std::marker::Unpin>(
     };
     // Write TLS Client Hello to Buffer
     let l = c.write_tls(&mut b)?;
-    let psize = (l - 5) / 2;
+
+    let mut written = 5;
     let mut fragmented_tls_hello_buf = [0; 512];
     let mut fragmented_tls_hello = Buffering(&mut fragmented_tls_hello_buf, 0);
-    fragmented_tls_hello
-        .write(&[22, 3, 1, 0, b.buff[5..psize].len() as u8])
-        .write(&b.buff[5..psize])
-        .write(&[22, 3, 1, 0, b.buff[psize..l].len() as u8])
-        .write(&b.buff[psize..l]);
+    loop {
+        let size = rand::random_range(fragmenting.fragment_size_min..fragmenting.fragment_size_max);
+        if written + size >= l {
+            let size = b.buff[written..l].len();
+            fragmented_tls_hello
+                .write(&[22, 3, 1, 0, size as u8])
+                .write(&b.buff[written..l]);
+            break;
+        }
+        fragmented_tls_hello
+            .write(&[22, 3, 1, 0, size as u8])
+            .write(&b.buff[written..written + size]);
+        written += size;
+    }
+
     let _ = tcp.write(fragmented_tls_hello.get()).await?;
-    tcp.flush().await?;
-
-    Ok(())
-}
-
-pub async fn fragment_client_hello_jump<IO: AsyncWriteExt + std::marker::Unpin>(
-    c: &mut ClientConnection,
-    tcp: &mut IO,
-    fragmenting: &crate::config::Fragmenting,
-) -> tokio::io::Result<()> {
-    let mut mr_randy = rand::rngs::OsRng;
-    // Buffer to store TLS Client Hello
-    let mut tlshello = TlsHello {
-        buff: [0; 1024 * 4],
-    };
-    let l = c.write_tls(&mut tlshello)?;
-
-    let mut fragmented_tls_hello_buf = [0; 512];
-    let mut fragmented_tls_hello = Buffering(&mut fragmented_tls_hello_buf, 0);
-    let psize = (l - 5) / 2;
-    let _ = tcp
-        .write(
-            fragmented_tls_hello
-                .write(&[22, 3, 1, 0, tlshello.buff[5..psize].len() as u8])
-                .write(&tlshello.buff[5..(psize / 2)])
-                .get(),
-        )
-        .await?;
-    tcp.flush().await?;
-    sleep(Duration::from_millis(mr_randy.gen_range(
-        fragmenting.sleep_interval_min..fragmenting.sleep_interval_max,
-    )))
-    .await;
-
-    let _ = tcp.write(&tlshello.buff[(psize / 2)..psize]).await?;
-    tcp.flush().await?;
-    sleep(Duration::from_millis(mr_randy.gen_range(
-        fragmenting.sleep_interval_min..fragmenting.sleep_interval_max,
-    )))
-    .await;
-
-    let _ = tcp
-        .write(
-            fragmented_tls_hello
-                .reset()
-                .write(&[22, 3, 1, 0, tlshello.buff[psize..l].len() as u8])
-                .write(&tlshello.buff[psize..(psize + (psize / 2))])
-                .get(),
-        )
-        .await?;
-    tcp.flush().await?;
-    sleep(Duration::from_millis(mr_randy.gen_range(
-        fragmenting.sleep_interval_min..fragmenting.sleep_interval_max,
-    )))
-    .await;
-
-    let _ = tcp.write(&tlshello.buff[(psize + (psize / 2))..l]).await?;
     tcp.flush().await?;
 
     Ok(())

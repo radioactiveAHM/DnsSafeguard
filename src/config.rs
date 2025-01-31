@@ -3,10 +3,8 @@ use std::net::IpAddr;
 #[derive(serde::Deserialize, Clone, Copy)]
 #[allow(non_camel_case_types)]
 pub enum FragMethod {
-    linear,
     random,
     single,
-    jump,
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -15,6 +13,9 @@ pub struct Fragmenting {
     pub method: FragMethod,
     pub sleep_interval_min: u64,
     pub sleep_interval_max: u64,
+    pub fragment_size_min: usize,
+    pub fragment_size_max: usize,
+    pub segments: usize,
 }
 
 #[derive(serde::Deserialize, Clone, Copy)]

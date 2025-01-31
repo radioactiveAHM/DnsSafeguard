@@ -54,7 +54,7 @@ pub mod dns {
 
         pub fn with_domain(domain: &str) -> Vec<u8> {
             let mut random = [0u8; 1024];
-            rand::thread_rng().fill(&mut random);
+            rand::rng().fill(&mut random);
 
             let ab: Vec<&str> = domain.split(".").collect();
             let query = Query {
@@ -86,8 +86,8 @@ pub mod lsd {
     use std::net::SocketAddr;
 
     use rand::{
-        distributions::{Alphanumeric, DistString},
-        thread_rng, Rng,
+        distr::{Alphanumeric, SampleString},
+        rng, Rng,
     };
 
     pub struct Lsd<'a> {
@@ -101,11 +101,11 @@ pub mod lsd {
 
     impl Lsd<'_> {
         pub fn new(target: SocketAddr) -> Self {
-            let mut rng = thread_rng();
+            let mut rng = rng();
             Lsd {
                 header: "BT-SEARCH * HTTP/1.1",
                 host: format!("Host: {}", target),
-                port: format!("Port: {}", rng.gen::<u16>()),
+                port: format!("Port: {}", rng.random::<u16>()),
                 infohash: format!("Infohash: {}", Alphanumeric.sample_string(&mut rng, 40)),
                 cookie: format!("Cookie: {}", Alphanumeric.sample_string(&mut rng, 8)),
             }
@@ -147,7 +147,7 @@ pub async fn noiser(noise: Noise, target: SocketAddr, socket: &socket2::Socket) 
             for _ in 0..noise.packets {
                 // generate random packet
                 let mut packet = [0u8; 1024];
-                rand::thread_rng().fill(&mut packet);
+                rand::rng().fill(&mut packet);
                 // send packet
                 if socket
                     .send_to(&packet[..noise.packet_length], &target.into())
@@ -200,7 +200,7 @@ async fn continues_noise(noise: Noise, target: SocketAddr, socket: socket2::Sock
                 for _ in 0..noise.packets {
                     // generate random packet
                     let mut packet = [0u8; 1024];
-                    rand::thread_rng().fill(&mut packet);
+                    rand::rng().fill(&mut packet);
                     // send packet
                     if socket
                         .send_to(&packet[..noise.packet_length], &target.into())

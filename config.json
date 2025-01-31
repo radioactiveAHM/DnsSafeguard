@@ -8,9 +8,12 @@
 	"custom_http_path": null,
 	"fragmenting": {
 		"enable": true,
-		"method": "single",
+		"method": "random",
 		"sleep_interval_min": 10,
-		"sleep_interval_max": 100
+		"sleep_interval_max": 100,
+		"fragment_size_min": 50,
+		"fragment_size_max": 100,
+		"segments": 2
 	},
 	"noise": {
 		"enable": true,
@@ -32,9 +35,12 @@
 		"custom_http_path": null,
 		"fragmenting": {
 			"enable": false,
-			"method": "single",
+			"method": "random",
 			"sleep_interval_min": 10,
-			"sleep_interval_max": 100
+			"sleep_interval_max": 100,
+			"fragment_size_min": 50,
+			"fragment_size_max": 100,
+			"segments": 2
 		},
 		"noise": {
 			"enable": false,
@@ -68,16 +74,5 @@
 		"key": "key.pem",
 		"log_errors": false
 	},
-	"rules": [
-		{
-			"options": [
-				"googlesyndication",
-				"analytic",
-				"googletagmanager"
-			],
-			"target": {
-				"block": null
-			}
-		}
-	]
+	"rules": null
 }

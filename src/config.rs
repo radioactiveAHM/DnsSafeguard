@@ -25,6 +25,7 @@ pub enum NoiseType {
     str,
     lsd,
     rand,
+    tracker
 }
 
 #[derive(serde::Deserialize, Clone)]

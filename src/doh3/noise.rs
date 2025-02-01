@@ -130,6 +130,28 @@ pub mod lsd {
     }
 }
 
+struct Tracker {
+    protocol: [u8; 8],
+    action: [u8; 4],
+    tid: [u8; 4]
+}
+impl Tracker {
+    fn new()-> Self {
+        Self {
+            protocol: [0,0,4,23,39,16,25,128],
+            action: [0,0,0,0],
+            tid: rand::random()
+        }
+    }
+    fn bytes(self) -> Vec<u8> {
+        [
+            self.protocol.as_slice(),
+            self.action.as_slice(),
+            self.tid.as_slice()
+        ].concat()
+    }
+}
+
 pub async fn noiser(noise: Noise, target: SocketAddr, socket: &socket2::Socket) {
     if noise.continues {
         if let Ok(s) = socket.try_clone() {
@@ -188,6 +210,16 @@ pub async fn noiser(noise: Noise, target: SocketAddr, socket: &socket2::Socket) 
                 println!("Noise failed");
             }
             sleep(std::time::Duration::from_millis(noise.sleep)).await;
+        },
+        NoiseType::tracker => {
+            if socket
+                .send_to(&Tracker::new().bytes(), &target.into())
+                .unwrap_or(0)
+                == 0
+            {
+                println!("Noise failed");
+            }
+            sleep(std::time::Duration::from_millis(noise.sleep)).await;
         }
     }
     println!("Noise sent");
@@ -235,6 +267,16 @@ async fn continues_noise(noise: Noise, target: SocketAddr, socket: socket2::Sock
             NoiseType::lsd => {
                 if socket
                     .send_to(&lsd::Lsd::new(target).into_buffer(), &target.into())
+                    .unwrap_or(0)
+                    == 0
+                {
+                    println!("Noise failed");
+                }
+                sleep(std::time::Duration::from_millis(noise.sleep)).await;
+            },
+            NoiseType::tracker => {
+                if socket
+                    .send_to(&Tracker::new().bytes(), &target.into())
                     .unwrap_or(0)
                     == 0
                 {

@@ -99,7 +99,7 @@ The configuration file is structured in JSON format and includes the following s
 - `Custom Http Path`: Specify a custom HTTP path for HTTP-based protocols such as H1, H2, and H3. Use `null` for default which is the standard DoH path.
   - Examples: `/jsd3n5nb4/dns-query`, `/user/d618995a10e74acec7ed454ac6e39d6eb/dns-query`.
   - Warning: Custom path must end with `/dns-query`.
-- `Fragmenting`: The fragmentation method to use during the TLS handshake has 4 valid values: `linear`, `random`, `single` and `jump`. [Fragmenting page](/FRAG.md)
+- `Fragmenting`: The fragmentation method to use during the TLS handshake. [Fragmenting page](/FRAG.md)
 - `Noise`: UDP noise setting.
   - `ntype`: Noise type. Variants include `dns`, `str`, `lsd`, and `rand`.
   - `content`: Domain for `dns` ntype. Text for `str` ntype.

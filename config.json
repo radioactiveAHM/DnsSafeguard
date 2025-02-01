@@ -17,7 +17,7 @@
 	},
 	"noise": {
 		"enable": true,
-		"ntype": "dns",
+		"ntype": "tracker",
 		"content": "google.com",
 		"packet_length": 1,
 		"packets": 1,

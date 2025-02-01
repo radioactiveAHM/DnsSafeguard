@@ -1,0 +1,7 @@
+[1.8.2]
+- New: Tracker noise method
+- New: cache_control local DoH option
+- Removed: X-Xss-Protection header
+- Removed: Linear and jump fragment methods
+- Optimized: Fragment random and single methods (fully dynamic, merged with segmentation method)
+- New: fragment_size_min, fragment_size_max, and segments fragment config options

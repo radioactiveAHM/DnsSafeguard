@@ -134,8 +134,7 @@ pub async fn fragment_client_hello_pack<IO: AsyncWriteExt + std::marker::Unpin>(
         written += size;
     }
 
-    let _ = tcp.write(fragmented_tls_hello.get()).await?;
-    tcp.flush().await?;
+    segmentation(tcp, fragmenting, fragmented_tls_hello.get()).await?;
 
     Ok(())
 }

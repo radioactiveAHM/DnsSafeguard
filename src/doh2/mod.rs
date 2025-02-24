@@ -1,8 +1,8 @@
 use crate::chttp::genrequrl;
 use crate::rule::rulecheck;
 use crate::tls::tlsfragmenting;
-use crate::utils::unsafe_staticref;
 use crate::utils::Buffering;
+use crate::utils::unsafe_staticref;
 use core::str;
 use h2::client::SendRequest;
 use std::{net::SocketAddr, sync::Arc};

@@ -9,7 +9,7 @@ use crate::{
     config::{self, Connection},
     rule::rulecheck,
     tls::{self, tls_conn_gen},
-    utils::{c_len, catch_in_buff, unsafe_staticref, Buffering},
+    utils::{Buffering, c_len, catch_in_buff, unsafe_staticref},
 };
 
 type CrossContainer = (

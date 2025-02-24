@@ -3,9 +3,9 @@ use std::{net::SocketAddr, sync::Arc};
 
 use crate::chttp::genrequrlh1;
 use crate::config::{Connection, Fragmenting};
-use crate::rule::{rulecheck_sync, Rules};
+use crate::rule::{Rules, rulecheck_sync};
 use crate::tls::{self, tlsfragmenting};
-use crate::utils::{c_len, catch_in_buff, tcp_connect_handle, Buffering};
+use crate::utils::{Buffering, c_len, catch_in_buff, tcp_connect_handle};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     time::sleep,

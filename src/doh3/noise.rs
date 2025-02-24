@@ -86,8 +86,9 @@ pub mod lsd {
     use std::net::SocketAddr;
 
     use rand::{
+        Rng,
         distr::{Alphanumeric, SampleString},
-        rng, Rng,
+        rng,
     };
 
     pub struct Lsd<'a> {
@@ -133,22 +134,23 @@ pub mod lsd {
 struct Tracker {
     protocol: [u8; 8],
     action: [u8; 4],
-    tid: [u8; 4]
+    tid: [u8; 4],
 }
 impl Tracker {
-    fn new()-> Self {
+    fn new() -> Self {
         Self {
-            protocol: [0,0,4,23,39,16,25,128],
-            action: [0,0,0,0],
-            tid: rand::random()
+            protocol: [0, 0, 4, 23, 39, 16, 25, 128],
+            action: [0, 0, 0, 0],
+            tid: rand::random(),
         }
     }
     fn bytes(self) -> Vec<u8> {
         [
             self.protocol.as_slice(),
             self.action.as_slice(),
-            self.tid.as_slice()
-        ].concat()
+            self.tid.as_slice(),
+        ]
+        .concat()
     }
 }
 
@@ -210,7 +212,7 @@ pub async fn noiser(noise: Noise, target: SocketAddr, socket: &socket2::Socket) 
                 println!("Noise failed");
             }
             sleep(std::time::Duration::from_millis(noise.sleep)).await;
-        },
+        }
         NoiseType::tracker => {
             if socket
                 .send_to(&Tracker::new().bytes(), &target.into())
@@ -273,7 +275,7 @@ async fn continues_noise(noise: Noise, target: SocketAddr, socket: socket2::Sock
                     println!("Noise failed");
                 }
                 sleep(std::time::Duration::from_millis(noise.sleep)).await;
-            },
+            }
             NoiseType::tracker => {
                 if socket
                     .send_to(&Tracker::new().bytes(), &target.into())

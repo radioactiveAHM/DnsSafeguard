@@ -4,7 +4,7 @@ use tokio::{
     net::UdpSocket,
 };
 
-use crate::utils::{c_len, catch_in_buff, recv_timeout, Buffering};
+use crate::utils::{Buffering, c_len, catch_in_buff, recv_timeout};
 
 use super::DnsQuery;
 
@@ -12,7 +12,7 @@ pub async fn serve_http11(
     mut stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     udp_socket_addrs: SocketAddr,
     log: bool,
-    cache_control: &'static String
+    cache_control: &'static String,
 ) -> tokio::io::Result<()> {
     let peer = stream.get_ref().0.peer_addr()?;
     let agent = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
@@ -35,7 +35,7 @@ pub async fn serve_http11(
                     &mut respbuff,
                     log,
                     &peer,
-                    cache_control
+                    cache_control,
                 )
                 .await
                 {
@@ -60,7 +60,7 @@ async fn handle_req(
     respbuff: &mut [u8],
     log: bool,
     peer: &SocketAddr,
-    cache_control: &'static String
+    cache_control: &'static String,
 ) -> tokio::io::Result<()> {
     let req = {
         match HTTP11::parse(buff, stream).await {

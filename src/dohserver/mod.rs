@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::time::sleep;
-use tokio_rustls::{rustls, TlsAcceptor};
+use tokio_rustls::{TlsAcceptor, rustls};
 
 use crate::config::DohServer;
 use crate::utils::unsafe_staticref;
@@ -81,7 +81,9 @@ pub async fn doh_server(dsc: DohServer, udp_socket_addrs: SocketAddr) {
         match Tc::new(acceptor.clone(), listener.accept().await) {
             Ok(tc) => {
                 tokio::spawn(async move {
-                    if let Err(e) = tc_handler(tc, udp_socket_addrs, dsc.log_errors, cache_control).await {
+                    if let Err(e) =
+                        tc_handler(tc, udp_socket_addrs, dsc.log_errors, cache_control).await
+                    {
                         if dsc.log_errors {
                             println!("DoH server<TLS>: {e}")
                         }
@@ -97,7 +99,12 @@ pub async fn doh_server(dsc: DohServer, udp_socket_addrs: SocketAddr) {
     }
 }
 
-async fn tc_handler(tc: Tc, udp_socket_addrs: SocketAddr, log: bool, cache_control: &'static String) -> tokio::io::Result<()> {
+async fn tc_handler(
+    tc: Tc,
+    udp_socket_addrs: SocketAddr,
+    log: bool,
+    cache_control: &'static String,
+) -> tokio::io::Result<()> {
     let mut stream = tc.accept().await?;
 
     if let Some(alpn) = stream.get_ref().1.alpn_protocol() {

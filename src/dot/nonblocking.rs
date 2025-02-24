@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Mutex;
-use tokio::time::{sleep, Instant};
+use tokio::time::{Instant, sleep};
 
 use crate::rule::rulecheck;
 use crate::utils::{convert_two_u8s_to_u16_be, unsafe_staticref};

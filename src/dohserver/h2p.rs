@@ -1,6 +1,6 @@
 use bytes::Bytes;
-use h2::server::SendResponse;
 use h2::Reason;
+use h2::server::SendResponse;
 use http::Response;
 use std::net::SocketAddr;
 
@@ -12,7 +12,7 @@ pub async fn serve_h2(
     stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     udp_socket_addrs: SocketAddr,
     log: bool,
-    cache_control: &'static String
+    cache_control: &'static String,
 ) -> tokio::io::Result<()> {
     let peer = stream.get_ref().0.peer_addr()?;
     let mut conn = {
@@ -32,7 +32,9 @@ pub async fn serve_h2(
             if req.method() == http::Method::POST {
                 tokio::spawn(async move {
                     if let Some(Ok(body)) = req.body_mut().data().await {
-                        if let Err(e) = handle_dns_req_post(&mut resp, body, udp_socket_addrs, cache_control).await
+                        if let Err(e) =
+                            handle_dns_req_post(&mut resp, body, udp_socket_addrs, cache_control)
+                                .await
                         {
                             if log {
                                 println!(
@@ -52,7 +54,8 @@ pub async fn serve_h2(
                     if let Ok(dq) = DnsQuery::new(&bs4dns.as_bytes()[4..]) {
                         tokio::spawn(async move {
                             if let Err(e) =
-                                handle_dns_req_get(&mut resp, dq, udp_socket_addrs, cache_control).await
+                                handle_dns_req_get(&mut resp, dq, udp_socket_addrs, cache_control)
+                                    .await
                             {
                                 if log {
                                     println!(
@@ -83,7 +86,7 @@ async fn handle_dns_req_post(
     resp: &mut SendResponse<Bytes>,
     body: Bytes,
     udp_socket_addrs: SocketAddr,
-    cache_control: &'static String
+    cache_control: &'static String,
 ) -> tokio::io::Result<()> {
     let agent = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
     agent.connect(udp_socket_addrs).await?;
@@ -123,7 +126,7 @@ async fn handle_dns_req_get(
     resp: &mut SendResponse<Bytes>,
     dq: DnsQuery,
     udp_socket_addrs: SocketAddr,
-    cache_control: &'static String
+    cache_control: &'static String,
 ) -> tokio::io::Result<()> {
     let agent = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
     agent.connect(udp_socket_addrs).await?;
@@ -156,7 +159,7 @@ async fn handle_resp(
     rframe: &mut SendResponse<Bytes>,
     buff: &[u8],
     size: usize,
-    cache_control: &'static String
+    cache_control: &'static String,
 ) -> tokio::io::Result<()> {
     let waker = futures::task::noop_waker();
     let heads = Response::builder()

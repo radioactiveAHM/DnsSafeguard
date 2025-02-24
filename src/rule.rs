@@ -2,7 +2,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
 use crate::{
     config::TargetType,
-    utils::{catch_in_buff, recv_timeout, Buffering},
+    utils::{Buffering, catch_in_buff, recv_timeout},
 };
 
 pub type Rules = Option<Vec<Rule>>;

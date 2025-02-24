@@ -16,7 +16,7 @@ mod utils;
 
 use h11::http1;
 use multi::h1_multi;
-use rule::{convert_rules, Rules};
+use rule::{Rules, convert_rules};
 use utils::unsafe_staticref;
 
 #[tokio::main(flavor = "multi_thread")]

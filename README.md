@@ -101,7 +101,7 @@ The configuration file is structured in JSON format and includes the following s
   - Warning: Custom path must end with `/dns-query`.
 - `Fragmenting`: The fragmentation method to use during the TLS handshake. [Fragmenting page](/FRAG.md)
 - `Noise`: UDP noise setting.
-  - `ntype`: Noise type. Variants include `dns`, `str`, `lsd`, and `rand`.
+  - `ntype`: Noise type. Variants include `dns`, `str`, `lsd`, `tracker` and `rand`.
   - `content`: Domain for `dns` ntype. Text for `str` ntype.
   - `packet_length`: Specifies the length of each noise packet in bytes for `rand` ntype.
   - `packets`: Indicates the total number of UDP noise packets to send for `rand` ntype.

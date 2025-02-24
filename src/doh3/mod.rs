@@ -17,7 +17,7 @@ use crate::{
     chttp::genrequrl,
     config::{self, Noise},
     rule::rulecheck,
-    utils::{unsafe_staticref, Buffering},
+    utils::{Buffering, unsafe_staticref},
 };
 
 pub async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise) -> quinn::Endpoint {

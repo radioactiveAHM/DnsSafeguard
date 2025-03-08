@@ -4,21 +4,36 @@ use tokio::{net::TcpStream, time::sleep};
 
 pub fn get_interface(ipv4: bool, interface: &str) -> SocketAddr {
     // Cause panic if it fails, informing the user that the binding interface is not available.
-    match local_ip_address::list_afinet_netifas()
-        .expect("binding interface is not available")
-        .iter()
-        .find(|i| {
-            if ipv4 {
-                i.0.as_str() == interface && i.1.is_ipv4()
-            } else {
-                i.0.as_str() == interface && i.1.is_ipv6()
-            }
-        })
-        .expect("interface not found or interface does not provide IPv6")
-        .1
-    {
-        IpAddr::V4(ip) => std::net::SocketAddr::V4(SocketAddrV4::new(ip, 0)),
-        IpAddr::V6(ip) => std::net::SocketAddr::V6(SocketAddrV6::new(ip, 0, 0, 0)),
+    let interfaces =
+        local_ip_address::list_afinet_netifas().expect("binding interface is not available");
+
+    let ip = interfaces.iter().find(|i| {
+        if ipv4 {
+            i.0.as_str().to_lowercase() == interface.to_lowercase() && i.1.is_ipv4()
+        } else {
+            i.0.as_str().to_lowercase() == interface.to_lowercase() && i.1.is_ipv6()
+        }
+    });
+
+    if ip.is_none() {
+        println!(
+            "interface not found or interface does not provide IPv6.\nAvailable interface are:"
+        );
+        for interface in interfaces {
+            println!("{}: {}", interface.0, interface.1);
+        }
+        std::process::exit(1);
+    }
+
+    match ip.unwrap().1 {
+        IpAddr::V4(ip) => {
+            println!("{ip} Selected for binding");
+            std::net::SocketAddr::V4(SocketAddrV4::new(ip, 0))
+        }
+        IpAddr::V6(ip) => {
+            println!("[{ip}] Selected for binding");
+            std::net::SocketAddr::V6(SocketAddrV6::new(ip, 0, 0, 0))
+        }
     }
 }
 

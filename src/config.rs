@@ -1,5 +1,3 @@
-use std::net::IpAddr;
-
 #[derive(serde::Deserialize, Clone, Copy)]
 #[allow(non_camel_case_types)]
 pub enum FragMethod {
@@ -96,7 +94,7 @@ pub struct Connection {
 pub enum TargetType {
     dns(std::net::SocketAddr),
     block(Option<Vec<crate::rule::Targets>>),
-    ip(IpAddr),
+    ip(std::net::IpAddr, Option<std::net::Ipv6Addr>),
 }
 
 #[derive(serde::Deserialize, Clone)]

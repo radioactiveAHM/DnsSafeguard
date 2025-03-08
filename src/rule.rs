@@ -32,7 +32,7 @@ pub async fn rulecheck(
     client_addr: SocketAddr,
     udp: &'static tokio::net::UdpSocket,
 ) -> bool {
-    for rule in rules.as_deref().unwrap() {
+    for rule in rules.as_ref().unwrap() {
         match &rule.target {
             TargetType::block(t) => {
                 for option in &rule.options {
@@ -73,7 +73,7 @@ pub async fn rulecheck(
                     }
                 }
             }
-            TargetType::ip(ip) => {
+            TargetType::ip(ip, ip2) => {
                 for option in &rule.options {
                     if catch_in_buff(option, dq.slice()).is_some() {
                         let mut temp = [0; 1024];
@@ -83,17 +83,21 @@ pub async fn rulecheck(
                                 if gen_resp_v4(dq.slice(), &mut resp, ipv4) {
                                     let _ = udp.send_to(resp.get(), client_addr).await;
                                     return true;
-                                } else {
-                                    return false;
                                 }
                             }
                             IpAddr::V6(ipv6) => {
                                 if gen_resp_v6(dq.slice(), &mut resp, ipv6) {
                                     let _ = udp.send_to(resp.get(), client_addr).await;
                                     return true;
-                                } else {
-                                    return false;
                                 }
+                            }
+                        }
+                        if let Some(ipv6) = ip2 {
+                            if gen_resp_v6(dq.slice(), &mut resp, ipv6) {
+                                let _ = udp.send_to(resp.get(), client_addr).await;
+                                return true;
+                            } else {
+                                return false;
                             }
                         }
                     }
@@ -128,7 +132,7 @@ pub async fn rulecheck_sync(
     client_addr: SocketAddr,
     udp: &tokio::net::UdpSocket,
 ) -> bool {
-    for rule in rules.as_deref().unwrap() {
+    for rule in rules.as_ref().unwrap() {
         match &rule.target {
             TargetType::block(t) => {
                 for option in &rule.options {
@@ -164,7 +168,7 @@ pub async fn rulecheck_sync(
                     }
                 }
             }
-            TargetType::ip(ip) => {
+            TargetType::ip(ip, ip2) => {
                 for option in &rule.options {
                     if catch_in_buff(option, dq).is_some() {
                         let mut temp = [0; 1024];
@@ -174,17 +178,21 @@ pub async fn rulecheck_sync(
                                 if gen_resp_v4(dq, &mut resp, ipv4) {
                                     let _ = udp.send_to(resp.get(), client_addr).await;
                                     return true;
-                                } else {
-                                    return false;
                                 }
                             }
                             IpAddr::V6(ipv6) => {
                                 if gen_resp_v6(dq, &mut resp, ipv6) {
                                     let _ = udp.send_to(resp.get(), client_addr).await;
                                     return true;
-                                } else {
-                                    return false;
                                 }
+                            }
+                        }
+                        if let Some(ipv6) = ip2 {
+                            if gen_resp_v6(dq, &mut resp, ipv6) {
+                                let _ = udp.send_to(resp.get(), client_addr).await;
+                                return true;
+                            } else {
+                                return false;
                             }
                         }
                     }

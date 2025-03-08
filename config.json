@@ -75,5 +75,14 @@
 		"cache_control": "private, max-age=3600",
 		"log_errors": false
 	},
-	"rules": null
+	"rules": [
+		{
+			"options": [
+				"google.com"
+			],
+			"target": {
+				"ip": ["127.0.0.1", null] 
+			}
+		}
+	]
 }

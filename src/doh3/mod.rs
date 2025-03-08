@@ -36,7 +36,9 @@ pub async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise) ->
     socket.bind(&addr.into()).unwrap();
 
     // send noises
-    noise::noiser(noise, target, &socket).await;
+    if noise.enable {
+        noise::noiser(noise, target, &socket).await;
+    }
 
     let runtime = quinn::default_runtime()
         .ok_or_else(|| tokio::io::Error::new(tokio::io::ErrorKind::Other, "no async runtime found"))
@@ -67,13 +69,7 @@ pub async fn udp_setup(
         }
     };
 
-    let mut endpoint = {
-        if noise.enable {
-            client_noise(quic_udp_binding_addr, target, noise).await
-        } else {
-            quinn::Endpoint::client(quic_udp_binding_addr).unwrap()
-        }
-    };
+    let mut endpoint = client_noise(quic_udp_binding_addr, target, noise).await;
 
     endpoint.set_default_client_config(
         quinn::ClientConfig::new(qtls::qtls(alpn))

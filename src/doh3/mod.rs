@@ -3,7 +3,13 @@ pub mod qtls;
 pub mod transporter;
 
 use core::str;
-use std::{borrow::BorrowMut, future, io::Read, net::SocketAddr, str::FromStr, sync::Arc};
+use std::{
+    borrow::BorrowMut,
+    future,
+    io::Read,
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
+    sync::Arc,
+};
 
 use tokio::{
     sync::Mutex,
@@ -45,29 +51,30 @@ pub async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise) ->
 }
 
 pub async fn udp_setup(
-    socketadrs: SocketAddr,
+    target: SocketAddr,
     noise: Noise,
     quic_conf_file: crate::config::Quic,
     alpn: &str,
+    network_interface: &'static Option<String>,
 ) -> quinn::Endpoint {
-    let qaddress = {
-        if socketadrs.is_ipv4() {
-            SocketAddr::from_str("0.0.0.0:0").unwrap()
-        } else if socketadrs.is_ipv6() {
-            SocketAddr::from_str("[::]:0").unwrap()
+    let quic_udp_binding_addr = {
+        if let Some(interface) = network_interface {
+            crate::interface::get_interface(target.is_ipv4(), interface.as_str())
+        } else if target.is_ipv4() {
+            SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0))
         } else {
-            panic!()
+            SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, 0, 0, 0))
         }
     };
-    // UDP socket as endpoint for quic
+
     let mut endpoint = {
         if noise.enable {
-            client_noise(qaddress, socketadrs, noise).await
+            client_noise(quic_udp_binding_addr, target, noise).await
         } else {
-            quinn::Endpoint::client(qaddress).unwrap()
+            quinn::Endpoint::client(quic_udp_binding_addr).unwrap()
         }
     };
-    // Setup QUIC connection (QUIC Config)
+
     endpoint.set_default_client_config(
         quinn::ClientConfig::new(qtls::qtls(alpn))
             .transport_config(transporter::tc(quic_conf_file))
@@ -86,8 +93,16 @@ pub async fn http3(
     connection: config::Connection,
     rules: &Option<Vec<crate::rule::Rule>>,
     ucpath: &'static Option<String>,
+    network_interface: &'static Option<String>,
 ) {
-    let mut endpoint = udp_setup(socket_addrs, noise.clone(), quic_conf_file.clone(), "h3").await;
+    let mut endpoint = udp_setup(
+        socket_addrs,
+        noise.clone(),
+        quic_conf_file.clone(),
+        "h3",
+        network_interface,
+    )
+    .await;
 
     let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
     let uudp = unsafe_staticref(&udp);
@@ -107,7 +122,14 @@ pub async fn http3(
             .await;
             retry = 0;
             // on windows when pc goes sleep the endpoint config is fucked up
-            endpoint = udp_setup(socket_addrs, noise.clone(), quic_conf_file.clone(), "h3").await;
+            endpoint = udp_setup(
+                socket_addrs,
+                noise.clone(),
+                quic_conf_file.clone(),
+                "h3",
+                network_interface,
+            )
+            .await;
             continue;
         }
 

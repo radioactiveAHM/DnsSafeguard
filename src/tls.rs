@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use crate::{config, utils::tcp_connect_handle};
+use crate::{config, interface::tcp_connect_handle};
 
 pub fn tlsconf(
     alpn: Vec<Vec<u8>>,
@@ -54,6 +54,7 @@ pub async fn tls_conn_gen(
     fragmenting: config::Fragmenting,
     ctls: Arc<tokio_rustls::rustls::ClientConfig>,
     connection_cfg: config::Connection,
+    network_interface: &'static Option<String>,
 ) -> tokio::io::Result<tokio_rustls::client::TlsStream<tokio::net::TcpStream>> {
     let example_com = if disable_domain_sni {
         (socket_addrs.ip()).into()
@@ -64,7 +65,7 @@ pub async fn tls_conn_gen(
     tokio_rustls::TlsConnector::from(ctls)
         .connect_with_stream(
             example_com,
-            tcp_connect_handle(socket_addrs, connection_cfg).await,
+            tcp_connect_handle(socket_addrs, connection_cfg, network_interface).await,
             |tls, tcp| {
                 // Do fragmenting
                 if fragmenting.enable {

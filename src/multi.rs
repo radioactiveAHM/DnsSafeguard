@@ -28,6 +28,7 @@ pub async fn h1_multi(
     connection: Connection,
     rules: &Option<Vec<crate::rule::Rule>>,
     ucpath: &'static Option<String>,
+    network_interface: &'static Option<String>,
 ) {
     // TLS Client Config
     let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()], dcv);
@@ -55,6 +56,7 @@ pub async fn h1_multi(
                     frag.clone(),
                     tls_config.clone(),
                     connection,
+                    network_interface,
                 )
                 .await;
                 if tls_conn.is_err() {

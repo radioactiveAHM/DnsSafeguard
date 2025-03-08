@@ -21,8 +21,16 @@ pub async fn doq(
     noise: Noise,
     connection: config::Connection,
     rules: &Option<Vec<crate::rule::Rule>>,
+    network_interface: &'static Option<String>,
 ) {
-    let mut endpoint = udp_setup(socket_addrs, noise.clone(), quic_conf_file.clone(), "doq").await;
+    let mut endpoint = udp_setup(
+        socket_addrs,
+        noise.clone(),
+        quic_conf_file.clone(),
+        "doq",
+        network_interface,
+    )
+    .await;
 
     let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
     let uudp = unsafe_staticref(&udp);
@@ -44,7 +52,14 @@ pub async fn doq(
             .await;
             retry = 0;
             // on windows when pc goes sleep the endpoint config is fucked up
-            endpoint = udp_setup(socket_addrs, noise.clone(), quic_conf_file.clone(), "doq").await;
+            endpoint = udp_setup(
+                socket_addrs,
+                noise.clone(),
+                quic_conf_file.clone(),
+                "doq",
+                network_interface,
+            )
+            .await;
             continue;
         }
 

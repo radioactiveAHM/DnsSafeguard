@@ -10,8 +10,8 @@ use tokio::sync::Mutex;
 use tokio::time::sleep;
 
 use crate::config;
+use crate::interface::tcp_connect_handle;
 use crate::tls;
-use crate::utils::tcp_connect_handle;
 
 pub async fn http2(
     sn: &'static str,
@@ -23,6 +23,7 @@ pub async fn http2(
     connection: config::Connection,
     rules: &Option<Vec<crate::rule::Rule>>,
     ucpath: &'static Option<String>,
+    network_interface: &'static Option<String>,
 ) {
     // TLS Conf
     let h2tls = tls::tlsconf(vec![b"h2".to_vec()], dcv);
@@ -36,7 +37,7 @@ pub async fn http2(
     loop {
         // TCP Connection
         // Panic if socket_addrs invalid
-        let tcp = tcp_connect_handle(socket_addrs, connection).await;
+        let tcp = tcp_connect_handle(socket_addrs, connection, network_interface).await;
         println!("New H2 connection");
 
         let example_com = if disable_domain_sni {

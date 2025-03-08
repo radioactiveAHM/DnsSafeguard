@@ -4,6 +4,7 @@
 	"disable_domain_sni": false,
 	"disable_certificate_validation": false,
 	"socket_addrs": "1.1.1.1:443",
+	"interface": null,
 	"udp_socket_addrs": "127.0.0.1:53",
 	"custom_http_path": null,
 	"fragmenting": {
@@ -31,6 +32,7 @@
 		"disable_domain_sni": false,
 		"disable_certificate_validation": false,
 		"socket_addrs": "[2606:4700:4700::1111]:443",
+		"interface": null,
 		"udp_socket_addrs": "[::1]:53",
 		"custom_http_path": null,
 		"fragmenting": {

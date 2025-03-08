@@ -9,6 +9,7 @@ mod doq;
 mod dot;
 mod fragment;
 mod h11;
+mod interface;
 mod multi;
 mod rule;
 mod tls;
@@ -35,6 +36,7 @@ async fn main() {
     let urules = unsafe_staticref(&rules);
     let usn = unsafe_staticref(conf.server_name.as_str());
     let ucpath = unsafe_staticref(&conf.custom_http_path);
+    let network_interface = unsafe_staticref(&conf.interface);
 
     if conf.doh_server.enable {
         tokio::spawn(async move {
@@ -48,6 +50,7 @@ async fn main() {
     // since values all avalible during application lifetime
     let usn6 = unsafe_staticref(v6.server_name.as_str());
     let ucpath6 = unsafe_staticref(&v6.custom_http_path);
+    let network_interface6 = unsafe_staticref(&v6.interface);
 
     let quic_conf_file_v6 = conf.quic.clone();
     let v6rules = rules.clone();
@@ -65,6 +68,7 @@ async fn main() {
                         conf.connection,
                         urules,
                         ucpath6,
+                        network_interface6,
                     )
                     .await
                 }
@@ -79,6 +83,7 @@ async fn main() {
                         conf.connection,
                         v6rules,
                         ucpath6,
+                        network_interface6,
                     )
                     .await
                 }
@@ -93,6 +98,7 @@ async fn main() {
                         conf.connection,
                         urules,
                         ucpath6,
+                        network_interface6,
                     )
                     .await
                 }
@@ -106,6 +112,7 @@ async fn main() {
                         conf.connection,
                         urules,
                         ucpath6,
+                        network_interface6,
                     )
                     .await
                 }
@@ -119,6 +126,7 @@ async fn main() {
                         &v6.fragmenting,
                         conf.connection,
                         v6rules,
+                        network_interface6,
                     )
                     .await;
                 }
@@ -132,6 +140,7 @@ async fn main() {
                         &v6.fragmenting,
                         conf.connection,
                         urules,
+                        network_interface6,
                     )
                     .await;
                 }
@@ -144,6 +153,7 @@ async fn main() {
                         v6.noise,
                         conf.connection,
                         urules,
+                        network_interface6,
                     )
                     .await;
                 }
@@ -163,6 +173,7 @@ async fn main() {
                 conf.connection,
                 urules,
                 ucpath,
+                network_interface,
             )
             .await
         }
@@ -177,6 +188,7 @@ async fn main() {
                 conf.connection,
                 rules,
                 ucpath,
+                network_interface,
             )
             .await
         }
@@ -191,6 +203,7 @@ async fn main() {
                 conf.connection,
                 urules,
                 ucpath,
+                network_interface,
             )
             .await
         }
@@ -204,6 +217,7 @@ async fn main() {
                 conf.connection,
                 urules,
                 ucpath,
+                network_interface,
             )
             .await
         }
@@ -217,6 +231,7 @@ async fn main() {
                 &conf.fragmenting,
                 conf.connection,
                 rules,
+                network_interface,
             )
             .await;
         }
@@ -230,6 +245,7 @@ async fn main() {
                 &conf.fragmenting,
                 conf.connection,
                 urules,
+                network_interface,
             )
             .await;
         }
@@ -242,6 +258,7 @@ async fn main() {
                 conf.noise,
                 conf.connection,
                 urules,
+                network_interface,
             )
             .await;
         }

@@ -3,9 +3,10 @@ use std::{net::SocketAddr, sync::Arc};
 
 use crate::chttp::genrequrlh1;
 use crate::config::{Connection, Fragmenting};
+use crate::interface::tcp_connect_handle;
 use crate::rule::{Rules, rulecheck_sync};
 use crate::tls::{self, tlsfragmenting};
-use crate::utils::{Buffering, c_len, catch_in_buff, tcp_connect_handle};
+use crate::utils::{Buffering, c_len, catch_in_buff};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     time::sleep,
@@ -21,6 +22,7 @@ pub async fn http1(
     connection: Connection,
     rule: Rules,
     ucpath: &'static Option<String>,
+    network_interface: &'static Option<String>,
 ) {
     // TLS Client
     let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()], dcv);
@@ -30,7 +32,7 @@ pub async fn http1(
     let mut retry = 0u8;
     loop {
         // TCP socket for TLS
-        let tcp = tcp_connect_handle(socket_addrs, connection).await;
+        let tcp = tcp_connect_handle(socket_addrs, connection, network_interface).await;
         println!("New HTTP/1.1 connection");
 
         let example_com = if disable_domain_sni {

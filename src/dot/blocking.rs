@@ -15,6 +15,7 @@ pub async fn dot(
     fragmenting: &config::Fragmenting,
     connection: config::Connection,
     rule: crate::Rules,
+    network_interface: &'static Option<String>,
 ) {
     let ctls = tls::tlsconf(vec![b"dot".to_vec()], dcv);
     let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
@@ -28,6 +29,7 @@ pub async fn dot(
             fragmenting.clone(),
             ctls.clone(),
             connection,
+            network_interface,
         )
         .await;
         if tls_conn.is_err() {

@@ -18,6 +18,7 @@ pub async fn dot_nonblocking(
     fragmenting: &config::Fragmenting,
     connection: config::Connection,
     rules: &Option<Vec<crate::rule::Rule>>,
+    network_interface: &'static Option<String>,
 ) {
     let ctls = tls::tlsconf(vec![b"dot".to_vec()], dcv);
 
@@ -36,6 +37,7 @@ pub async fn dot_nonblocking(
             fragmenting.clone(),
             ctls.clone(),
             connection,
+            network_interface,
         )
         .await;
         if tls_conn.is_err() {

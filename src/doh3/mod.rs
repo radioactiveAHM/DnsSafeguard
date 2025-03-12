@@ -90,6 +90,7 @@ pub async fn http3(
     rules: &Option<Vec<crate::rule::Rule>>,
     ucpath: &'static Option<String>,
     network_interface: &'static Option<String>,
+    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
 ) {
     let mut endpoint = udp_setup(
         socket_addrs,
@@ -198,7 +199,7 @@ pub async fn http3(
                 tokio::spawn(async move {
                     let mut temp = false;
                     if let Err(e) =
-                        send_request(sn, h3, (*dns_query, query_size), addr, uudp, ucpath).await
+                        send_request(sn, h3, (*dns_query, query_size), addr, uudp, ucpath, ow).await
                     {
                         println!("{e}");
                         temp = true;
@@ -237,7 +238,7 @@ pub async fn http3(
                 tokio::spawn(async move {
                     let mut temp = false;
                     if let Err(e) =
-                        send_request(sn, h3, (dns_query, query_size), addr, uudp, ucpath).await
+                        send_request(sn, h3, (dns_query, query_size), addr, uudp, ucpath, ow).await
                     {
                         println!("{e}");
                         temp = true;
@@ -258,6 +259,7 @@ async fn send_request(
     addr: SocketAddr,
     udp: &'static tokio::net::UdpSocket,
     cpath: &'static Option<String>,
+    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut temp = [0u8; 512];
     let mut url = [0; 1024];
@@ -283,6 +285,9 @@ async fn send_request(
         if let Some(body) = reqs.recv_data().await? {
             let mut buff = [0; 4096];
             let body_len = body.reader().read(&mut buff)?;
+            if ow.is_some() {
+                crate::ipoverwrite::overwrite_ip(&mut buff[..body_len], ow);
+            }
             let _ = udp.send_to(&buff[..body_len], addr).await;
         }
     }

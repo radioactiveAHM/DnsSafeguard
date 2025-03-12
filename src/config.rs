@@ -132,6 +132,7 @@ pub struct Config {
     pub connection: Connection,
     pub doh_server: DohServer,
     pub rules: Option<Vec<Rule>>,
+    pub overwrite: Option<Vec<crate::ipoverwrite::IpOverwrite>>,
 }
 
 pub fn load_config() -> Config {

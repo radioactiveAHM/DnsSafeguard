@@ -77,5 +77,6 @@
 		"cache_control": "private, max-age=3600",
 		"log_errors": false
 	},
-	"rules": null
+	"rules": null,
+	"overwrite": null
 }

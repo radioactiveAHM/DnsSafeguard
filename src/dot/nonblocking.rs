@@ -19,6 +19,7 @@ pub async fn dot_nonblocking(
     connection: config::Connection,
     rules: &Option<Vec<crate::rule::Rule>>,
     network_interface: &'static Option<String>,
+    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
 ) {
     let ctls = tls::tlsconf(vec![b"dot".to_vec()], dcv);
 
@@ -77,15 +78,23 @@ pub async fn dot_nonblocking(
                     if resp_dot_query_size as u16
                         == convert_two_u8s_to_u16_be([resp_dot_query[0], resp_dot_query[1]]) + 2
                     {
-                        let query = &resp_dot_query[2..(resp_dot_query_size)];
-
                         // match the response with DNS message ID
                         let mut waiters_lock = waiters.lock().await;
                         if let Some(waiter) = waiters_lock.iter().position(|waiter| {
-                            waiter.0 == convert_two_u8s_to_u16_be([query[0], query[1]])
+                            waiter.0
+                                == convert_two_u8s_to_u16_be([resp_dot_query[2], resp_dot_query[3]])
                         }) {
+                            if ow.is_some() {
+                                crate::ipoverwrite::overwrite_ip(
+                                    &mut resp_dot_query[2..(resp_dot_query_size)],
+                                    ow,
+                                );
+                            }
                             let _ = uudp
-                                .send_to(query, waiters_lock.swap_remove(waiter).1)
+                                .send_to(
+                                    &resp_dot_query[2..(resp_dot_query_size)],
+                                    waiters_lock.swap_remove(waiter).1,
+                                )
                                 .await;
                         }
                     }

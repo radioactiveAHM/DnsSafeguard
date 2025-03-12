@@ -16,6 +16,7 @@ pub async fn dot(
     connection: config::Connection,
     rule: crate::Rules,
     network_interface: &'static Option<String>,
+    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
 ) {
     let ctls = tls::tlsconf(vec![b"dot".to_vec()], dcv);
     let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
@@ -67,6 +68,7 @@ pub async fn dot(
                     &mut resp_dot_query,
                     query_size,
                     addr,
+                    ow,
                 )
                 .await
                 .is_ok()
@@ -96,6 +98,7 @@ pub async fn dot(
                     &mut resp_dot_query,
                     &query_size,
                     &addr,
+                    ow,
                 )
                 .await
                 {
@@ -115,6 +118,7 @@ async fn handler(
     resp_dot_query: &mut [u8],
     query_size: &usize,
     addr: &SocketAddr,
+    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
 ) -> tokio::io::Result<()> {
     // Send DOT query
     let _ = conn.write(&query[..query_size + 2]).await?;
@@ -124,7 +128,10 @@ async fn handler(
     if resp_dot_query_size as u16
         == convert_two_u8s_to_u16_be([resp_dot_query[0], resp_dot_query[1]]) + 2
     {
-        udp.send_to(&resp_dot_query[2..(resp_dot_query_size)], addr)
+        if ow.is_some() {
+            crate::ipoverwrite::overwrite_ip(&mut resp_dot_query[..resp_dot_query_size], ow);
+        }
+        udp.send_to(&resp_dot_query[2..resp_dot_query_size], addr)
             .await?;
     }
 

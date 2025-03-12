@@ -24,6 +24,7 @@ pub async fn http2(
     rules: &Option<Vec<crate::rule::Rule>>,
     ucpath: &'static Option<String>,
     network_interface: &'static Option<String>,
+    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
 ) {
     // TLS Conf
     let h2tls = tls::tlsconf(vec![b"h2".to_vec()], dcv);
@@ -95,8 +96,16 @@ pub async fn http2(
                 let h2_client = client.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
-                    if let Err(e) =
-                        send_req(sn, (*dns_query, query_size), h2_client, addr, uudp, ucpath).await
+                    if let Err(e) = send_req(
+                        sn,
+                        (*dns_query, query_size),
+                        h2_client,
+                        addr,
+                        uudp,
+                        ucpath,
+                        ow,
+                    )
+                    .await
                     {
                         println!("{e}");
                         temp = true;
@@ -135,8 +144,16 @@ pub async fn http2(
                 let h2_client = client.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
-                    if let Err(e) =
-                        send_req(sn, (dns_query, query_size), h2_client, addr, uudp, ucpath).await
+                    if let Err(e) = send_req(
+                        sn,
+                        (dns_query, query_size),
+                        h2_client,
+                        addr,
+                        uudp,
+                        ucpath,
+                        ow,
+                    )
+                    .await
                     {
                         println!("{e}");
                         temp = true;
@@ -158,6 +175,7 @@ async fn send_req(
     addr: SocketAddr,
     udp: &'static tokio::net::UdpSocket,
     ucpath: &'static Option<String>,
+    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut temp = [0u8; 512];
     let mut url = [0u8; 1024];
@@ -182,7 +200,16 @@ async fn send_req(
     if resp.status() == http::status::StatusCode::OK {
         // Get body (dns query)
         if let Some(body) = resp.into_body().data().await {
-            udp.send_to(&body?, addr).await?;
+            let body_b = body?;
+            if ow.is_some() {
+                let b: &[u8] = &body_b;
+                let mut buff = [0; 4196];
+                buff[..b.len()].copy_from_slice(b);
+                crate::ipoverwrite::overwrite_ip(&mut buff[..b.len()], ow);
+                udp.send_to(&buff[..b.len()], addr).await?;
+            } else {
+                udp.send_to(&body_b, addr).await?;
+            }
         }
     }
     Ok(())

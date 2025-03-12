@@ -29,6 +29,7 @@ pub async fn h1_multi(
     rules: &Option<Vec<crate::rule::Rule>>,
     ucpath: &'static Option<String>,
     network_interface: &'static Option<String>,
+    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
 ) {
     // TLS Client Config
     let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()], dcv);
@@ -115,16 +116,29 @@ pub async fn h1_multi(
                             let content_length = c_len(&http_resp[..x1]);
                             if content_length != 0 && content_length == body.len() {
                                 // Full body recved
-                                udp.send_to(body, addr).await.unwrap_or(0);
+                                if ow.is_some() {
+                                    crate::ipoverwrite::overwrite_ip(
+                                        &mut http_resp[x2..http_resp_size],
+                                        ow,
+                                    );
+                                }
+                                let _ = udp.send_to(&http_resp[x2..http_resp_size], addr).await;
                             } else if content_length != 0 && content_length > body.len() {
                                 // There is another chunk of body
-                                // We know it's not bigger than 512 bytes
-                                let mut b2 = [0; 4096];
-                                let b2_len = c.read(&mut b2).await.unwrap_or(0);
 
-                                udp.send_to(&[body, &b2[..b2_len]].concat(), addr)
-                                    .await
-                                    .unwrap_or(0);
+                                if let Ok(size) =
+                                    c.read(&mut http_resp[x2 + http_resp_size..]).await
+                                {
+                                    if ow.is_some() {
+                                        crate::ipoverwrite::overwrite_ip(
+                                            &mut http_resp[x2..http_resp_size + size],
+                                            ow,
+                                        );
+                                    }
+                                    let _ = udp
+                                        .send_to(&http_resp[x2..http_resp_size + size], addr)
+                                        .await;
+                                }
                             }
                         }
                     }

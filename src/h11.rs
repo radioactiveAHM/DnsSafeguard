@@ -23,6 +23,7 @@ pub async fn http1(
     rule: Rules,
     ucpath: &'static Option<String>,
     network_interface: &'static Option<String>,
+    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
 ) {
     // TLS Client
     let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()], dcv);
@@ -94,6 +95,7 @@ pub async fn http1(
                     &mut http_resp,
                     query_size,
                     addr,
+                    ow,
                 )
                 .await
                 .is_ok()
@@ -122,6 +124,7 @@ pub async fn http1(
                     &mut http_resp,
                     &query_size,
                     &addr,
+                    ow,
                 )
                 .await
                 {
@@ -145,6 +148,7 @@ pub async fn handler(
     http_resp: &mut [u8],
     query_size: &usize,
     addr: &SocketAddr,
+    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
 ) -> tokio::io::Result<()> {
     let query_bs4url = match base64_url::encode_to_slice(&dns_query[..*query_size], base64_url_temp)
     {
@@ -169,15 +173,19 @@ pub async fn handler(
         let content_length = c_len(&http_resp[..x1]);
         if content_length != 0 && content_length == body.len() {
             // Full body recved
-            let _ = udp.send_to(body, addr).await;
+            if ow.is_some() {
+                crate::ipoverwrite::overwrite_ip(&mut http_resp[x2..http_resp_size], ow);
+            }
+            let _ = udp.send_to(&http_resp[x2..http_resp_size], addr).await;
         } else if content_length != 0 && content_length > body.len() {
             // There is another chunk of body
-            // We know it's not bigger than 512 bytes
-            let mut merged_body = [0; 4096];
-            merged_body[..body.len()].copy_from_slice(body);
-            if let Ok(b2_len) = c.read(&mut merged_body[body.len()..]).await {
-                let _ = udp.send_to(&merged_body[..body.len() + b2_len], addr).await;
+            let size = c.read(&mut http_resp[x2 + http_resp_size..]).await?;
+            if ow.is_some() {
+                crate::ipoverwrite::overwrite_ip(&mut http_resp[x2..http_resp_size + size], ow);
             }
+            let _ = udp
+                .send_to(&http_resp[x2..http_resp_size + size], addr)
+                .await;
         }
     }
 

@@ -22,6 +22,7 @@ pub async fn doq(
     connection: config::Connection,
     rules: &Option<Vec<crate::rule::Rule>>,
     network_interface: &'static Option<String>,
+    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
 ) {
     let mut endpoint = udp_setup(
         socket_addrs,
@@ -121,7 +122,7 @@ pub async fn doq(
                         tokio::spawn(async move {
                             let mut temp = false;
                             if let Err(e) =
-                                send_dq(bistream, (*dns_query, query_size), addr, uudp).await
+                                send_dq(bistream, (*dns_query, query_size), addr, uudp, ow).await
                             {
                                 let e_str = e.to_string();
                                 println!("{}", e_str);
@@ -170,7 +171,7 @@ pub async fn doq(
                         tokio::spawn(async move {
                             let mut temp = false;
                             if let Err(e) =
-                                send_dq(bistream, (dns_query, query_size), addr, udp).await
+                                send_dq(bistream, (dns_query, query_size), addr, udp, ow).await
                             {
                                 let e_str = e.to_string();
                                 println!("{}", e_str);
@@ -196,6 +197,7 @@ async fn send_dq(
     mut dns_query: ([u8; 514], usize),
     addr: SocketAddr,
     udp: &'static tokio::net::UdpSocket,
+    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
 ) -> tokio::io::Result<()> {
     [dns_query.0[0], dns_query.0[1]] = convert_u16_to_two_u8s_be(dns_query.1 as u16);
 
@@ -203,6 +205,9 @@ async fn send_dq(
     send.finish()?;
     let mut buff = [0u8; 4096];
     if let Some(resp_size) = recv.read(&mut buff).await? {
+        if ow.is_some() {
+            crate::ipoverwrite::overwrite_ip(&mut buff[2..resp_size], ow);
+        }
         let _ = udp.send_to(&buff[2..resp_size], addr).await;
     }
 

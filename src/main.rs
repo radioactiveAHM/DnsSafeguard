@@ -10,6 +10,7 @@ mod dot;
 mod fragment;
 mod h11;
 mod interface;
+mod ipoverwrite;
 mod multi;
 mod rule;
 mod tls;
@@ -37,6 +38,8 @@ async fn main() {
     let usn = unsafe_staticref(conf.server_name.as_str());
     let ucpath = unsafe_staticref(&conf.custom_http_path);
     let network_interface = unsafe_staticref(&conf.interface);
+    let uoverwrite: &'static Option<Vec<ipoverwrite::IpOverwrite>> =
+        unsafe_staticref(&conf.overwrite);
 
     if conf.doh_server.enable {
         tokio::spawn(async move {
@@ -69,6 +72,7 @@ async fn main() {
                         urules,
                         ucpath6,
                         network_interface6,
+                        uoverwrite,
                     )
                     .await
                 }
@@ -84,6 +88,7 @@ async fn main() {
                         v6rules,
                         ucpath6,
                         network_interface6,
+                        uoverwrite,
                     )
                     .await
                 }
@@ -99,6 +104,7 @@ async fn main() {
                         urules,
                         ucpath6,
                         network_interface6,
+                        uoverwrite,
                     )
                     .await
                 }
@@ -113,6 +119,7 @@ async fn main() {
                         urules,
                         ucpath6,
                         network_interface6,
+                        uoverwrite,
                     )
                     .await
                 }
@@ -127,6 +134,7 @@ async fn main() {
                         conf.connection,
                         v6rules,
                         network_interface6,
+                        uoverwrite,
                     )
                     .await;
                 }
@@ -141,6 +149,7 @@ async fn main() {
                         conf.connection,
                         urules,
                         network_interface6,
+                        uoverwrite,
                     )
                     .await;
                 }
@@ -154,6 +163,7 @@ async fn main() {
                         conf.connection,
                         urules,
                         network_interface6,
+                        uoverwrite,
                     )
                     .await;
                 }
@@ -174,6 +184,7 @@ async fn main() {
                 urules,
                 ucpath,
                 network_interface,
+                uoverwrite,
             )
             .await
         }
@@ -189,6 +200,7 @@ async fn main() {
                 rules,
                 ucpath,
                 network_interface,
+                uoverwrite,
             )
             .await
         }
@@ -204,6 +216,7 @@ async fn main() {
                 urules,
                 ucpath,
                 network_interface,
+                uoverwrite,
             )
             .await
         }
@@ -218,6 +231,7 @@ async fn main() {
                 urules,
                 ucpath,
                 network_interface,
+                uoverwrite,
             )
             .await
         }
@@ -232,6 +246,7 @@ async fn main() {
                 conf.connection,
                 rules,
                 network_interface,
+                uoverwrite,
             )
             .await;
         }
@@ -246,6 +261,7 @@ async fn main() {
                 conf.connection,
                 urules,
                 network_interface,
+                uoverwrite,
             )
             .await;
         }
@@ -259,6 +275,7 @@ async fn main() {
                 conf.connection,
                 urules,
                 network_interface,
+                uoverwrite,
             )
             .await;
         }

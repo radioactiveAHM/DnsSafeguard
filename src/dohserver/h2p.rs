@@ -155,84 +155,92 @@ async fn handle_dns_req_get(
     handle_resp(resp, &buff, size, cache_control).await
 }
 
+struct SendResponseHeader<'a> (&'a mut SendResponse<Bytes>, http::Response<()>);
+impl<'a> Future for SendResponseHeader<'a> {
+    type Output = tokio::io::Result<Result<h2::SendStream<Bytes>, h2::Error>>;
+    fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+        let r = self.1.clone();
+        match self.0.poll_reset(cx) {
+            std::task::Poll::Ready(Ok(r)) => {
+                return std::task::Poll::Ready(Err(tokio::io::Error::new(tokio::io::ErrorKind::ConnectionAborted, r.description())))
+            }
+            std::task::Poll::Ready(Err(e)) => {
+                return std::task::Poll::Ready(Err(tokio::io::Error::other(e)))
+            }
+            std::task::Poll::Pending => {
+                std::task::Poll::Ready(Ok(self.0.send_response(r, false)))
+            },
+        }
+    }
+}
+
+// Wait for capacity
+struct WaitForCap<'a>(&'a mut h2::SendStream<Bytes>);
+impl<'a> Future for WaitForCap<'a> {
+    type Output = tokio::io::Result<usize>;
+
+    fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+        match self.0.poll_capacity(cx) {
+            std::task::Poll::Pending => std::task::Poll::Pending,
+            std::task::Poll::Ready(Some(Ok(size))) => std::task::Poll::Ready(Ok(size)),
+            std::task::Poll::Ready(Some(Err(e))) => std::task::Poll::Ready(Err(tokio::io::Error::other(e))),
+            _ => std::task::Poll::Ready(Err(tokio::io::Error::new(tokio::io::ErrorKind::ConnectionAborted, "Stream Closed")))
+        }
+    }
+}
+
 async fn handle_resp(
     rframe: &mut SendResponse<Bytes>,
     buff: &[u8],
     size: usize,
     cache_control: &'static String,
 ) -> tokio::io::Result<()> {
-    let waker = futures::task::noop_waker();
     let heads = Response::builder()
         .version(http::Version::HTTP_2)
         .status(http::status::StatusCode::OK)
         .header("Content-Type", "application/dns-message")
         .header("Cache-Control", cache_control)
         .header("Access-Control-Allow-Origin", "*")
-        .header("Server", "HTTP server")
-        .header("X-Content-Type-Options", "nosniff")
-        .header("X-Frame-Options", "SAMEORIGIN")
         .header("content-length", size)
         .body(())
         .unwrap();
 
-    let mut cx = std::task::Context::from_waker(&waker);
-    let pending = match rframe.poll_reset(&mut cx) {
-        std::task::Poll::Ready(Ok(_)) => {
-            return Ok(());
-        }
-        std::task::Poll::Ready(Err(e)) => {
-            return Err(tokio::io::Error::other(e));
-        }
-        std::task::Poll::Pending => rframe.send_response(heads, false),
-    };
-
-    if let Ok(mut bframe) = pending {
+    if let Ok(Ok(mut bframe)) = SendResponseHeader(rframe, heads).await {
         bframe.reserve_capacity(size);
-        let mut cx = std::task::Context::from_waker(&waker);
         let mut written = 0;
         loop {
-            match bframe.poll_capacity(&mut cx) {
-                std::task::Poll::Ready(Some(Ok(capacity))) => {
+            match WaitForCap(&mut bframe).await {
+                Ok(capacity) => {
                     if capacity >= size {
                         if let Err(e) =
-                            bframe.send_data(Bytes::copy_from_slice(&buff[..size]), true)
+                        bframe.send_data(Bytes::copy_from_slice(&buff[..size]), true)
                         {
                             return Err(tokio::io::Error::other(e));
                         }
-                        break;
+                        return Ok(());
                     } else {
                         if written + capacity >= size {
                             if let Err(e) = bframe.send_data(
                                 Bytes::copy_from_slice(&buff[written..written + capacity]),
-                                false,
+                                true,
                             ) {
                                 return Err(tokio::io::Error::other(e));
                             }
+                            return Ok(());
                         } else if let Err(e) =
                             bframe.send_data(Bytes::copy_from_slice(&buff[written..size]), false)
                         {
                             return Err(tokio::io::Error::other(e));
                         }
-
+            
                         written += capacity;
+                        bframe.reserve_capacity(size - written);
                     }
                 }
-                std::task::Poll::Ready(Some(Err(e))) => {
-                    return Err(tokio::io::Error::other(e));
-                }
-                std::task::Poll::Ready(None) => {
-                    return Err(tokio::io::Error::from(
-                        tokio::io::ErrorKind::ConnectionReset,
-                    ));
-                }
-                std::task::Poll::Pending => {
-                    continue;
-                }
+                Err(e) => return Err(e)
             }
         }
     } else {
-        return Err(tokio::io::Error::other(pending.unwrap_err()));
+        return Ok(());
     }
-
-    Ok(())
 }

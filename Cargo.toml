@@ -27,8 +27,7 @@ base64-url = "3.0.0"
 h2 = "0.4.8"
 tokio-rustls = { git = "https://github.com/radioactiveAHM/tokio-rustls.git", default-features = false, features = ["ring"] }
 crossbeam-channel = "0.5.14"
-socket2 = "0.5.8"
-futures = "0.3.31"
+socket2 = "0.5.9"
 local-ip-address = "0.6.3"
 
 [profile.release]

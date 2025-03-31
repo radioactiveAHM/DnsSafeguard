@@ -69,13 +69,13 @@
 		"max_reconnect_sleep": 2
 	},
 	"doh_server": {
-		"enable": false,
+		"enable": true,
 		"alpn": ["h2", "http/1.1"],
 		"listen_address": "127.0.0.1:443",
 		"certificate": "cert.crt",
 		"key": "key.pem",
 		"cache_control": "private, max-age=3600",
-		"log_errors": false
+		"log_errors": true
 	},
 	"rules": null,
 	"overwrite": null

@@ -94,7 +94,7 @@ async fn handle_req(
         Buffering(&mut temp, 0)
     .write(
         format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/dns-message\r\nCache-Control: {cache_control}\r\nAccess-Control-Allow-Origin: *\r\nServer: HTTP server\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: SAMEORIGIN\r\ncontent-length: {size}\r\n\r\n"
+            "HTTP/1.1 200 OK\r\nContent-Type: application/dns-message\r\nCache-Control: {cache_control}\r\nAccess-Control-Allow-Origin: *\r\ncontent-length: {size}\r\n\r\n"
         ).as_bytes()
     ).write(&respbuff[..size]).get()
     ).await?;

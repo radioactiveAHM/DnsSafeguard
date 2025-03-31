@@ -124,7 +124,8 @@ The configuration file is structured in JSON format and includes the following s
   - `ALPN`: Set up the HTTP version to serve. Supported variants are `h2` and `http/1.1`.
   - `Certificate`: Path to the certificate file (e.g., `/path/to/certificate.crt`).
   - `Key`: Path to the key file (e.g., `/path/to/key.key`).
-  - `log_errors`: Enable logging DoH sever errors.
+  - `Cache Control`: cache control as response header.
+  - `Log Errors`: Enable logging DoH sever errors.
 - `Rules`: Block or bypass DNS queries containing specified domains or keywords. [Rules Page](/RULES.md).
 
 ## Notes

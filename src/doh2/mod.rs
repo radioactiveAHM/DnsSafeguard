@@ -3,6 +3,7 @@ use crate::rule::rulecheck;
 use crate::tls::tlsfragmenting;
 use crate::utils::Buffering;
 use crate::utils::unsafe_staticref;
+use bytes::Bytes;
 use core::str;
 use h2::client::SendRequest;
 use std::{net::SocketAddr, sync::Arc};
@@ -25,6 +26,7 @@ pub async fn http2(
     ucpath: &'static Option<String>,
     network_interface: &'static Option<String>,
     ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
+    hm: config::HttpMethod,
 ) {
     // TLS Conf
     let h2tls = tls::tlsconf(vec![b"h2".to_vec()], dcv);
@@ -104,6 +106,7 @@ pub async fn http2(
                         uudp,
                         ucpath,
                         ow,
+                        hm,
                     )
                     .await
                     {
@@ -152,6 +155,7 @@ pub async fn http2(
                         uudp,
                         ucpath,
                         ow,
+                        hm,
                     )
                     .await
                     {
@@ -176,26 +180,56 @@ async fn send_req(
     udp: &'static tokio::net::UdpSocket,
     ucpath: &'static Option<String>,
     ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
+    hm: config::HttpMethod,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut temp = [0u8; 512];
-    let mut url = [0u8; 1024];
-
     // Sending request
-    let resp = h2_client
-        .send_request(
-            http::Request::get(genrequrl(
-                &mut Buffering(&mut url, 0),
-                server_name.as_bytes(),
-                base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?,
-                ucpath,
-            )?)
-            .version(http::Version::HTTP_2)
-            .header("Accept", "application/dns-message")
-            .body(())?,
-            true,
-        )?
-        .0
-        .await?;
+    let resp = match hm {
+        config::HttpMethod::GET => {
+            let mut temp = [0u8; 512];
+            let mut url = [0u8; 1024];
+            h2_client
+                .send_request(
+                    http::Request::get(genrequrl(
+                        &mut Buffering(&mut url, 0),
+                        server_name.as_bytes(),
+                        base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?,
+                        ucpath,
+                    )?)
+                    .version(http::Version::HTTP_2)
+                    .header("Accept", "application/dns-message")
+                    .body(())?,
+                    true,
+                )?
+                .0
+                .await?
+        }
+        config::HttpMethod::POST => {
+            let p = if let Some(path) = ucpath {
+                path.as_str()
+            } else {
+                "/dns-query"
+            };
+            let mut p = h2_client.send_request(
+                http::Request::post(
+                    http::Uri::builder()
+                        .scheme("https")
+                        .authority(server_name)
+                        .path_and_query(p)
+                        .build()?,
+                )
+                .header("Accept", "application/dns-message")
+                .header("Content-Type", "application/dns-message")
+                .header("content-length", dns_query.1)
+                .version(http::Version::HTTP_2)
+                .body(())?,
+                false,
+            )?;
+            p.1.reserve_capacity(dns_query.1);
+            crate::dohserver::h2p::WaitForCap(&mut p.1).await?;
+            p.1.send_data(Bytes::copy_from_slice(&dns_query.0[..dns_query.1]), true)?;
+            p.0.await?
+        }
+    };
 
     if resp.status() == http::status::StatusCode::OK {
         // Get body (dns query)

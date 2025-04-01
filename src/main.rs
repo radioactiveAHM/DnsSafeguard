@@ -105,6 +105,7 @@ async fn main() {
                         ucpath6,
                         network_interface6,
                         uoverwrite,
+                        v6.http_method,
                     )
                     .await
                 }
@@ -120,6 +121,7 @@ async fn main() {
                         ucpath6,
                         network_interface6,
                         uoverwrite,
+                        v6.http_method,
                     )
                     .await
                 }
@@ -217,6 +219,7 @@ async fn main() {
                 ucpath,
                 network_interface,
                 uoverwrite,
+                conf.http_method,
             )
             .await
         }
@@ -232,6 +235,7 @@ async fn main() {
                 ucpath,
                 network_interface,
                 uoverwrite,
+                conf.http_method,
             )
             .await
         }

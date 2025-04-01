@@ -4,7 +4,6 @@ pub mod transporter;
 
 use core::str;
 use std::{
-    borrow::BorrowMut,
     future,
     io::Read,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
@@ -91,6 +90,7 @@ pub async fn http3(
     ucpath: &'static Option<String>,
     network_interface: &'static Option<String>,
     ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
+    hm: config::HttpMethod,
 ) {
     let mut endpoint = udp_setup(
         socket_addrs,
@@ -199,7 +199,8 @@ pub async fn http3(
                 tokio::spawn(async move {
                     let mut temp = false;
                     if let Err(e) =
-                        send_request(sn, h3, (*dns_query, query_size), addr, uudp, ucpath, ow).await
+                        send_request(sn, h3, (*dns_query, query_size), addr, uudp, ucpath, ow, hm)
+                            .await
                     {
                         println!("{e}");
                         temp = true;
@@ -238,7 +239,8 @@ pub async fn http3(
                 tokio::spawn(async move {
                     let mut temp = false;
                     if let Err(e) =
-                        send_request(sn, h3, (dns_query, query_size), addr, uudp, ucpath, ow).await
+                        send_request(sn, h3, (dns_query, query_size), addr, uudp, ucpath, ow, hm)
+                            .await
                     {
                         println!("{e}");
                         temp = true;
@@ -260,24 +262,55 @@ async fn send_request(
     udp: &'static tokio::net::UdpSocket,
     cpath: &'static Option<String>,
     ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
+    hm: config::HttpMethod,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut temp = [0u8; 512];
-    let mut url = [0; 1024];
+    let mut reqs = match hm {
+        config::HttpMethod::GET => {
+            let mut temp = [0u8; 512];
+            let mut url = [0; 1024];
+            h3.send_request(
+                http::Request::get(genrequrl(
+                    &mut Buffering(&mut url, 0),
+                    server_name.as_bytes(),
+                    base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?,
+                    cpath,
+                )?)
+                .version(http::Version::HTTP_3)
+                .header("Accept", "application/dns-message")
+                .body(())?,
+            )
+            .await?
+        }
+        config::HttpMethod::POST => {
+            let p = if let Some(path) = cpath {
+                path.as_str()
+            } else {
+                "/dns-query"
+            };
+            let mut pending = h3
+                .send_request(
+                    http::Request::post(
+                        http::Uri::builder()
+                            .scheme("https")
+                            .authority(server_name)
+                            .path_and_query(p)
+                            .build()?,
+                    )
+                    .header("Accept", "application/dns-message")
+                    .header("Content-Type", "application/dns-message")
+                    .header("content-length", dns_query.1)
+                    .version(http::Version::HTTP_3)
+                    .body(())?,
+                )
+                .await?;
+            // pending
+            pending
+                .send_data(bytes::Bytes::copy_from_slice(&dns_query.0[..dns_query.1]))
+                .await?;
+            pending
+        }
+    };
 
-    let mut reqs = h3
-        .borrow_mut()
-        .send_request(
-            http::Request::get(genrequrl(
-                &mut Buffering(&mut url, 0),
-                server_name.as_bytes(),
-                base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?,
-                cpath,
-            )?)
-            .version(http::Version::HTTP_3)
-            .header("Accept", "application/dns-message")
-            .body(())?,
-        )
-        .await?;
     reqs.finish().await?;
 
     if reqs.recv_response().await?.status() == http::status::StatusCode::OK {

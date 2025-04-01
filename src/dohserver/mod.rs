@@ -1,5 +1,5 @@
 mod h11p;
-mod h2p;
+pub mod h2p;
 
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};

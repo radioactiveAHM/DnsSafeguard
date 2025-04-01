@@ -7,6 +7,7 @@
 	"interface": null,
 	"udp_socket_addrs": "127.0.0.1:53",
 	"custom_http_path": null,
+	"http_method": "POST",
 	"fragmenting": {
 		"enable": true,
 		"method": "random",
@@ -35,6 +36,7 @@
 		"interface": null,
 		"udp_socket_addrs": "[::1]:53",
 		"custom_http_path": null,
+		"http_method": "POST",
 		"fragmenting": {
 			"enable": false,
 			"method": "random",
@@ -69,13 +71,13 @@
 		"max_reconnect_sleep": 2
 	},
 	"doh_server": {
-		"enable": true,
+		"enable": false,
 		"alpn": ["h2", "http/1.1"],
 		"listen_address": "127.0.0.1:443",
 		"certificate": "cert.crt",
 		"key": "key.pem",
 		"cache_control": "private, max-age=3600",
-		"log_errors": true
+		"log_errors": false
 	},
 	"rules": null,
 	"overwrite": null

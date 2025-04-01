@@ -155,36 +155,46 @@ async fn handle_dns_req_get(
     handle_resp(resp, &buff, size, cache_control).await
 }
 
-struct SendResponseHeader<'a> (&'a mut SendResponse<Bytes>, http::Response<()>);
-impl<'a> Future for SendResponseHeader<'a> {
+struct SendResponseHeader<'a>(&'a mut SendResponse<Bytes>, http::Response<()>);
+impl Future for SendResponseHeader<'_> {
     type Output = tokio::io::Result<Result<h2::SendStream<Bytes>, h2::Error>>;
-    fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
         let r = self.1.clone();
         match self.0.poll_reset(cx) {
-            std::task::Poll::Ready(Ok(r)) => {
-                return std::task::Poll::Ready(Err(tokio::io::Error::new(tokio::io::ErrorKind::ConnectionAborted, r.description())))
-            }
+            std::task::Poll::Ready(Ok(r)) => std::task::Poll::Ready(Err(tokio::io::Error::new(
+                tokio::io::ErrorKind::ConnectionAborted,
+                r.description(),
+            ))),
             std::task::Poll::Ready(Err(e)) => {
-                return std::task::Poll::Ready(Err(tokio::io::Error::other(e)))
+                std::task::Poll::Ready(Err(tokio::io::Error::other(e)))
             }
-            std::task::Poll::Pending => {
-                std::task::Poll::Ready(Ok(self.0.send_response(r, false)))
-            },
+            std::task::Poll::Pending => std::task::Poll::Ready(Ok(self.0.send_response(r, false))),
         }
     }
 }
 
 // Wait for capacity
-struct WaitForCap<'a>(&'a mut h2::SendStream<Bytes>);
-impl<'a> Future for WaitForCap<'a> {
+pub struct WaitForCap<'a>(pub &'a mut h2::SendStream<Bytes>);
+impl Future for WaitForCap<'_> {
     type Output = tokio::io::Result<usize>;
 
-    fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
         match self.0.poll_capacity(cx) {
             std::task::Poll::Pending => std::task::Poll::Pending,
             std::task::Poll::Ready(Some(Ok(size))) => std::task::Poll::Ready(Ok(size)),
-            std::task::Poll::Ready(Some(Err(e))) => std::task::Poll::Ready(Err(tokio::io::Error::other(e))),
-            _ => std::task::Poll::Ready(Err(tokio::io::Error::new(tokio::io::ErrorKind::ConnectionAborted, "Stream Closed")))
+            std::task::Poll::Ready(Some(Err(e))) => {
+                std::task::Poll::Ready(Err(tokio::io::Error::other(e)))
+            }
+            _ => std::task::Poll::Ready(Err(tokio::io::Error::new(
+                tokio::io::ErrorKind::ConnectionAborted,
+                "Stream Closed",
+            ))),
         }
     }
 }
@@ -213,7 +223,7 @@ async fn handle_resp(
                 Ok(capacity) => {
                     if capacity >= size {
                         if let Err(e) =
-                        bframe.send_data(Bytes::copy_from_slice(&buff[..size]), true)
+                            bframe.send_data(Bytes::copy_from_slice(&buff[..size]), true)
                         {
                             return Err(tokio::io::Error::other(e));
                         }
@@ -232,15 +242,15 @@ async fn handle_resp(
                         {
                             return Err(tokio::io::Error::other(e));
                         }
-            
+
                         written += capacity;
                         bframe.reserve_capacity(size - written);
                     }
                 }
-                Err(e) => return Err(e)
+                Err(e) => return Err(e),
             }
         }
     } else {
-        return Ok(());
+        Ok(())
     }
 }

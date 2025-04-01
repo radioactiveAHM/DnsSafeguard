@@ -60,6 +60,7 @@ pub struct Ipv6 {
     pub interface: Option<String>,
     pub udp_socket_addrs: std::net::SocketAddr,
     pub custom_http_path: Option<String>,
+    pub http_method: HttpMethod,
     pub fragmenting: Fragmenting,
     pub noise: Noise,
 }
@@ -115,6 +116,12 @@ pub struct DohServer {
     pub log_errors: bool,
 }
 
+#[derive(serde::Deserialize, Clone, Copy)]
+pub enum HttpMethod {
+    POST,
+    GET,
+}
+
 #[derive(serde::Deserialize)]
 pub struct Config {
     pub protocol: Protocol,
@@ -125,6 +132,7 @@ pub struct Config {
     pub interface: Option<String>,
     pub udp_socket_addrs: std::net::SocketAddr,
     pub custom_http_path: Option<String>,
+    pub http_method: HttpMethod,
     pub fragmenting: Fragmenting,
     pub noise: Noise,
     pub ipv6: Ipv6,

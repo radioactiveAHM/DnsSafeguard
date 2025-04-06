@@ -29,6 +29,9 @@ DnsSafeguard is a fast and secure DNS client written in Rust, designed to interc
 - [x] Local HTTP/1.1 and HTTP/2 DoH Server (POST + GET)
 - [x] Block DNS queries based on record type
 - [x] Respond to the DNS query with a static IP(V4 and V6)
+- [x] Owerwrite IPs from DNS responses
+- [x] Interface/Adapter binding
+- [x] POST Method
 
 ## Building the Project
 
@@ -95,10 +98,12 @@ The configuration file is structured in JSON format and includes the following s
 - `Disable Domain SNI`: When enabled, the server name is not used as SNI, which can be a good alternative to the fragmenting method. Some public DNS servers, like Google, support this. Supported protocols include H1, H2, DoT, DoT_nonblocking, and H1_multi.
 - `Disable Certificate Validation`: This option ignores certificate server name matching, enabling the use of domain fronting. For example, you can use `www.google.com` as the server name, which is not blocked by the Great Firewall (GFW). Many DNS servers, such as Google, Quad9, and NextDNS, support this option. However, Cloudflare does not, as it uses SNI guard. This is the best option for bypassing the GFW. **Disable Fragmenting**.
 - `Socket Addresses`: The IP address and port for the DNS server connection.
+- `Interface`: Name of the Interface/Adapter to bind to. Use `null` for default.
 - `UDP Socket Addresses`: Local UDP address and port for DNS queries.
 - `Custom Http Path`: Specify a custom HTTP path for HTTP-based protocols such as H1, H2, and H3. Use `null` for default which is the standard DoH path.
   - Examples: `/jsd3n5nb4/dns-query`, `/user/d618995a10e74acec7ed454ac6e39d6eb/dns-query`.
   - Warning: Custom path must end with `/dns-query`.
+- `Http Method`: Values are `GET` and `POST`. GET is more compatible, it consumes more memory. POST, on the other hand, eliminates the need to encode DNS queries in base64url, resulting in lower memory usage. However, it requires two write system calls.
 - `Fragmenting`: The fragmentation method to use during the TLS handshake. [Fragmenting page](/FRAG.md)
 - `Noise`: UDP noise setting.
   - `ntype`: Noise type. Variants include `dns`, `str`, `lsd`, `tracker` and `rand`.
@@ -127,6 +132,7 @@ The configuration file is structured in JSON format and includes the following s
   - `Cache Control`: cache control as response header.
   - `Log Errors`: Enable logging DoH sever errors.
 - `Rules`: Block or bypass DNS queries containing specified domains or keywords. [Rules Page](/RULES.md).
+- `Overwrite`: Overwrite IPs from DNS responses. [Overwrite Page](/OVERWRITE.md).
 
 ## Notes
 

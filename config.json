@@ -7,7 +7,7 @@
 	"interface": null,
 	"udp_socket_addrs": "127.0.0.1:53",
 	"custom_http_path": null,
-	"http_method": "POST",
+	"http_method": "GET",
 	"fragmenting": {
 		"enable": true,
 		"method": "random",
@@ -36,7 +36,7 @@
 		"interface": null,
 		"udp_socket_addrs": "[::1]:53",
 		"custom_http_path": null,
-		"http_method": "POST",
+		"http_method": "GET",
 		"fragmenting": {
 			"enable": false,
 			"method": "random",

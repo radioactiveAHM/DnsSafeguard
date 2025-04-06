@@ -63,7 +63,13 @@ The `ip` object responds to the DNS query with the provided IP. The value must b
 Example:
 
 ```json
-"ip": "192.168.2.1"
+"ip": ["192.168.2.1", null]
+```
+
+with IPv6
+
+```json
+"ip": ["127.0.0.1", "::1"]
 ```
 
 ## Example Configuration
@@ -109,7 +115,16 @@ Here's an example configuration for the `rules` object:
       "router.com"
     ],
     "target": {
-      "ip": "192.168.2.1"
+      "ip": ["192.168.2.1", null]
+    }
+  },
+    // Respond to DNS queries containing domains in the options object with both IP versions
+  {
+    "options": [
+      "localhost.com"
+    ],
+    "target": {
+      "ip": ["127.0.0.1", "::1"]
     }
   }
 ]

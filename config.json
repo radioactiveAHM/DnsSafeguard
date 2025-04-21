@@ -70,6 +70,12 @@
 		"max_reconnect": 5,
 		"max_reconnect_sleep": 2
 	},
+	"tcp_socket_options": {
+		"set_send_buffer_size": 4096,
+		"set_recv_buffer_size": 8196,
+		"nodelay": false,
+		"keepalive": true
+	},
 	"doh_server": {
 		"enable": false,
 		"alpn": ["h2", "http/1.1"],

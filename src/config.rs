@@ -1,4 +1,12 @@
 #[derive(serde::Deserialize, Clone, Copy)]
+pub struct TcpSocketOptions {
+    pub set_send_buffer_size: u32,
+    pub set_recv_buffer_size: u32,
+    pub nodelay: bool,
+    pub keepalive: bool
+}
+
+#[derive(serde::Deserialize, Clone, Copy)]
 #[allow(non_camel_case_types)]
 pub enum FragMethod {
     random,
@@ -138,6 +146,7 @@ pub struct Config {
     pub ipv6: Ipv6,
     pub quic: Quic,
     pub connection: Connection,
+    pub tcp_socket_options: TcpSocketOptions,
     pub doh_server: DohServer,
     pub rules: Option<Vec<Rule>>,
     pub overwrite: Option<Vec<crate::ipoverwrite::IpOverwrite>>,

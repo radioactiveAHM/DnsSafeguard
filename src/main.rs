@@ -21,6 +21,19 @@ use multi::h1_multi;
 use rule::{Rules, convert_rules};
 use utils::unsafe_staticref;
 
+static mut SOCKET_OPT: config::TcpSocketOptions = config::TcpSocketOptions {
+    set_send_buffer_size: 8196,
+    set_recv_buffer_size: 8196,
+    nodelay: false,
+    keepalive: true
+};
+
+fn get_socket_op() -> config::TcpSocketOptions {
+    unsafe {
+        SOCKET_OPT
+    }
+}
+
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
     tokio_rustls::rustls::crypto::ring::default_provider()
@@ -31,6 +44,10 @@ async fn main() {
     let conf = config::load_config();
     // Convert rules to adjust domains like dns query and improve performance
     let rules = convert_rules(conf.rules);
+
+    unsafe {
+        SOCKET_OPT = conf.tcp_socket_options
+    }
 
     // unsafe values
     // since values all avalible during application lifetime

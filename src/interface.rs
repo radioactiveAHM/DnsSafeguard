@@ -37,6 +37,15 @@ pub fn get_interface(ipv4: bool, interface: &str) -> SocketAddr {
     }
 }
 
+pub fn set_tcp_socket_options(tcp: &mut tokio::net::TcpSocket) {
+    let options = crate::get_socket_op();
+
+    tcp.set_send_buffer_size(options.set_send_buffer_size).unwrap();
+    tcp.set_recv_buffer_size(options.set_recv_buffer_size).unwrap();
+    tcp.set_nodelay(options.nodelay).unwrap();
+    tcp.set_keepalive(options.keepalive).unwrap();
+}
+
 pub async fn tcp_connect_handle(
     target: std::net::SocketAddr,
     connection_cfg: crate::config::Connection,
@@ -44,11 +53,13 @@ pub async fn tcp_connect_handle(
 ) -> TcpStream {
     let mut retry = 0u8;
     loop {
-        let socket = if target.is_ipv4() {
+        let mut socket = if target.is_ipv4() {
             tokio::net::TcpSocket::new_v4().expect("Could not create socket v4")
         } else {
             tokio::net::TcpSocket::new_v6().expect("Could not create socket v6")
         };
+
+        set_tcp_socket_options(&mut socket);
 
         if let Some(interface) = network_interface {
             socket

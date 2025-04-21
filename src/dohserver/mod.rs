@@ -6,7 +6,6 @@ use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::net::TcpListener;
 use tokio::time::sleep;
 use tokio_rustls::{TlsAcceptor, rustls};
 
@@ -71,7 +70,14 @@ pub async fn doh_server(dsc: DohServer, udp_socket_addrs: SocketAddr) {
         .collect();
     let acceptor = TlsAcceptor::from(Arc::new(config));
 
-    let listener = TcpListener::bind(dsc.listen_address).await.unwrap();
+    let mut tsocket = if dsc.listen_address.is_ipv4() {
+        tokio::net::TcpSocket::new_v4().unwrap()
+    } else {
+        tokio::net::TcpSocket::new_v6().unwrap()
+    };
+    crate::interface::set_tcp_socket_options(&mut tsocket);
+    tsocket.bind(dsc.listen_address).unwrap();
+    let listener = tsocket.listen(128).unwrap();
 
     println!("DoH server Listening on {}", dsc.listen_address);
 

@@ -13,22 +13,22 @@ categories = [
 ]
 
 [dependencies]
-webpki-roots = "0.26.10"
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
-rand = "0.9.1"
-quinn = "0.11.7"
-tokio = { version = "1.44.2", features = ["rt-multi-thread", "net", "macros"] }
-h3-quinn = "0.0.9"
-h3 = "0.0.7"
-http = "1.3.1"
-bytes = "1.10.1"
-base64-url = "3.0.0"
-h2 = "0.4.9"
+webpki-roots = "1.0.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rand = "0.9"
+quinn = "0.11"
+tokio = { version = "1.45.0", features = ["rt-multi-thread", "net", "macros"] }
+h3-quinn = "0.0.10"
+h3 = "0.0.8"
+http = "1.3"
+bytes = "1.10"
+base64-url = "3"
+h2 = "0.4"
 tokio-rustls = { git = "https://github.com/radioactiveAHM/tokio-rustls.git", default-features = false, features = ["ring"] }
-crossbeam-channel = "0.5.15"
-socket2 = "0.5.9"
-local-ip-address = "0.6.5"
+crossbeam-channel = "0.5"
+socket2 = "0.5"
+local-ip-address = "0.6"
 
 [profile.release]
 panic = "abort"

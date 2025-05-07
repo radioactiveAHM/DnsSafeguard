@@ -181,9 +181,8 @@ pub async fn http3(
             .unwrap();
         let deriver_dead_conn = dead_conn.clone();
         let drive = async move {
-            future::poll_fn(|cx| driver.poll_close(cx)).await?;
+            println!("H3: {}", future::poll_fn(|cx| driver.poll_close(cx)).await);
             *(deriver_dead_conn.lock().await) = true;
-            Ok::<(), h3::Error>(())
         };
 
         tokio::spawn(drive);

@@ -3,7 +3,7 @@ pub struct TcpSocketOptions {
     pub set_send_buffer_size: u32,
     pub set_recv_buffer_size: u32,
     pub nodelay: bool,
-    pub keepalive: bool
+    pub keepalive: bool,
 }
 
 #[derive(serde::Deserialize, Clone, Copy)]
@@ -125,6 +125,7 @@ pub struct DohServer {
 }
 
 #[derive(serde::Deserialize, Clone, Copy)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum HttpMethod {
     POST,
     GET,

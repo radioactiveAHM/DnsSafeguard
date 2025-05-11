@@ -2,6 +2,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use quinn::{RecvStream, SendStream};
 use tokio::{
+    io::ReadBuf,
     sync::Mutex,
     time::{sleep, timeout},
 };
@@ -200,16 +201,14 @@ async fn send_dq(
     ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
 ) -> tokio::io::Result<()> {
     [dns_query.0[0], dns_query.0[1]] = convert_u16_to_two_u8s_be(dns_query.1 as u16);
-
     send.write(&dns_query.0[..dns_query.1 + 2]).await?;
     send.finish()?;
     let mut buff = [0u8; 4096];
-    if let Some(resp_size) = recv.read(&mut buff).await? {
-        if ow.is_some() {
-            crate::ipoverwrite::overwrite_ip(&mut buff[2..resp_size], ow);
-        }
-        let _ = udp.send_to(&buff[2..resp_size], addr).await;
+    let mut rb = ReadBuf::new(&mut buff);
+    std::future::poll_fn(|cx| recv.poll_read_buf(cx, &mut rb)).await?;
+    if ow.is_some() {
+        crate::ipoverwrite::overwrite_ip(&mut rb.filled_mut()[2..], ow);
     }
-
+    let _ = udp.send_to(&rb.filled()[2..], addr).await;
     Ok(())
 }

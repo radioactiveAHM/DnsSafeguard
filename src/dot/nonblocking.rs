@@ -112,7 +112,7 @@ pub async fn dot_nonblocking(
                 ))
                 .await;
                 let mut waiters_cleanup_lock = waiters_cleanup.lock().await;
-                if waiters_cleanup_lock.len() > 0 {
+                if !waiters_cleanup_lock.is_empty() {
                     waiters_cleanup_lock.retain(|waiter| {
                         waiter.2.elapsed().as_secs() < connection.dot_nonblocking_dns_query_lifetime
                     });

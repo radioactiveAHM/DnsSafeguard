@@ -40,8 +40,10 @@ pub fn get_interface(ipv4: bool, interface: &str) -> SocketAddr {
 pub fn set_tcp_socket_options(tcp: &mut tokio::net::TcpSocket) {
     let options = crate::get_socket_op();
 
-    tcp.set_send_buffer_size(options.set_send_buffer_size).unwrap();
-    tcp.set_recv_buffer_size(options.set_recv_buffer_size).unwrap();
+    tcp.set_send_buffer_size(options.set_send_buffer_size)
+        .unwrap();
+    tcp.set_recv_buffer_size(options.set_recv_buffer_size)
+        .unwrap();
     tcp.set_nodelay(options.nodelay).unwrap();
     tcp.set_keepalive(options.keepalive).unwrap();
 }

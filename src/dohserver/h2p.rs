@@ -1,6 +1,6 @@
 use bytes::Bytes;
-use h2::Reason;
 use h2::server::SendResponse;
+use h2::{Reason, SendStream};
 use http::Response;
 use std::net::SocketAddr;
 
@@ -176,25 +176,40 @@ impl Future for SendResponseHeader<'_> {
     }
 }
 
-// Wait for capacity
-pub struct WaitForCap<'a>(pub &'a mut h2::SendStream<Bytes>);
-impl Future for WaitForCap<'_> {
-    type Output = tokio::io::Result<usize>;
+pub async fn h2_send_bytes(stream: &mut SendStream<Bytes>, bytes: &[u8]) -> tokio::io::Result<()> {
+    let size = bytes.len();
+    stream.reserve_capacity(size);
+    let mut written = 0;
+    loop {
+        if let Some(Ok(capacity)) = std::future::poll_fn(|cx| stream.poll_capacity(cx)).await {
+            if capacity >= size {
+                if let Err(e) = stream.send_data(Bytes::copy_from_slice(bytes), true) {
+                    return Err(tokio::io::Error::other(e));
+                }
+                return Ok(());
+            } else {
+                if written + capacity >= size {
+                    if let Err(e) = stream.send_data(
+                        Bytes::copy_from_slice(&bytes[written..written + capacity]),
+                        true,
+                    ) {
+                        return Err(tokio::io::Error::other(e));
+                    }
+                    return Ok(());
+                } else if let Err(e) =
+                    stream.send_data(Bytes::copy_from_slice(&bytes[written..size]), false)
+                {
+                    return Err(tokio::io::Error::other(e));
+                }
 
-    fn poll(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output> {
-        match self.0.poll_capacity(cx) {
-            std::task::Poll::Pending => std::task::Poll::Pending,
-            std::task::Poll::Ready(Some(Ok(size))) => std::task::Poll::Ready(Ok(size)),
-            std::task::Poll::Ready(Some(Err(e))) => {
-                std::task::Poll::Ready(Err(tokio::io::Error::other(e)))
+                written += capacity;
+                stream.reserve_capacity(size - written);
             }
-            _ => std::task::Poll::Ready(Err(tokio::io::Error::new(
+        } else {
+            return Err(tokio::io::Error::new(
                 tokio::io::ErrorKind::ConnectionAborted,
                 "Stream Closed",
-            ))),
+            ));
         }
     }
 }
@@ -216,40 +231,7 @@ async fn handle_resp(
         .unwrap();
 
     if let Ok(Ok(mut bframe)) = SendResponseHeader(rframe, heads).await {
-        bframe.reserve_capacity(size);
-        let mut written = 0;
-        loop {
-            match WaitForCap(&mut bframe).await {
-                Ok(capacity) => {
-                    if capacity >= size {
-                        if let Err(e) =
-                            bframe.send_data(Bytes::copy_from_slice(&buff[..size]), true)
-                        {
-                            return Err(tokio::io::Error::other(e));
-                        }
-                        return Ok(());
-                    } else {
-                        if written + capacity >= size {
-                            if let Err(e) = bframe.send_data(
-                                Bytes::copy_from_slice(&buff[written..written + capacity]),
-                                true,
-                            ) {
-                                return Err(tokio::io::Error::other(e));
-                            }
-                            return Ok(());
-                        } else if let Err(e) =
-                            bframe.send_data(Bytes::copy_from_slice(&buff[written..size]), false)
-                        {
-                            return Err(tokio::io::Error::other(e));
-                        }
-
-                        written += capacity;
-                        bframe.reserve_capacity(size - written);
-                    }
-                }
-                Err(e) => return Err(e),
-            }
-        }
+        h2_send_bytes(&mut bframe, &buff[..size]).await
     } else {
         Ok(())
     }

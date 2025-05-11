@@ -3,7 +3,6 @@ use crate::rule::rulecheck;
 use crate::tls::tlsfragmenting;
 use crate::utils::Buffering;
 use crate::utils::unsafe_staticref;
-use bytes::Bytes;
 use core::str;
 use h2::client::SendRequest;
 use std::{net::SocketAddr, sync::Arc};
@@ -183,7 +182,7 @@ async fn send_req(
     hm: config::HttpMethod,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Sending request
-    let resp = match hm {
+    let mut resp = match hm {
         config::HttpMethod::GET => {
             let mut temp = [0u8; 512];
             let mut url = [0u8; 1024];
@@ -224,25 +223,21 @@ async fn send_req(
                 .body(())?,
                 false,
             )?;
-            p.1.reserve_capacity(dns_query.1);
-            crate::dohserver::h2p::WaitForCap(&mut p.1).await?;
-            p.1.send_data(Bytes::copy_from_slice(&dns_query.0[..dns_query.1]), true)?;
+            crate::dohserver::h2p::h2_send_bytes(&mut p.1, &dns_query.0[..dns_query.1]).await?;
             p.0.await?
         }
     };
 
     if resp.status() == http::status::StatusCode::OK {
-        // Get body (dns query)
-        if let Some(body) = resp.into_body().data().await {
-            let body_b = body?;
+        if let Some(Ok(body)) = resp.body_mut().data().await {
             if ow.is_some() {
-                let b: &[u8] = &body_b;
-                let mut buff = [0; 4196];
+                let b: &[u8] = &body;
+                let mut buff = [0; 1024 * 4];
                 buff[..b.len()].copy_from_slice(b);
                 crate::ipoverwrite::overwrite_ip(&mut buff[..b.len()], ow);
                 udp.send_to(&buff[..b.len()], addr).await?;
             } else {
-                udp.send_to(&body_b, addr).await?;
+                udp.send_to(&body, addr).await?;
             }
         }
     }

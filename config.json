@@ -9,7 +9,7 @@
 	"custom_http_path": null,
 	"http_method": "GET",
 	"fragmenting": {
-		"enable": true,
+		"enable": false,
 		"method": "random",
 		"sleep_interval_min": 10,
 		"sleep_interval_max": 100,
@@ -18,7 +18,7 @@
 		"segments": 2
 	},
 	"noise": {
-		"enable": true,
+		"enable": false,
 		"ntype": "tracker",
 		"content": "google.com",
 		"packet_length": 1,
@@ -61,7 +61,8 @@
 		"keep_alive_interval": 5,
 		"datagram_receive_buffer_size": 16384,
 		"datagram_send_buffer_size": 8192,
-		"connecting_timeout_sec": 2
+		"connecting_timeout_sec": 2,
+		"max_udp_payload_size": null
 	},
 	"connection": {
 		"h1_multi_connections": 3,

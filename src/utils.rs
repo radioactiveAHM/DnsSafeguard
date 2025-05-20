@@ -1,11 +1,11 @@
 use core::str;
 use std::str::Utf8Error;
 
-#[allow(unused)]
+#[inline(always)]
 pub fn convert_u16_to_two_u8s_be(integer: u16) -> [u8; 2] {
     [(integer >> 8) as u8, integer as u8]
 }
-#[allow(unused)]
+#[inline(always)]
 pub fn convert_two_u8s_to_u16_be(bytes: [u8; 2]) -> u16 {
     ((bytes[0] as u16) << 8) | bytes[1] as u16
 }
@@ -33,14 +33,14 @@ impl Buffering<'_> {
     }
 }
 
+#[inline(always)]
 pub fn c_len(http_head: &[u8]) -> usize {
-    let content_length = b"content-length: ";
     for line in http_head.split(|&b| b == b'\r' || b == b'\n') {
         if let Some(pos) = line
-            .windows(content_length.len())
-            .position(|window| window.eq_ignore_ascii_case(content_length))
+            .windows(16)
+            .position(|window| window.eq_ignore_ascii_case(b"content-length: "))
         {
-            if let Ok(length) = std::str::from_utf8(&line[pos + content_length.len()..])
+            if let Ok(length) = std::str::from_utf8(&line[pos + 16..])
                 .unwrap_or("0")
                 .trim()
                 .parse::<usize>()
@@ -52,12 +52,14 @@ pub fn c_len(http_head: &[u8]) -> usize {
     0
 }
 
+#[inline(always)]
 pub fn catch_in_buff(find: &[u8], buff: &[u8]) -> Option<(usize, usize)> {
     buff.windows(find.len())
         .position(|pre| pre == find)
         .map(|a| (a, a + find.len()))
 }
 
+#[inline(always)]
 pub async fn recv_timeout(
     udp: &tokio::net::UdpSocket,
     buff: &mut [u8],
@@ -74,6 +76,7 @@ pub async fn recv_timeout(
     }
 }
 
+#[inline(always)]
 pub fn unsafe_staticref<'a, T: ?Sized>(r: &'a T) -> &'static T {
     unsafe { std::mem::transmute::<&'a T, &'static T>(r) }
 }

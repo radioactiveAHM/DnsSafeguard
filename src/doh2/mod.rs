@@ -78,29 +78,32 @@ pub async fn http2(
         retry = 0;
 
         let dead_conn = Arc::new(Mutex::new(false));
-
-        // handle h2 low level connection
+        // h2 engine
         let dead_conn_h2 = dead_conn.clone();
         tokio::spawn(async move {
             if let Err(e) = h2_.await {
                 *(dead_conn_h2.lock().await) = true;
-                println!("GOT ERR={:?}", e);
+                println!("H2: {}", e);
             }
         });
 
         let mut dns_query = [0u8; 512];
         loop {
+            let h2_client = client.clone().ready().await;
+            if let Err(e) = h2_client {
+                println!("H2: {e}");
+                break;
+            }
             // Check if Connection is dead
             let h2_conn_dead = dead_conn.clone();
 
             if let Some((dns_query, query_size, addr)) = tank {
-                let h2_client = client.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
                     if let Err(e) = send_req(
                         sn,
                         (*dns_query, query_size),
-                        h2_client,
+                        h2_client.unwrap(),
                         addr,
                         uudp,
                         ucpath,
@@ -143,13 +146,12 @@ pub async fn http2(
                 }
 
                 // Base64url dns query
-                let h2_client = client.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
                     if let Err(e) = send_req(
                         sn,
                         (dns_query, query_size),
-                        h2_client,
+                        h2_client.unwrap(),
                         addr,
                         uudp,
                         ucpath,
@@ -183,25 +185,7 @@ async fn send_req(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Sending request
     let mut resp = match hm {
-        config::HttpMethod::GET => {
-            let mut temp = [0u8; 512];
-            let mut url = [0u8; 1024];
-            h2_client
-                .send_request(
-                    http::Request::get(genrequrl(
-                        &mut Buffering(&mut url, 0),
-                        server_name.as_bytes(),
-                        base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?,
-                        ucpath,
-                    )?)
-                    .version(http::Version::HTTP_2)
-                    .header("Accept", "application/dns-message")
-                    .body(())?,
-                    true,
-                )?
-                .0
-                .await?
-        }
+        config::HttpMethod::GET => get(&mut h2_client, server_name, ucpath, dns_query).await?,
         config::HttpMethod::POST => {
             let p = if let Some(path) = ucpath {
                 path.as_str()
@@ -242,4 +226,31 @@ async fn send_req(
         }
     }
     Ok(())
+}
+
+#[inline(never)]
+async fn get(
+    h2_client: &mut SendRequest<bytes::Bytes>,
+    server_name: &'static str,
+    ucpath: &'static Option<String>,
+    dns_query: ([u8; 512], usize),
+) -> Result<http::Response<h2::RecvStream>, Box<dyn std::error::Error>> {
+    let mut temp = [0u8; 512];
+    let mut url = [0u8; 1024];
+    let r = h2_client
+        .send_request(
+            http::Request::get(genrequrl(
+                &mut Buffering(&mut url, 0),
+                server_name.as_bytes(),
+                base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?,
+                ucpath,
+            )?)
+            .version(http::Version::HTTP_2)
+            .header("Accept", "application/dns-message")
+            .body(())?,
+            true,
+        )?
+        .0
+        .await?;
+    Ok(r)
 }

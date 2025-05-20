@@ -2,6 +2,7 @@ use crate::utils::Buffering;
 use core::str;
 use std::str::Utf8Error;
 
+#[inline(always)]
 pub fn genrequrl<'a>(
     url: &'a mut Buffering,
     server_name: &[u8],
@@ -24,6 +25,7 @@ pub fn genrequrl<'a>(
     }
 }
 
+#[inline(always)]
 pub fn genrequrlh1<'a>(
     url: &'a mut Buffering,
     server_name: &[u8],

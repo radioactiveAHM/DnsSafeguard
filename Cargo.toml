@@ -19,7 +19,7 @@ webpki-roots = "1.0.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rand = "0.9"
-quinn = "0.11"
+quinn = { version = "0.11", default-features = false, features = ["rustls-ring", "runtime-tokio", "platform-verifier"] }
 tokio = { version = "1.45.0", features = ["rt-multi-thread", "net", "macros"] }
 h3-quinn = "0.0.10"
 h3 = "0.0.8"

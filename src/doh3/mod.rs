@@ -25,7 +25,12 @@ use crate::{
     utils::{Buffering, unsafe_staticref},
 };
 
-pub async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise) -> quinn::Endpoint {
+pub async fn client_noise(
+    addr: SocketAddr,
+    target: SocketAddr,
+    noise: &Noise,
+    max_udp_payload_size: Option<u16>,
+) -> quinn::Endpoint {
     let socket = socket2::Socket::new(
         socket2::Domain::for_address(addr),
         socket2::Type::DGRAM,
@@ -39,11 +44,13 @@ pub async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise) ->
         noise::noiser(noise, target, &socket).await;
     }
 
-    let runtime = quinn::default_runtime()
-        .ok_or_else(|| tokio::io::Error::new(tokio::io::ErrorKind::Other, "no async runtime found"))
-        .unwrap();
+    let runtime = quinn::default_runtime().unwrap();
+    let mut ep = quinn::EndpointConfig::default();
+    if let Some(mups) = max_udp_payload_size {
+        ep.max_udp_payload_size(mups).unwrap();
+    }
     quinn::Endpoint::new_with_abstract_socket(
-        quinn::EndpointConfig::default(),
+        ep,
         None,
         runtime.wrap_udp_socket(socket.into()).unwrap(),
         runtime,
@@ -53,8 +60,8 @@ pub async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: Noise) ->
 
 pub async fn udp_setup(
     target: SocketAddr,
-    noise: Noise,
-    quic_conf_file: crate::config::Quic,
+    noise: &Noise,
+    quic_conf_file: &crate::config::Quic,
     alpn: &str,
     network_interface: &'static Option<String>,
 ) -> quinn::Endpoint {
@@ -68,8 +75,13 @@ pub async fn udp_setup(
         }
     };
 
-    let mut endpoint = client_noise(quic_udp_binding_addr, target, noise).await;
-
+    let mut endpoint = client_noise(
+        quic_udp_binding_addr,
+        target,
+        noise,
+        quic_conf_file.max_udp_payload_size,
+    )
+    .await;
     endpoint.set_default_client_config(
         quinn::ClientConfig::new(qtls::qtls(alpn))
             .transport_config(transporter::tc(quic_conf_file))
@@ -94,8 +106,8 @@ pub async fn http3(
 ) {
     let mut endpoint = udp_setup(
         socket_addrs,
-        noise.clone(),
-        quic_conf_file.clone(),
+        &noise,
+        &quic_conf_file,
         "h3",
         network_interface,
     )
@@ -121,8 +133,8 @@ pub async fn http3(
             // on windows when pc goes sleep the endpoint config is fucked up
             endpoint = udp_setup(
                 socket_addrs,
-                noise.clone(),
-                quic_conf_file.clone(),
+                &noise,
+                &quic_conf_file,
                 "h3",
                 network_interface,
             )
@@ -180,12 +192,10 @@ pub async fn http3(
             .await
             .unwrap();
         let deriver_dead_conn = dead_conn.clone();
-        let drive = async move {
+        tokio::spawn(async move {
             println!("H3: {}", future::poll_fn(|cx| driver.poll_close(cx)).await);
             *(deriver_dead_conn.lock().await) = true;
-        };
-
-        tokio::spawn(drive);
+        });
 
         let mut dns_query = [0u8; 512];
         loop {
@@ -250,6 +260,7 @@ pub async fn http3(
                 });
             }
         }
+        endpoint.wait_idle().await;
     }
 }
 
@@ -264,22 +275,7 @@ async fn send_request(
     hm: config::HttpMethod,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut reqs = match hm {
-        config::HttpMethod::GET => {
-            let mut temp = [0u8; 512];
-            let mut url = [0; 1024];
-            h3.send_request(
-                http::Request::get(genrequrl(
-                    &mut Buffering(&mut url, 0),
-                    server_name.as_bytes(),
-                    base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?,
-                    cpath,
-                )?)
-                .version(http::Version::HTTP_3)
-                .header("Accept", "application/dns-message")
-                .body(())?,
-            )
-            .await?
-        }
+        config::HttpMethod::GET => get(&mut h3, server_name, cpath, dns_query).await?,
         config::HttpMethod::POST => {
             let p = if let Some(path) = cpath {
                 path.as_str()
@@ -324,4 +320,32 @@ async fn send_request(
         }
     }
     Ok(())
+}
+
+#[inline(never)]
+async fn get(
+    h3: &mut SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
+    server_name: &'static str,
+    ucpath: &'static Option<String>,
+    dns_query: ([u8; 512], usize),
+) -> Result<
+    h3::client::RequestStream<h3_quinn::BidiStream<bytes::Bytes>, bytes::Bytes>,
+    Box<dyn std::error::Error>,
+> {
+    let mut temp = [0u8; 512];
+    let mut url = [0; 1024];
+    let r = h3
+        .send_request(
+            http::Request::get(genrequrl(
+                &mut Buffering(&mut url, 0),
+                server_name.as_bytes(),
+                base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?,
+                ucpath,
+            )?)
+            .version(http::Version::HTTP_3)
+            .header("Accept", "application/dns-message")
+            .body(())?,
+        )
+        .await?;
+    Ok(r)
 }

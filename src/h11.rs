@@ -154,10 +154,7 @@ pub async fn handler(
     {
         Ok(bs4) => bs4,
         Err(e) => {
-            return Err(tokio::io::Error::new(
-                tokio::io::ErrorKind::Other,
-                e.to_string(),
-            ));
+            return Err(tokio::io::Error::other(e));
         }
     };
     let mut b = Buffering(url, 0);

@@ -88,6 +88,7 @@ pub struct Quic {
     pub datagram_receive_buffer_size: usize,
     pub datagram_send_buffer_size: usize,
     pub connecting_timeout_sec: u64,
+    pub max_udp_payload_size: Option<u16>,
 }
 
 #[derive(serde::Deserialize, Clone, Copy)]

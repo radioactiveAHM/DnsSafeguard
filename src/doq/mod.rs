@@ -27,8 +27,8 @@ pub async fn doq(
 ) {
     let mut endpoint = udp_setup(
         socket_addrs,
-        noise.clone(),
-        quic_conf_file.clone(),
+        &noise,
+        &quic_conf_file,
         "doq",
         network_interface,
     )
@@ -56,8 +56,8 @@ pub async fn doq(
             // on windows when pc goes sleep the endpoint config is fucked up
             endpoint = udp_setup(
                 socket_addrs,
-                noise.clone(),
-                quic_conf_file.clone(),
+                &noise,
+                &quic_conf_file,
                 "doq",
                 network_interface,
             )
@@ -190,6 +190,7 @@ pub async fn doq(
                 }
             }
         }
+        endpoint.wait_idle().await;
     }
 }
 

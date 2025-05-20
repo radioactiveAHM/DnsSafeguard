@@ -1,4 +1,4 @@
-pub fn tc(quic_conf_file: crate::config::Quic) -> std::sync::Arc<quinn::TransportConfig> {
+pub fn tc(quic_conf_file: &crate::config::Quic) -> std::sync::Arc<quinn::TransportConfig> {
     let mut transport_config = quinn::TransportConfig::default();
 
     transport_config.keep_alive_interval(Some(std::time::Duration::from_secs(

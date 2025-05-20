@@ -119,7 +119,7 @@ The configuration file is structured in JSON format and includes the following s
   - `datagram_receive_buffer_size`: Size of the receive buffer for datagrams.
   - `datagram_send_buffer_size`: Size of the send buffer for datagrams.
   - `connecting_timeout_sec`: Specifies the maximum connection timeout duration in seconds.
-- `Connection`: Connection settings.
+  - `max_udp_payload_size`: Sets the maximum UDP payload size, which must be at least 1200 bytes. The default is 1472, the largest payload that fits within a standard 1500-byte Ethernet MTU. MTU discovery may override this value.
   - `h1_multi_connections`: Number of connections for the `h1 multi` protocol.
   - `reconnect_sleep`: Duration to sleep before reconnecting (in seconds).
   - `max_reconnect`: Maximum reconnect attempts before sleeping for a longer duration.

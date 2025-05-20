@@ -154,7 +154,7 @@ impl Tracker {
     }
 }
 
-pub async fn noiser(noise: Noise, target: SocketAddr, socket: &socket2::Socket) {
+pub async fn noiser(noise: &Noise, target: SocketAddr, socket: &socket2::Socket) {
     if noise.continues {
         if let Ok(s) = socket.try_clone() {
             let noise = noise.clone();
@@ -168,26 +168,12 @@ pub async fn noiser(noise: Noise, target: SocketAddr, socket: &socket2::Socket) 
 
     match noise.ntype {
         NoiseType::rand => {
-            for _ in 0..noise.packets {
-                // generate random packet
-                let mut packet = [0u8; 1024];
-                rand::rng().fill(&mut packet);
-                // send packet
-                if socket
-                    .send_to(&packet[..noise.packet_length], &target.into())
-                    .unwrap_or(0)
-                    == 0
-                {
-                    println!("Noise failed");
-                }
-                sleep(std::time::Duration::from_millis(noise.sleep)).await;
-            }
+            rand_noiser(noise, target, socket).await;
         }
         NoiseType::dns => {
             if socket
                 .send_to(&dns::DnsRcord::with_domain(&noise.content), &target.into())
-                .unwrap_or(0)
-                == 0
+                .is_err()
             {
                 println!("Noise failed");
             }
@@ -196,8 +182,7 @@ pub async fn noiser(noise: Noise, target: SocketAddr, socket: &socket2::Socket) 
         NoiseType::str => {
             if socket
                 .send_to(noise.content.as_bytes(), &target.into())
-                .unwrap_or(0)
-                == 0
+                .is_err()
             {
                 println!("Noise failed");
             }
@@ -206,8 +191,7 @@ pub async fn noiser(noise: Noise, target: SocketAddr, socket: &socket2::Socket) 
         NoiseType::lsd => {
             if socket
                 .send_to(&lsd::Lsd::new(target).into_buffer(), &target.into())
-                .unwrap_or(0)
-                == 0
+                .is_err()
             {
                 println!("Noise failed");
             }
@@ -216,8 +200,7 @@ pub async fn noiser(noise: Noise, target: SocketAddr, socket: &socket2::Socket) 
         NoiseType::tracker => {
             if socket
                 .send_to(&Tracker::new().bytes(), &target.into())
-                .unwrap_or(0)
-                == 0
+                .is_err()
             {
                 println!("Noise failed");
             }
@@ -231,26 +214,12 @@ async fn continues_noise(noise: Noise, target: SocketAddr, socket: socket2::Sock
     loop {
         match noise.ntype {
             NoiseType::rand => {
-                for _ in 0..noise.packets {
-                    // generate random packet
-                    let mut packet = [0u8; 1024];
-                    rand::rng().fill(&mut packet);
-                    // send packet
-                    if socket
-                        .send_to(&packet[..noise.packet_length], &target.into())
-                        .unwrap_or(0)
-                        == 0
-                    {
-                        println!("Noise failed");
-                    }
-                    sleep(std::time::Duration::from_millis(noise.sleep)).await;
-                }
+                rand_noiser(&noise, target, &socket).await;
             }
             NoiseType::dns => {
                 if socket
                     .send_to(&dns::DnsRcord::with_domain(&noise.content), &target.into())
-                    .unwrap_or(0)
-                    == 0
+                    .is_err()
                 {
                     println!("Noise failed");
                 }
@@ -259,8 +228,7 @@ async fn continues_noise(noise: Noise, target: SocketAddr, socket: socket2::Sock
             NoiseType::str => {
                 if socket
                     .send_to(noise.content.as_bytes(), &target.into())
-                    .unwrap_or(0)
-                    == 0
+                    .is_err()
                 {
                     println!("Noise failed");
                 }
@@ -269,8 +237,7 @@ async fn continues_noise(noise: Noise, target: SocketAddr, socket: socket2::Sock
             NoiseType::lsd => {
                 if socket
                     .send_to(&lsd::Lsd::new(target).into_buffer(), &target.into())
-                    .unwrap_or(0)
-                    == 0
+                    .is_err()
                 {
                     println!("Noise failed");
                 }
@@ -279,13 +246,30 @@ async fn continues_noise(noise: Noise, target: SocketAddr, socket: socket2::Sock
             NoiseType::tracker => {
                 if socket
                     .send_to(&Tracker::new().bytes(), &target.into())
-                    .unwrap_or(0)
-                    == 0
+                    .is_err()
                 {
                     println!("Noise failed");
                 }
                 sleep(std::time::Duration::from_millis(noise.sleep)).await;
             }
         }
+    }
+}
+
+#[inline(never)]
+async fn rand_noiser(noise: &Noise, target: SocketAddr, socket: &socket2::Socket) {
+    for _ in 0..noise.packets {
+        // generate random packet
+        let mut packet = [0u8; 1024];
+        rand::rng().fill(&mut packet);
+        // send packet
+        if socket
+            .send_to(&packet[..noise.packet_length], &target.into())
+            .unwrap_or(0)
+            == 0
+        {
+            println!("Noise failed");
+        }
+        sleep(std::time::Duration::from_millis(noise.sleep)).await;
     }
 }

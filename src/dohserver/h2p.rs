@@ -15,11 +15,9 @@ pub async fn serve_h2(
     cache_control: &'static String,
 ) -> tokio::io::Result<()> {
     let peer = stream.get_ref().0.peer_addr()?;
-    let mut conn = {
-        match h2::server::handshake(stream).await {
-            Ok(c) => c,
-            Err(e) => return Err(tokio::io::Error::other(e)),
-        }
+    let mut conn = match h2::server::handshake(stream).await {
+        Ok(c) => c,
+        Err(e) => return Err(tokio::io::Error::other(e)),
     };
     let mut deadloop: u8 = 0;
     loop {
@@ -82,6 +80,7 @@ pub async fn serve_h2(
     Ok(())
 }
 
+#[inline(never)]
 async fn handle_dns_req_post(
     resp: &mut SendResponse<Bytes>,
     body: Bytes,
@@ -113,15 +112,13 @@ async fn handle_dns_req_post(
     }
 
     if let Err(e) = handle_resp(resp, &buff, size, cache_control).await {
-        return Err(tokio::io::Error::new(
-            tokio::io::ErrorKind::Other,
-            e.to_string(),
-        ));
+        return Err(tokio::io::Error::other(e));
     }
 
     Ok(())
 }
 
+#[inline(never)]
 async fn handle_dns_req_get(
     resp: &mut SendResponse<Bytes>,
     dq: DnsQuery,
@@ -176,6 +173,7 @@ impl Future for SendResponseHeader<'_> {
     }
 }
 
+#[inline(always)]
 pub async fn h2_send_bytes(stream: &mut SendStream<Bytes>, bytes: &[u8]) -> tokio::io::Result<()> {
     let size = bytes.len();
     stream.reserve_capacity(size);
@@ -214,6 +212,7 @@ pub async fn h2_send_bytes(stream: &mut SendStream<Bytes>, bytes: &[u8]) -> toki
     }
 }
 
+#[inline(always)]
 async fn handle_resp(
     rframe: &mut SendResponse<Bytes>,
     buff: &[u8],

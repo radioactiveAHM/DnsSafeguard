@@ -78,7 +78,7 @@ pub async fn h1_multi(
                     sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
                     continue;
                 }
-                println!("HTTP/1.1 Connection {} Established", conn_i);
+                println!("HTTP/1.1 Connection {conn_i} Established");
                 retry = 0;
                 let mut c = tls_conn.unwrap();
                 loop {

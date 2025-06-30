@@ -83,7 +83,7 @@ pub async fn http2(
         tokio::spawn(async move {
             if let Err(e) = h2_.await {
                 *(dead_conn_h2.lock().await) = true;
-                println!("H2: {}", e);
+                println!("H2: {e}");
             }
         });
 

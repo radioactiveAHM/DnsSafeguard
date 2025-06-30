@@ -126,7 +126,7 @@ pub async fn doq(
                                 send_dq(bistream, (*dns_query, query_size), addr, uudp, ow).await
                             {
                                 let e_str = e.to_string();
-                                println!("{}", e_str);
+                                println!("{e_str}");
                                 temp = true;
                             }
                             if temp {
@@ -175,7 +175,7 @@ pub async fn doq(
                                 send_dq(bistream, (dns_query, query_size), addr, udp, ow).await
                             {
                                 let e_str = e.to_string();
-                                println!("{}", e_str);
+                                println!("{e_str}");
                                 temp = true;
                             }
                             if temp {

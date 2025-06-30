@@ -40,7 +40,7 @@ pub async fn serve_http11(
                 .await
                 {
                     if log {
-                        println!("DoH1.1 server<{}:stream>: {}", peer, e);
+                        println!("DoH1.1 server<{peer}:stream>: {e}");
                     }
                 }
             } else {
@@ -67,7 +67,7 @@ async fn handle_req(
             Ok(h) => h,
             Err(e) => {
                 if log {
-                    println!("DoH1.1 server<{}:stream>: {}", peer, e);
+                    println!("DoH1.1 server<{peer}:stream>: {e}");
                 }
                 return Ok(());
             }

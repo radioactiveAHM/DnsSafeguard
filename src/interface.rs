@@ -93,7 +93,7 @@ pub async fn tcp_connect_handle(
                     retry = 0;
                     continue;
                 }
-                println!("{}", e);
+                println!("{e}");
                 retry += 1;
                 sleep(std::time::Duration::from_secs(
                     connection_cfg.reconnect_sleep,

@@ -105,7 +105,7 @@ pub mod lsd {
             let mut rng = rng();
             Lsd {
                 header: "BT-SEARCH * HTTP/1.1",
-                host: format!("Host: {}", target),
+                host: format!("Host: {target}"),
                 port: format!("Port: {}", rng.random::<u16>()),
                 infohash: format!("Infohash: {}", Alphanumeric.sample_string(&mut rng, 40)),
                 cookie: format!("Cookie: {}", Alphanumeric.sample_string(&mut rng, 8)),
@@ -152,6 +152,14 @@ impl Tracker {
         ]
         .concat()
     }
+}
+
+fn stun() -> [u8; 20] {
+    let mut message = [
+        0, 1, 0, 0, 33, 18, 164, 66, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ];
+    rand::rng().fill(&mut message[8..]);
+    message
 }
 
 pub async fn noiser(noise: &Noise, target: SocketAddr, socket: &socket2::Socket) {
@@ -206,6 +214,12 @@ pub async fn noiser(noise: &Noise, target: SocketAddr, socket: &socket2::Socket)
             }
             sleep(std::time::Duration::from_millis(noise.sleep)).await;
         }
+        NoiseType::stun => {
+            if socket.send_to(&stun(), &target.into()).is_err() {
+                println!("Noise failed");
+            }
+            sleep(std::time::Duration::from_millis(noise.sleep)).await;
+        }
     }
     println!("Noise sent");
 }
@@ -248,6 +262,12 @@ async fn continues_noise(noise: Noise, target: SocketAddr, socket: socket2::Sock
                     .send_to(&Tracker::new().bytes(), &target.into())
                     .is_err()
                 {
+                    println!("Noise failed");
+                }
+                sleep(std::time::Duration::from_millis(noise.sleep)).await;
+            }
+            NoiseType::stun => {
+                if socket.send_to(&stun(), &target.into()).is_err() {
                     println!("Noise failed");
                 }
                 sleep(std::time::Duration::from_millis(noise.sleep)).await;

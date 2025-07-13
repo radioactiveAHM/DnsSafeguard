@@ -33,6 +33,7 @@ pub enum NoiseType {
     rand,
     tracker,
     stun,
+    tftp
 }
 
 #[derive(serde::Deserialize, Clone)]

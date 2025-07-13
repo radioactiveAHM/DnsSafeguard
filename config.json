@@ -1,5 +1,5 @@
 {
-	"protocol": "h3",
+	"protocol": "h2",
 	"server_name": "cloudflare-dns.com",
 	"disable_domain_sni": false,
 	"disable_certificate_validation": false,
@@ -18,8 +18,8 @@
 		"segments": 2
 	},
 	"noise": {
-		"enable": true,
-		"ntype": "stun",
+		"enable": false,
+		"ntype": "tftp",
 		"content": "google.com",
 		"packet_length": 1,
 		"packets": 1,

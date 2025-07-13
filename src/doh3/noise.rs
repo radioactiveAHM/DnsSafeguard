@@ -1,8 +1,12 @@
 use std::net::SocketAddr;
 
 use crate::config::{Noise, NoiseType};
-use rand::Rng;
 use tokio::time::sleep;
+use rand::{
+    Rng,
+    distr::{Alphanumeric, SampleString},
+    rng,
+};
 
 // Generate random standard dns record
 pub mod dns {
@@ -82,52 +86,42 @@ pub mod dns {
     }
 }
 
-pub mod lsd {
-    use std::net::SocketAddr;
+struct Lsd<'a> {
+    // [13u8, 10] after each part
+    header: &'a str,
+    host: String,
+    port: String,
+    infohash: String,
+    cookie: String, // [13u8, 10, 13u8, 10, 13u8, 10]
+}
 
-    use rand::{
-        Rng,
-        distr::{Alphanumeric, SampleString},
-        rng,
-    };
-
-    pub struct Lsd<'a> {
-        // [13u8, 10] after each part
-        header: &'a str,
-        host: String,
-        port: String,
-        infohash: String,
-        cookie: String, // [13u8, 10, 13u8, 10, 13u8, 10]
+impl Lsd<'_> {
+    pub fn new(target: SocketAddr) -> Self {
+        let mut rng = rng();
+        Lsd {
+            header: "BT-SEARCH * HTTP/1.1",
+            host: format!("Host: {target}"),
+            port: format!("Port: {}", rng.random::<u16>()),
+            infohash: format!("Infohash: {}", Alphanumeric.sample_string(&mut rng, 40)),
+            cookie: format!("Cookie: {}", Alphanumeric.sample_string(&mut rng, 8)),
+        }
     }
 
-    impl Lsd<'_> {
-        pub fn new(target: SocketAddr) -> Self {
-            let mut rng = rng();
-            Lsd {
-                header: "BT-SEARCH * HTTP/1.1",
-                host: format!("Host: {target}"),
-                port: format!("Port: {}", rng.random::<u16>()),
-                infohash: format!("Infohash: {}", Alphanumeric.sample_string(&mut rng, 40)),
-                cookie: format!("Cookie: {}", Alphanumeric.sample_string(&mut rng, 8)),
-            }
-        }
-
-        pub fn into_buffer(self) -> Vec<u8> {
-            // I know &[13, 10] is same is \r\n but i liked this way :)
-            [
-                self.header.as_bytes(),
-                &[13, 10],
-                self.host.as_bytes(),
-                &[13, 10],
-                self.port.as_bytes(),
-                &[13, 10],
-                self.infohash.as_bytes(),
-                &[13, 10],
-                self.cookie.as_bytes(),
-                &[13, 10, 13, 10, 13, 10],
-            ]
-            .concat()
-        }
+    pub fn into_buffer(self) -> Vec<u8> {
+        // I know &[13, 10] is same is \r\n but i liked this way :)
+        [
+            self.header.as_bytes(),
+            &[13, 10],
+            self.host.as_bytes(),
+            &[13, 10],
+            self.port.as_bytes(),
+            &[13, 10],
+            self.infohash.as_bytes(),
+            &[13, 10],
+            self.cookie.as_bytes(),
+            &[13, 10, 13, 10, 13, 10],
+        ]
+        .concat()
     }
 }
 
@@ -160,6 +154,22 @@ fn stun() -> [u8; 20] {
     ];
     rand::rng().fill(&mut message[8..]);
     message
+}
+
+fn tftp() -> Vec<u8> {
+    // TODO: Add write mode
+    let mut packet: Vec<u8> = vec![
+        0, 1
+    ];
+
+    let mut rng = rng();
+    let filename_len = rng.random_range(1..128);
+    packet.extend_from_slice(Alphanumeric.sample_string(&mut rng, filename_len).as_bytes());
+
+    //                          |---".bin"---|
+    packet.extend_from_slice(&[46, 98, 105, 110, 0, 111, 99, 116, 101, 116, 0]);
+
+    packet
 }
 
 pub async fn noiser(noise: &Noise, target: SocketAddr, socket: &socket2::Socket) {
@@ -198,7 +208,7 @@ pub async fn noiser(noise: &Noise, target: SocketAddr, socket: &socket2::Socket)
         }
         NoiseType::lsd => {
             if socket
-                .send_to(&lsd::Lsd::new(target).into_buffer(), &target.into())
+                .send_to(&Lsd::new(target).into_buffer(), &target.into())
                 .is_err()
             {
                 println!("Noise failed");
@@ -216,6 +226,12 @@ pub async fn noiser(noise: &Noise, target: SocketAddr, socket: &socket2::Socket)
         }
         NoiseType::stun => {
             if socket.send_to(&stun(), &target.into()).is_err() {
+                println!("Noise failed");
+            }
+            sleep(std::time::Duration::from_millis(noise.sleep)).await;
+        }
+        NoiseType::tftp => {
+            if socket.send_to(&tftp(), &target.into()).is_err() {
                 println!("Noise failed");
             }
             sleep(std::time::Duration::from_millis(noise.sleep)).await;
@@ -250,7 +266,7 @@ async fn continues_noise(noise: Noise, target: SocketAddr, socket: socket2::Sock
             }
             NoiseType::lsd => {
                 if socket
-                    .send_to(&lsd::Lsd::new(target).into_buffer(), &target.into())
+                    .send_to(&Lsd::new(target).into_buffer(), &target.into())
                     .is_err()
                 {
                     println!("Noise failed");
@@ -268,6 +284,12 @@ async fn continues_noise(noise: Noise, target: SocketAddr, socket: socket2::Sock
             }
             NoiseType::stun => {
                 if socket.send_to(&stun(), &target.into()).is_err() {
+                    println!("Noise failed");
+                }
+                sleep(std::time::Duration::from_millis(noise.sleep)).await;
+            },
+            NoiseType::tftp => {
+                if socket.send_to(&tftp(), &target.into()).is_err() {
                     println!("Noise failed");
                 }
                 sleep(std::time::Duration::from_millis(noise.sleep)).await;

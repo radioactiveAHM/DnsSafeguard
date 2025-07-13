@@ -106,7 +106,7 @@ The configuration file is structured in JSON format and includes the following s
 - `Http Method`: Values are `GET` and `POST`. GET is more compatible, it consumes more memory. POST, on the other hand, eliminates the need to encode DNS queries in base64url, resulting in lower memory usage. However, it requires two write system calls.
 - `Fragmenting`: The fragmentation method to use during the TLS handshake. [Fragmenting page](/FRAG.md)
 - `Noise`: UDP noise setting.
-  - `ntype`: Noise type. Variants include `dns`, `str`, `lsd`, `tracker` and `rand`.
+  - `ntype`: Noise type. Variants include `dns`, `str`, `lsd`, `tracker`, `stun`, `tftp` and `rand`.
   - `content`: Domain for `dns` ntype. Text for `str` ntype.
   - `packet_length`: Specifies the length of each noise packet in bytes for `rand` ntype.
   - `packets`: Indicates the total number of UDP noise packets to send for `rand` ntype.

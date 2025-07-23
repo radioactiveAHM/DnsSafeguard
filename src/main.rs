@@ -22,10 +22,10 @@ use rule::{Rules, convert_rules};
 use utils::unsafe_staticref;
 
 static mut SOCKET_OPT: config::TcpSocketOptions = config::TcpSocketOptions {
-    set_send_buffer_size: 8196,
-    set_recv_buffer_size: 8196,
-    nodelay: false,
-    keepalive: true,
+    send_buffer_size: None,
+    recv_buffer_size: None,
+    nodelay: None,
+    keepalive: None,
 };
 
 fn get_socket_op() -> config::TcpSocketOptions {

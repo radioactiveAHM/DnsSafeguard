@@ -53,10 +53,11 @@
 	"quic": {
 		"congestion_controller": "bbr",
 		"keep_alive_interval": 5,
-		"datagram_receive_buffer_size": 16384,
-		"datagram_send_buffer_size": 8192,
 		"connecting_timeout_sec": 2,
-		"max_udp_payload_size": null
+		"datagram_receive_buffer_size": null,
+		"datagram_send_buffer_size": null,
+		"packet_threshold": 12,
+		"max_idle_timeout": 120
 	},
 	"connection": {
 		"h1_multi_connections": 3,
@@ -66,10 +67,10 @@
 		"max_reconnect_sleep": 2
 	},
 	"tcp_socket_options": {
-		"set_send_buffer_size": 4096,
-		"set_recv_buffer_size": 8196,
-		"nodelay": false,
-		"keepalive": true
+		"send_buffer_size": null,
+		"recv_buffer_size": null,
+		"nodelay": null,
+		"keepalive": null
 	},
 	"doh_server": {
 		"enable": false,

@@ -39,13 +39,18 @@ pub fn get_interface(ipv4: bool, interface: &str) -> SocketAddr {
 
 pub fn set_tcp_socket_options(tcp: &mut tokio::net::TcpSocket) {
     let options = crate::get_socket_op();
-
-    tcp.set_send_buffer_size(options.set_send_buffer_size)
-        .unwrap();
-    tcp.set_recv_buffer_size(options.set_recv_buffer_size)
-        .unwrap();
-    tcp.set_nodelay(options.nodelay).unwrap();
-    tcp.set_keepalive(options.keepalive).unwrap();
+    if let Some(send_buffer_size) = options.send_buffer_size {
+        tcp.set_send_buffer_size(send_buffer_size).unwrap();
+    }
+    if let Some(recv_buffer_size) = options.recv_buffer_size {
+        tcp.set_recv_buffer_size(recv_buffer_size).unwrap();
+    }
+    if let Some(nodelay) = options.nodelay {
+        tcp.set_nodelay(nodelay).unwrap();
+    }
+    if let Some(keepalive) = options.keepalive {
+        tcp.set_keepalive(keepalive).unwrap();
+    }
 }
 
 pub async fn tcp_connect_handle(

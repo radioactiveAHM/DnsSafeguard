@@ -1,9 +1,9 @@
 #[derive(serde::Deserialize, Clone, Copy)]
 pub struct TcpSocketOptions {
-    pub set_send_buffer_size: u32,
-    pub set_recv_buffer_size: u32,
-    pub nodelay: bool,
-    pub keepalive: bool,
+    pub send_buffer_size: Option<u32>,
+    pub recv_buffer_size: Option<u32>,
+    pub nodelay: Option<bool>,
+    pub keepalive: Option<bool>,
 }
 
 #[derive(serde::Deserialize, Clone, Copy)]
@@ -31,7 +31,7 @@ pub enum NoiseType {
     rand,
     tracker,
     stun,
-    tftp
+    tftp,
 }
 
 #[derive(serde::Deserialize)]
@@ -41,7 +41,7 @@ pub struct Noise {
     pub packets: u8,
     pub sleep: u64,
     pub ntype: NoiseType,
-    pub content: String
+    pub content: String,
 }
 
 #[derive(serde::Deserialize, Clone, Copy)]
@@ -84,10 +84,11 @@ pub enum CongestionController {
 pub struct Quic {
     pub congestion_controller: CongestionController,
     pub keep_alive_interval: u64,
-    pub datagram_receive_buffer_size: usize,
-    pub datagram_send_buffer_size: usize,
     pub connecting_timeout_sec: u64,
-    pub max_udp_payload_size: Option<u16>,
+    pub datagram_receive_buffer_size: Option<usize>,
+    pub datagram_send_buffer_size: Option<usize>,
+    pub packet_threshold: u32,
+    pub max_idle_timeout: Option<u32>,
 }
 
 #[derive(serde::Deserialize, Clone, Copy)]

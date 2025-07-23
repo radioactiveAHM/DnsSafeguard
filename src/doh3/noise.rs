@@ -198,7 +198,9 @@ async fn rand_noiser(
 pub async fn noiser(noise: &Noise, target: SocketAddr, socket: &socket2::Socket) {
     if let Ok(sent_bytes) = match noise.ntype {
         NoiseType::rand => rand_noiser(noise, target, socket).await,
-        NoiseType::dns => socket.send_to(&dns::DnsRcord::with_domain(&noise.content), &target.into()),
+        NoiseType::dns => {
+            socket.send_to(&dns::DnsRcord::with_domain(&noise.content), &target.into())
+        }
         NoiseType::str => socket.send_to(noise.content.as_bytes(), &target.into()),
         NoiseType::lsd => socket.send_to(&Lsd::new(target).into_buffer(), &target.into()),
         NoiseType::tracker => socket.send_to(&Tracker::new().bytes(), &target.into()),

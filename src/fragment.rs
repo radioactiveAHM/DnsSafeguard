@@ -34,7 +34,8 @@ async fn segmentation<IO: AsyncWriteExt + std::marker::Unpin>(
 ) -> tokio::io::Result<()> {
     let packet = fragment.len() / fragmenting.segments;
     let mut written = 0;
-    let sleep_interval = crate::utils::parse_range(&fragmenting.sleep_interval).expect("Failed to parse fragmenting sleep_interval range");
+    let sleep_interval = crate::utils::parse_range(&fragmenting.sleep_interval)
+        .expect("Failed to parse fragmenting sleep_interval range");
     loop {
         if written + packet >= fragment.len() {
             let _ = tcp.write(&fragment[written..]).await?;
@@ -45,7 +46,10 @@ async fn segmentation<IO: AsyncWriteExt + std::marker::Unpin>(
         tcp.flush().await?;
         written += packet;
 
-        sleep(Duration::from_millis(rand::random_range(sleep_interval.clone()) as u64)).await;
+        sleep(Duration::from_millis(
+            rand::random_range(sleep_interval.clone()) as u64,
+        ))
+        .await;
     }
     Ok(())
 }
@@ -56,7 +60,8 @@ pub async fn fragment_client_hello_rand<IO: AsyncWriteExt + std::marker::Unpin>(
     tcp: &mut IO,
     fragmenting: &crate::config::Fragmenting,
 ) -> tokio::io::Result<()> {
-    let fragment_size = crate::utils::parse_range(&fragmenting.fragment_size).expect("Failed to parse fragmenting fragment_size range");
+    let fragment_size = crate::utils::parse_range(&fragmenting.fragment_size)
+        .expect("Failed to parse fragmenting fragment_size range");
     // Buffer to store TLS Client Hello
     let mut buff = TlsHello {
         buff: [0; 1024 * 4],
@@ -71,8 +76,7 @@ pub async fn fragment_client_hello_rand<IO: AsyncWriteExt + std::marker::Unpin>(
     let mut fragmented_tls_hello = Buffering(&mut fragmented_tls_hello_buf, 0);
     // Send TLS Client Hello with random chunks
     loop {
-        let chunck_size =
-            rand::random_range(fragment_size.clone());
+        let chunck_size = rand::random_range(fragment_size.clone());
         if chunck_size + written >= l {
             let fragment = fragmented_tls_hello
                 .reset()
@@ -107,7 +111,8 @@ pub async fn fragment_client_hello_pack<IO: AsyncWriteExt + std::marker::Unpin>(
     tcp: &mut IO,
     fragmenting: &crate::config::Fragmenting,
 ) -> tokio::io::Result<()> {
-    let fragment_size = crate::utils::parse_range(&fragmenting.fragment_size).expect("Failed to parse fragmenting fragment_size range");
+    let fragment_size = crate::utils::parse_range(&fragmenting.fragment_size)
+        .expect("Failed to parse fragmenting fragment_size range");
     // Buffer to store TLS Client Hello
     let mut b = TlsHello {
         buff: [0; 1024 * 4],

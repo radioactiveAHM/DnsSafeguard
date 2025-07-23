@@ -1,17 +1,23 @@
-pub fn tc(quic_conf_file: &crate::config::Quic) -> std::sync::Arc<quinn::TransportConfig> {
+use quinn::{IdleTimeout, VarInt};
+
+pub fn tc(quic_conf: &crate::config::Quic) -> std::sync::Arc<quinn::TransportConfig> {
     let mut transport_config = quinn::TransportConfig::default();
 
     transport_config.keep_alive_interval(Some(std::time::Duration::from_secs(
-        quic_conf_file.keep_alive_interval,
+        quic_conf.keep_alive_interval,
     )));
-
     transport_config
-        .congestion_controller_factory(congestion_selection(quic_conf_file.congestion_controller));
-
-    transport_config
-        .datagram_receive_buffer_size(Some(quic_conf_file.datagram_receive_buffer_size));
-
-    transport_config.datagram_send_buffer_size(quic_conf_file.datagram_send_buffer_size);
+        .congestion_controller_factory(congestion_selection(quic_conf.congestion_controller));
+    transport_config.datagram_receive_buffer_size(quic_conf.datagram_receive_buffer_size);
+    if let Some(datagram_send_buffer_size) = quic_conf.datagram_send_buffer_size {
+        transport_config.datagram_send_buffer_size(datagram_send_buffer_size);
+    }
+    transport_config.packet_threshold(quic_conf.packet_threshold);
+    if let Some(max_idle_timeout) = quic_conf.max_idle_timeout {
+        transport_config.max_idle_timeout(Some(IdleTimeout::from(VarInt::from_u32(
+            max_idle_timeout * 1000,
+        ))));
+    }
 
     std::sync::Arc::new(transport_config)
 }

@@ -25,12 +25,7 @@ use crate::{
     utils::{Buffering, unsafe_staticref},
 };
 
-pub async fn client_noise(
-    addr: SocketAddr,
-    target: SocketAddr,
-    noise: &Noise,
-    max_udp_payload_size: Option<u16>,
-) -> quinn::Endpoint {
+pub async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: &Noise) -> quinn::Endpoint {
     let socket = socket2::Socket::new(
         socket2::Domain::for_address(addr),
         socket2::Type::DGRAM,
@@ -45,10 +40,7 @@ pub async fn client_noise(
     }
 
     let runtime = quinn::default_runtime().unwrap();
-    let mut ep = quinn::EndpointConfig::default();
-    if let Some(mups) = max_udp_payload_size {
-        ep.max_udp_payload_size(mups).unwrap();
-    }
+    let ep = quinn::EndpointConfig::default();
     quinn::Endpoint::new_with_abstract_socket(
         ep,
         None,
@@ -75,13 +67,7 @@ pub async fn udp_setup(
         }
     };
 
-    let mut endpoint = client_noise(
-        quic_udp_binding_addr,
-        target,
-        noise,
-        quic_conf_file.max_udp_payload_size,
-    )
-    .await;
+    let mut endpoint = client_noise(quic_udp_binding_addr, target, noise).await;
     endpoint.set_default_client_config(
         quinn::ClientConfig::new(qtls::qtls(alpn))
             .transport_config(transporter::tc(quic_conf_file))

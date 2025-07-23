@@ -111,19 +111,25 @@ The configuration file is structured in JSON format and includes the following s
   - `packet_length`: Specifies the length of each noise packet in bytes for `rand` ntype.
   - `packets`: Indicates the total number of UDP noise packets to send for `rand` ntype.
   - `sleep`: Defines the sleep time (in milliseconds) after each UDP noise packet is sent.
-  - `continues`: Enables continuous noise sending.
 - `IPv6`: Contains IPv6 specific settings, similar to the IPv4 configuration.
 - `Quic`: Configuration for QUIC protocol.
   - `congestion_controller`: The congestion controller algorithm, options are `bbr`, `cubic` and `newreno`.
   - `keep_alive_interval`: The interval in seconds to keep the connection alive.
-  - `datagram_receive_buffer_size`: Size of the receive buffer for datagrams.
-  - `datagram_send_buffer_size`: Size of the send buffer for datagrams.
+  - `datagram_receive_buffer_size`: Size of the receive buffer for datagrams. Use `null` for default.
+  - `datagram_send_buffer_size`: Size of the send buffer for datagrams. Use `null` for default.
   - `connecting_timeout_sec`: Specifies the maximum connection timeout duration in seconds.
-  - `max_udp_payload_size`: Sets the maximum UDP payload size, which must be at least 1200 bytes. The default is 1472, the largest payload that fits within a standard 1500-byte Ethernet MTU. MTU discovery may override this value.
+  - `packet_threshold`: Maximum reordering in packet number space before FACK style loss detection considers a packet lost. Should not be less than 3, per RFC5681.
+  - `max_idle_timeout`: Maximum duration in seconds of inactivity to accept before timing out the connection. Use `null` for default.
+- `connection`:
   - `h1_multi_connections`: Number of connections for the `h1 multi` protocol.
   - `reconnect_sleep`: Duration to sleep before reconnecting (in seconds).
   - `max_reconnect`: Maximum reconnect attempts before sleeping for a longer duration.
   - `max_reconnect_sleep`: Duration to sleep when the maximum reconnect attempts are reached.
+- `tcp_socket_options`:
+  - `send_buffer_size`: The size (in bytes) of the socket's send buffer. Use `null` for default.
+  - `recv_buffer_size`: The size (in bytes) of the socket's receive buffer. Use `null` for default.
+  - `nodelay`: Disables Nagle's algorithm when set to true. This reduces latency for small packets. Use `null` for default.
+  - `keepalive`: keepalive enables TCP keepalive probes when set to true. Helps detect dead peers and maintain long-lived connections. Use `null` for default.
 - `DoH Server`: Local DNS over HTTPS (HTTP/2) server for browsers.
   - `Listen Address`: The IP address and port of the local DoH server (e.g., `127.0.0.1:443`).
   - `ALPN`: Set up the HTTP version to serve. Supported variants are `h2` and `http/1.1`.

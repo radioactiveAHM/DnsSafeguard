@@ -15,7 +15,7 @@ categories = [
 ]
 
 [dependencies]
-webpki-roots = "1.0.0"
+webpki-roots = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rand = "0.9"
@@ -29,7 +29,7 @@ base64-url = "3"
 h2 = "0.4"
 tokio-rustls = { git = "https://github.com/radioactiveAHM/tokio-rustls.git", default-features = false, features = ["ring", "tls12"] }
 crossbeam-channel = "0.5"
-socket2 = "0.5"
+socket2 = "0.6"
 local-ip-address = "0.6"
 
 [profile.release]

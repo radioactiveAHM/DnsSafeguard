@@ -17,10 +17,8 @@ pub enum FragMethod {
 pub struct Fragmenting {
     pub enable: bool,
     pub method: FragMethod,
-    pub sleep_interval_min: u64,
-    pub sleep_interval_max: u64,
-    pub fragment_size_min: usize,
-    pub fragment_size_max: usize,
+    pub sleep_interval: String,
+    pub fragment_size: String,
     pub segments: usize,
 }
 
@@ -36,15 +34,14 @@ pub enum NoiseType {
     tftp
 }
 
-#[derive(serde::Deserialize, Clone)]
+#[derive(serde::Deserialize)]
 pub struct Noise {
     pub enable: bool,
-    pub packet_length: usize,
+    pub packet_length: String,
     pub packets: u8,
     pub sleep: u64,
     pub ntype: NoiseType,
-    pub content: String,
-    pub continues: bool,
+    pub content: String
 }
 
 #[derive(serde::Deserialize, Clone, Copy)]

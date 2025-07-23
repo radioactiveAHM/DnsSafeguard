@@ -80,3 +80,13 @@ pub async fn recv_timeout(
 pub fn unsafe_staticref<'a, T: ?Sized>(r: &'a T) -> &'static T {
     unsafe { std::mem::transmute::<&'a T, &'static T>(r) }
 }
+
+pub fn parse_range(s: &str) -> Option<std::ops::Range<usize>> {
+    let parts: Vec<&str> = s.split("-").collect();
+    if parts.len() == 2 {
+        if let (Ok(start), Ok(end)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>()) {
+            return Some(start..end);
+        }
+    }
+    None
+}

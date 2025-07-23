@@ -1,12 +1,12 @@
 use std::net::SocketAddr;
 
 use crate::config::{Noise, NoiseType};
-use tokio::time::sleep;
 use rand::{
     Rng,
     distr::{Alphanumeric, SampleString},
     rng,
 };
+use tokio::time::sleep;
 
 // Generate random standard dns record
 pub mod dns {
@@ -158,13 +158,15 @@ fn stun() -> [u8; 20] {
 
 fn tftp() -> Vec<u8> {
     // TODO: Add write mode
-    let mut packet: Vec<u8> = vec![
-        0, 1
-    ];
+    let mut packet: Vec<u8> = vec![0, 1];
 
     let mut rng = rng();
     let filename_len = rng.random_range(1..128);
-    packet.extend_from_slice(Alphanumeric.sample_string(&mut rng, filename_len).as_bytes());
+    packet.extend_from_slice(
+        Alphanumeric
+            .sample_string(&mut rng, filename_len)
+            .as_bytes(),
+    );
 
     //                          |---".bin"---|
     packet.extend_from_slice(&[46, 98, 105, 110, 0, 111, 99, 116, 101, 116, 0]);
@@ -172,146 +174,40 @@ fn tftp() -> Vec<u8> {
     packet
 }
 
-pub async fn noiser(noise: &Noise, target: SocketAddr, socket: &socket2::Socket) {
-    if noise.continues {
-        if let Ok(s) = socket.try_clone() {
-            let noise = noise.clone();
-            tokio::spawn(async move {
-                continues_noise(noise, target, s).await;
-            });
-        } else {
-            println!("continues unavailable");
-        }
-    }
-
-    match noise.ntype {
-        NoiseType::rand => {
-            rand_noiser(noise, target, socket).await;
-        }
-        NoiseType::dns => {
-            if socket
-                .send_to(&dns::DnsRcord::with_domain(&noise.content), &target.into())
-                .is_err()
-            {
-                println!("Noise failed");
-            }
-            sleep(std::time::Duration::from_millis(noise.sleep)).await;
-        }
-        NoiseType::str => {
-            if socket
-                .send_to(noise.content.as_bytes(), &target.into())
-                .is_err()
-            {
-                println!("Noise failed");
-            }
-            sleep(std::time::Duration::from_millis(noise.sleep)).await;
-        }
-        NoiseType::lsd => {
-            if socket
-                .send_to(&Lsd::new(target).into_buffer(), &target.into())
-                .is_err()
-            {
-                println!("Noise failed");
-            }
-            sleep(std::time::Duration::from_millis(noise.sleep)).await;
-        }
-        NoiseType::tracker => {
-            if socket
-                .send_to(&Tracker::new().bytes(), &target.into())
-                .is_err()
-            {
-                println!("Noise failed");
-            }
-            sleep(std::time::Duration::from_millis(noise.sleep)).await;
-        }
-        NoiseType::stun => {
-            if socket.send_to(&stun(), &target.into()).is_err() {
-                println!("Noise failed");
-            }
-            sleep(std::time::Duration::from_millis(noise.sleep)).await;
-        }
-        NoiseType::tftp => {
-            if socket.send_to(&tftp(), &target.into()).is_err() {
-                println!("Noise failed");
-            }
-            sleep(std::time::Duration::from_millis(noise.sleep)).await;
-        }
-    }
-    println!("Noise sent");
-}
-
-async fn continues_noise(noise: Noise, target: SocketAddr, socket: socket2::Socket) {
-    loop {
-        match noise.ntype {
-            NoiseType::rand => {
-                rand_noiser(&noise, target, &socket).await;
-            }
-            NoiseType::dns => {
-                if socket
-                    .send_to(&dns::DnsRcord::with_domain(&noise.content), &target.into())
-                    .is_err()
-                {
-                    println!("Noise failed");
-                }
-                sleep(std::time::Duration::from_millis(noise.sleep)).await;
-            }
-            NoiseType::str => {
-                if socket
-                    .send_to(noise.content.as_bytes(), &target.into())
-                    .is_err()
-                {
-                    println!("Noise failed");
-                }
-                sleep(std::time::Duration::from_millis(noise.sleep)).await;
-            }
-            NoiseType::lsd => {
-                if socket
-                    .send_to(&Lsd::new(target).into_buffer(), &target.into())
-                    .is_err()
-                {
-                    println!("Noise failed");
-                }
-                sleep(std::time::Duration::from_millis(noise.sleep)).await;
-            }
-            NoiseType::tracker => {
-                if socket
-                    .send_to(&Tracker::new().bytes(), &target.into())
-                    .is_err()
-                {
-                    println!("Noise failed");
-                }
-                sleep(std::time::Duration::from_millis(noise.sleep)).await;
-            }
-            NoiseType::stun => {
-                if socket.send_to(&stun(), &target.into()).is_err() {
-                    println!("Noise failed");
-                }
-                sleep(std::time::Duration::from_millis(noise.sleep)).await;
-            },
-            NoiseType::tftp => {
-                if socket.send_to(&tftp(), &target.into()).is_err() {
-                    println!("Noise failed");
-                }
-                sleep(std::time::Duration::from_millis(noise.sleep)).await;
-            }
-        }
-    }
-}
-
 #[inline(never)]
-async fn rand_noiser(noise: &Noise, target: SocketAddr, socket: &socket2::Socket) {
+async fn rand_noiser(
+    noise: &Noise,
+    target: SocketAddr,
+    socket: &socket2::Socket,
+) -> tokio::io::Result<usize> {
+    let mut packet = [0u8; 1500];
+    let psize_range = crate::utils::parse_range(&noise.packet_length)
+        .expect("Failed to parse packet length range");
+    let mut sent_bytes = 0;
     for _ in 0..noise.packets {
-        // generate random packet
-        let mut packet = [0u8; 1024];
         rand::rng().fill(&mut packet);
-        // send packet
-        if socket
-            .send_to(&packet[..noise.packet_length], &target.into())
-            .unwrap_or(0)
-            == 0
-        {
-            println!("Noise failed");
-        }
+        sent_bytes += socket.send_to(
+            &packet[..rand::rng().random_range(psize_range.clone())],
+            &target.into(),
+        )?;
         sleep(std::time::Duration::from_millis(noise.sleep)).await;
+    }
+    Ok(sent_bytes)
+}
+
+pub async fn noiser(noise: &Noise, target: SocketAddr, socket: &socket2::Socket) {
+    if let Ok(sent_bytes) = match noise.ntype {
+        NoiseType::rand => rand_noiser(noise, target, socket).await,
+        NoiseType::dns => socket.send_to(&dns::DnsRcord::with_domain(&noise.content), &target.into()),
+        NoiseType::str => socket.send_to(noise.content.as_bytes(), &target.into()),
+        NoiseType::lsd => socket.send_to(&Lsd::new(target).into_buffer(), &target.into()),
+        NoiseType::tracker => socket.send_to(&Tracker::new().bytes(), &target.into()),
+        NoiseType::stun => socket.send_to(&stun(), &target.into()),
+        NoiseType::tftp => socket.send_to(&tftp(), &target.into()),
+    } {
+        println!("{sent_bytes} bytes sent as noise");
+        sleep(std::time::Duration::from_millis(noise.sleep)).await;
+    } else {
+        println!("Noise failed");
     }
 }

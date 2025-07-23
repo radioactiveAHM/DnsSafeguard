@@ -10,21 +10,18 @@
 	"http_method": "GET",
 	"fragmenting": {
 		"enable": false,
-		"method": "random",
-		"sleep_interval_min": 10,
-		"sleep_interval_max": 100,
-		"fragment_size_min": 50,
-		"fragment_size_max": 100,
+		"method": "single",
+		"sleep_interval": "10-100",
+		"fragment_size": "50-100",
 		"segments": 2
 	},
 	"noise": {
 		"enable": false,
-		"ntype": "tftp",
+		"ntype": "rand",
 		"content": "google.com",
-		"packet_length": 1,
-		"packets": 1,
-		"sleep": 1000,
-		"continues": false
+		"packet_length": "1-100",
+		"packets": 8,
+		"sleep": 50
 	},
 	"ipv6": {
 		"enable": false,
@@ -39,21 +36,18 @@
 		"http_method": "GET",
 		"fragmenting": {
 			"enable": false,
-			"method": "random",
-			"sleep_interval_min": 10,
-			"sleep_interval_max": 100,
-			"fragment_size_min": 50,
-			"fragment_size_max": 100,
+			"method": "single",
+			"sleep_interval": "10-100",
+			"fragment_size": "50-100",
 			"segments": 2
 		},
 		"noise": {
 			"enable": false,
 			"ntype": "dns",
 			"content": "google.com",
-			"packet_length": 1,
+			"packet_length": "1-100",
 			"packets": 1,
-			"sleep": 1000,
-			"continues": false
+			"sleep": 1000
 		}
 	},
 	"quic": {
@@ -86,6 +80,19 @@
 		"cache_control": "private, max-age=3600",
 		"log_errors": false
 	},
-	"rules": null,
+	"rules": [
+		{
+			"options": [
+				"doubleclick.net",
+				"google-analytics.com",
+				"googlesyndication.com",
+				"firebaseinstallations.googleapis.com",
+				"www.googletagservices.com"
+			],
+			"target": {
+				"block": null
+			}
+		}
+	],
 	"overwrite": null
 }

@@ -31,7 +31,7 @@ DnsSafeguard is a fast and secure DNS client written in Rust, designed to interc
 - [x] Respond to the DNS query with a static IP(V4 and V6)
 - [x] Owerwrite IPs from DNS responses
 - [x] Interface/Adapter binding
-- [x] POST Method
+- [x] POST Method (H2, H3)
 
 ## Building the Project
 
@@ -139,10 +139,6 @@ The configuration file is structured in JSON format and includes the following s
   - `Log Errors`: Enable logging DoH sever errors.
 - `Rules`: Block or bypass DNS queries containing specified domains or keywords. [Rules Page](/RULES.md).
 - `Overwrite`: Overwrite IPs from DNS responses. [Overwrite Page](/OVERWRITE.md).
-
-## Notes
-
-> **Warning**: Only TLS 1.3 supported for better performance.
 
 ## License
 

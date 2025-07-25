@@ -30,7 +30,6 @@ pub async fn http1(
     let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
 
     let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
-    let mut retry = 0u8;
     loop {
         // TCP socket for TLS
         let tcp = tcp_connect_handle(socket_addrs, connection, network_interface).await;
@@ -55,26 +54,11 @@ pub async fn http1(
             })
             .await;
         if tls_conn.is_err() {
-            if retry == connection.max_reconnect {
-                println!(
-                    "Max retry reached. Sleeping for {}",
-                    connection.max_reconnect_sleep
-                );
-                sleep(std::time::Duration::from_secs(
-                    connection.max_reconnect_sleep,
-                ))
-                .await;
-                retry = 0;
-                continue;
-            }
             println!("{}", tls_conn.unwrap_err());
-            retry += 1;
             sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
             continue;
         }
-
         println!("HTTP/1.1 Connection Established");
-        retry = 0;
 
         let mut c = tls_conn.unwrap();
 

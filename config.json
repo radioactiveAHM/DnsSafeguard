@@ -62,15 +62,18 @@
 	"connection": {
 		"h1_multi_connections": 3,
 		"dot_nonblocking_dns_query_lifetime": 5,
-		"reconnect_sleep": 1,
-		"max_reconnect": 5,
-		"max_reconnect_sleep": 2
+		"reconnect_sleep": 1
 	},
 	"tcp_socket_options": {
 		"send_buffer_size": null,
 		"recv_buffer_size": null,
 		"nodelay": null,
-		"keepalive": null
+		"keepalive": null,
+		"linux": {
+			"bind_to_device": null,
+			"mss": null,
+			"congestion": null
+		}
 	},
 	"doh_server": {
 		"enable": false,

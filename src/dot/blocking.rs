@@ -21,7 +21,6 @@ pub async fn dot(
     let ctls = tls::tlsconf(vec![b"dot".to_vec()], dcv);
     let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
     let mut tank: Option<(Box<[u8; 514]>, usize, SocketAddr)> = None;
-    let mut retry = 0u8;
     loop {
         let tls_conn = tls::tls_conn_gen(
             sn.to_string(),
@@ -34,25 +33,11 @@ pub async fn dot(
         )
         .await;
         if tls_conn.is_err() {
-            if retry == connection.max_reconnect {
-                println!(
-                    "Max retry reached. Sleeping for {}",
-                    connection.max_reconnect_sleep
-                );
-                sleep(std::time::Duration::from_secs(
-                    connection.max_reconnect_sleep,
-                ))
-                .await;
-                retry = 0;
-                continue;
-            }
             println!("{}", tls_conn.unwrap_err());
-            retry += 1;
             sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
             continue;
         }
         println!("DOT Connection Established");
-        retry = 0;
 
         // Tls Client
         let mut conn = tls_conn.unwrap();

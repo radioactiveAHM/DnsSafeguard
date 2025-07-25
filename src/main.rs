@@ -26,10 +26,13 @@ static mut SOCKET_OPT: config::TcpSocketOptions = config::TcpSocketOptions {
     recv_buffer_size: None,
     nodelay: None,
     keepalive: None,
+    linux: config::LinuxSocketOptions { bind_to_device: None, mss: None, congestion: None }
 };
 
-fn get_socket_op() -> config::TcpSocketOptions {
-    unsafe { SOCKET_OPT }
+// I will change this later
+#[allow(static_mut_refs)]
+fn get_socket_op() -> &'static config::TcpSocketOptions {
+    unsafe { &SOCKET_OPT }
 }
 
 #[tokio::main(flavor = "multi_thread")]

@@ -35,7 +35,6 @@ pub async fn http2(
 
     let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
 
-    let mut retry = 0u8;
     loop {
         // TCP Connection
         // Panic if socket_addrs invalid
@@ -55,27 +54,13 @@ pub async fn http2(
             })
             .await;
         if tls_conn.is_err() {
-            if retry == connection.max_reconnect {
-                println!(
-                    "Max retry reached. Sleeping for {}",
-                    connection.max_reconnect_sleep
-                );
-                sleep(std::time::Duration::from_secs(
-                    connection.max_reconnect_sleep,
-                ))
-                .await;
-                retry = 0;
-                continue;
-            }
             println!("{}", tls_conn.unwrap_err());
-            retry += 1;
             sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
             continue;
         }
 
         let (client, h2_) = h2::client::handshake(tls_conn.unwrap()).await.unwrap();
         println!("H2 Connection Established");
-        retry = 0;
 
         let dead_conn = Arc::new(Mutex::new(false));
         // h2 engine

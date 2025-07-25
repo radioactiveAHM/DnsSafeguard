@@ -41,19 +41,9 @@ pub async fn doq(
 
     let mut tank: Option<(Box<[u8; 514]>, usize, SocketAddr)> = None;
 
-    let mut retry = 0u8;
+    let mut connecting_retry = 0u8;
     loop {
-        if retry == connection.max_reconnect {
-            println!(
-                "Max retry reached. Sleeping for {}",
-                connection.max_reconnect_sleep
-            );
-            sleep(std::time::Duration::from_secs(
-                connection.max_reconnect_sleep,
-            ))
-            .await;
-            retry = 0;
-            // on windows when pc goes sleep the endpoint config is fucked up
+        if connecting_retry == 5 {
             endpoint = udp_setup(
                 socket_addrs,
                 &noise,
@@ -62,9 +52,7 @@ pub async fn doq(
                 network_interface,
             )
             .await;
-            continue;
         }
-
         println!("QUIC Connecting");
         // Connect to dns server
         let connecting = endpoint.connect(socket_addrs, sn).unwrap();
@@ -92,23 +80,21 @@ pub async fn doq(
             if let Ok(pending) = timing {
                 pending
             } else {
+                connecting_retry += 1;
                 println!("Connecting timeout");
-                retry += 1;
+                sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
                 continue;
             }
         };
 
         if conn.is_err() {
+            connecting_retry += 1;
             println!("{}", conn.unwrap_err());
-            retry += 1;
             sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
             continue;
         }
 
         let quic = conn.unwrap();
-
-        // QUIC Connection Established
-        retry = 0;
 
         let mut dns_query = [0u8; 514];
         loop {

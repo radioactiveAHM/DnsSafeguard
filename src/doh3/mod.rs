@@ -4,7 +4,6 @@ pub mod transporter;
 
 use core::str;
 use std::{
-    future,
     io::Read,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
     sync::Arc,
@@ -104,19 +103,9 @@ pub async fn http3(
 
     let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
 
-    let mut retry = 0u8;
+    let mut connecting_retry = 0u8;
     loop {
-        if retry == connection.max_reconnect {
-            println!(
-                "Max retry reached. Sleeping for {}",
-                connection.max_reconnect_sleep
-            );
-            sleep(std::time::Duration::from_secs(
-                connection.max_reconnect_sleep,
-            ))
-            .await;
-            retry = 0;
-            // on windows when pc goes sleep the endpoint config is fucked up
+        if connecting_retry == 5 {
             endpoint = udp_setup(
                 socket_addrs,
                 &noise,
@@ -125,9 +114,7 @@ pub async fn http3(
                 network_interface,
             )
             .await;
-            continue;
         }
-
         println!("QUIC Connecting");
         // Connect to dns server
         let connecting = endpoint.connect(socket_addrs, sn).unwrap();
@@ -155,33 +142,29 @@ pub async fn http3(
             if let Ok(pending) = timing {
                 pending
             } else {
+                connecting_retry += 1;
                 println!("Connecting timeout");
-                retry += 1;
+                sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
                 continue;
             }
         };
 
         if conn.is_err() {
+            connecting_retry += 1;
             println!("{}", conn.unwrap_err());
-            retry += 1;
             sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
             continue;
         }
+        connecting_retry = 0;
 
-        // QUIC Connection Established
-        retry = 0;
-
+        let (mut h3c, h3) = match h3::client::new(h3_quinn::Connection::new(conn.unwrap())).await {
+            Ok(conn) => conn,
+            Err(e) => {
+                println!("H3: {e}");
+                continue;
+            }
+        };
         let dead_conn = Arc::new(Mutex::new(false));
-
-        // HTTP/3 Client
-        let (mut driver, h3) = h3::client::new(h3_quinn::Connection::new(conn.unwrap()))
-            .await
-            .unwrap();
-        let deriver_dead_conn = dead_conn.clone();
-        tokio::spawn(async move {
-            println!("H3: {}", future::poll_fn(|cx| driver.poll_close(cx)).await);
-            *(deriver_dead_conn.lock().await) = true;
-        });
 
         let mut dns_query = [0u8; 512];
         loop {
@@ -246,7 +229,7 @@ pub async fn http3(
                 });
             }
         }
-        endpoint.wait_idle().await;
+        println!("H3: {}", h3c.wait_idle().await);
     }
 }
 

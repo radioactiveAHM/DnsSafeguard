@@ -48,7 +48,6 @@ pub async fn h1_multi(
         let frag = (*fragmenting).clone();
         tokio::spawn(async move {
             let task_rcv = recver_cln;
-            let mut retry = 0u8;
             loop {
                 let tls_conn = tls_conn_gen(
                     sn.to_string(),
@@ -61,25 +60,11 @@ pub async fn h1_multi(
                 )
                 .await;
                 if tls_conn.is_err() {
-                    if retry == connection.max_reconnect {
-                        println!(
-                            "Max retry reached. Sleeping for {}",
-                            connection.max_reconnect_sleep
-                        );
-                        sleep(std::time::Duration::from_secs(
-                            connection.max_reconnect_sleep,
-                        ))
-                        .await;
-                        retry = 0;
-                        continue;
-                    }
                     println!("{}", tls_conn.unwrap_err());
-                    retry += 1;
                     sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
                     continue;
                 }
                 println!("HTTP/1.1 Connection {conn_i} Established");
-                retry = 0;
                 let mut c = tls_conn.unwrap();
                 loop {
                     let mut package = Result::Err(crossbeam_channel::RecvError);

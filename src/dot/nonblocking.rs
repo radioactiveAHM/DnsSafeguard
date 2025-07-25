@@ -25,7 +25,6 @@ pub async fn dot_nonblocking(
     let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
     let uudp = unsafe_staticref(&udp);
 
-    let mut retry = 0u8;
     loop {
         println!("DOT Non-Blocking Connecting");
         let tls_conn = tls::tls_conn_gen(
@@ -39,22 +38,11 @@ pub async fn dot_nonblocking(
         )
         .await;
         if tls_conn.is_err() {
-            if retry == connection.max_reconnect {
-                println!("Max retry reached. Sleeping for 1Min");
-                sleep(std::time::Duration::from_secs(
-                    connection.max_reconnect_sleep,
-                ))
-                .await;
-                retry = 0;
-                continue;
-            }
             println!("{}", tls_conn.unwrap_err());
-            retry += 1;
             sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
             continue;
         }
         println!("DOT Non-Blocking Connection Established");
-        retry = 0;
 
         // Tls Client
         let (mut conn_r, mut conn_w) = tokio::io::split(tls_conn.unwrap());

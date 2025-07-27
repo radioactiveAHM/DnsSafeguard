@@ -13,6 +13,7 @@ pub async fn serve_h2(
     udp_socket_addrs: SocketAddr,
     log: bool,
     cache_control: &'static String,
+    response_timeout: (u64, u64)
 ) -> tokio::io::Result<()> {
     let peer = stream.get_ref().0.peer_addr()?;
     let mut conn = match h2::server::handshake(stream).await {
@@ -31,7 +32,7 @@ pub async fn serve_h2(
                 tokio::spawn(async move {
                     if let Some(Ok(body)) = req.body_mut().data().await {
                         if let Err(e) =
-                            handle_dns_req_post(&mut resp, body, udp_socket_addrs, cache_control)
+                            handle_dns_req_post(&mut resp, body, udp_socket_addrs, cache_control, response_timeout)
                                 .await
                         {
                             if log {
@@ -52,7 +53,7 @@ pub async fn serve_h2(
                     if let Ok(dq) = DnsQuery::new(&bs4dns.as_bytes()[4..]) {
                         tokio::spawn(async move {
                             if let Err(e) =
-                                handle_dns_req_get(&mut resp, dq, udp_socket_addrs, cache_control)
+                                handle_dns_req_get(&mut resp, dq, udp_socket_addrs, cache_control, response_timeout)
                                     .await
                             {
                                 if log {
@@ -86,6 +87,7 @@ async fn handle_dns_req_post(
     body: Bytes,
     udp_socket_addrs: SocketAddr,
     cache_control: &'static String,
+    response_timeout: (u64, u64)
 ) -> tokio::io::Result<()> {
     let agent = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
     agent.connect(udp_socket_addrs).await?;
@@ -93,9 +95,9 @@ async fn handle_dns_req_post(
 
     let mut buff = [0; 4096];
     let size: usize;
-    if let Ok(v) = recv_timeout(&agent, &mut buff, 5).await {
+    if let Ok(v) = recv_timeout(&agent, &mut buff, response_timeout.0).await {
         size = v;
-    } else if let Ok(v) = recv_timeout(&agent, &mut buff, 10).await {
+    } else if let Ok(v) = recv_timeout(&agent, &mut buff, response_timeout.1).await {
         size = v;
     } else {
         match resp.send_response(
@@ -124,6 +126,7 @@ async fn handle_dns_req_get(
     dq: DnsQuery,
     udp_socket_addrs: SocketAddr,
     cache_control: &'static String,
+    response_timeout: (u64, u64)
 ) -> tokio::io::Result<()> {
     let agent = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
     agent.connect(udp_socket_addrs).await?;
@@ -131,9 +134,9 @@ async fn handle_dns_req_get(
 
     let mut buff = [0; 4096];
     let size: usize;
-    if let Ok(v) = recv_timeout(&agent, &mut buff, 5).await {
+    if let Ok(v) = recv_timeout(&agent, &mut buff, response_timeout.0).await {
         size = v;
-    } else if let Ok(v) = recv_timeout(&agent, &mut buff, 10).await {
+    } else if let Ok(v) = recv_timeout(&agent, &mut buff, response_timeout.1).await {
         size = v;
     } else {
         match resp.send_response(

@@ -129,6 +129,7 @@ pub struct DohServer {
     pub certificate: String,
     pub key: String,
     pub cache_control: String,
+    pub response_timeout: (u64, u64),
     pub log_errors: bool,
 }
 

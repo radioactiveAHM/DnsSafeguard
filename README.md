@@ -119,7 +119,7 @@ The configuration file is structured in JSON format and includes the following s
   - `datagram_send_buffer_size`: Size of the send buffer for datagrams. Use `null` for default.
   - `connecting_timeout_sec`: Specifies the maximum connection timeout duration in seconds.
   - `packet_threshold`: Maximum reordering in packet number space before FACK style loss detection considers a packet lost. Should not be less than 3, per RFC5681.
-  - `max_idle_timeout`: Maximum duration in seconds of inactivity to accept before timing out the connection. Use `null` for default.
+  - `max_idle_timeout`: Maximum duration in seconds of inactivity to accept before timing out the connection. `null` represents an infinite timeout.
 - `connection`:
   - `h1_multi_connections`: Number of connections for the `h1 multi` protocol.
   - `reconnect_sleep`: Duration to sleep before reconnecting (in seconds).
@@ -136,6 +136,7 @@ The configuration file is structured in JSON format and includes the following s
   - `Certificate`: Path to the certificate file (e.g., `/path/to/certificate.crt`).
   - `Key`: Path to the key file (e.g., `/path/to/key.key`).
   - `Cache Control`: cache control as response header.
+  - `response_timeout`: List of two durations (in seconds) specifying how long to wait for a response attempt.
   - `Log Errors`: Enable logging DoH sever errors.
 - `Rules`: Block or bypass DNS queries containing specified domains or keywords. [Rules Page](/RULES.md).
 - `Overwrite`: Overwrite IPs from DNS responses. [Overwrite Page](/OVERWRITE.md).

@@ -13,6 +13,7 @@ pub async fn serve_http11(
     udp_socket_addrs: SocketAddr,
     log: bool,
     cache_control: &'static String,
+    response_timeout: (u64, u64)
 ) -> tokio::io::Result<()> {
     let peer = stream.get_ref().0.peer_addr()?;
     let agent = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
@@ -36,6 +37,7 @@ pub async fn serve_http11(
                     log,
                     &peer,
                     cache_control,
+                    response_timeout
                 )
                 .await
                 {
@@ -61,6 +63,7 @@ async fn handle_req(
     log: bool,
     peer: &SocketAddr,
     cache_control: &'static String,
+    response_timeout: (u64, u64)
 ) -> tokio::io::Result<()> {
     let req = {
         match HTTP11::parse(buff, stream).await {
@@ -78,9 +81,9 @@ async fn handle_req(
     agent.send(dqbuff).await?;
 
     let size: usize;
-    if let Ok(v) = recv_timeout(agent, respbuff, 5).await {
+    if let Ok(v) = recv_timeout(agent, respbuff, response_timeout.0).await {
         size = v;
-    } else if let Ok(v) = recv_timeout(agent, respbuff, 10).await {
+    } else if let Ok(v) = recv_timeout(agent, respbuff, response_timeout.1).await {
         size = v;
     } else {
         let _ = stream

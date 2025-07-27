@@ -115,7 +115,7 @@ pub async fn http3(
             )
             .await;
         }
-        println!("QUIC Connecting");
+        println!("HTTP/3 Connecting");
         // Connect to dns server
         let connecting = endpoint.connect(socket_addrs, sn).unwrap();
 
@@ -126,12 +126,12 @@ pub async fn http3(
                     let connecting = connecting.into_0rtt();
                     if let Ok((conn, rtt)) = connecting {
                         rtt.await;
-                        println!("QUIC 0RTT Connection Established");
+                        println!("HTTP/3 0RTT Connection Established");
                         Ok(conn)
                     } else {
                         let conn = endpoint.connect(socket_addrs, sn).unwrap().await;
                         if conn.is_ok() {
-                            println!("QUIC Connection Established");
+                            println!("HTTP/3 Connection Established");
                         }
                         conn
                     }
@@ -208,6 +208,7 @@ pub async fn http3(
                     continue;
                 }
 
+                // Check if connection is closed
                 if *quic_conn_dead.lock().await {
                     tank = Some((Box::new(dns_query), query_size, addr));
                     break;
@@ -278,7 +279,6 @@ async fn send_request(
     reqs.finish().await?;
 
     if reqs.recv_response().await?.status() == http::status::StatusCode::OK {
-        // get body
         if let Some(body) = reqs.recv_data().await? {
             let mut buff = [0; 4096];
             let body_len = body.reader().read(&mut buff)?;

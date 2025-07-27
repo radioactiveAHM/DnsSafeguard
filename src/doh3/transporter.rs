@@ -17,6 +17,8 @@ pub fn tc(quic_conf: &crate::config::Quic) -> std::sync::Arc<quinn::TransportCon
         transport_config.max_idle_timeout(Some(IdleTimeout::from(VarInt::from_u32(
             max_idle_timeout * 1000,
         ))));
+    } else {
+        transport_config.max_idle_timeout(None);
     }
 
     std::sync::Arc::new(transport_config)

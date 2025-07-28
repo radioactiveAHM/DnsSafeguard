@@ -23,6 +23,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: mlugg/setup-zig@v1
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:

@@ -31,7 +31,7 @@ tokio-rustls = { git = "https://github.com/radioactiveAHM/tokio-rustls.git", def
 crossbeam-channel = "0.5"
 socket2 = "0.6"
 local-ip-address = "0.6"
-libc = "0.2.174"
+libc = "0.2"
 
 [profile.release]
 panic = "abort"

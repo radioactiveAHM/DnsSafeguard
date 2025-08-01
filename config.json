@@ -8,6 +8,7 @@
 	"udp_socket_addrs": "127.0.0.1:53",
 	"custom_http_path": null,
 	"http_method": "GET",
+	"response_timeout": 5,
 	"fragmenting": {
 		"enable": false,
 		"method": "single",
@@ -61,7 +62,6 @@
 	},
 	"connection": {
 		"h1_multi_connections": 3,
-		"dot_nonblocking_dns_query_lifetime": 5,
 		"reconnect_sleep": 1
 	},
 	"tcp_socket_options": {
@@ -81,8 +81,8 @@
 		"listen_address": "127.0.0.1:443",
 		"certificate": "cert.crt",
 		"key": "key.pem",
-		"cache_control": "private, max-age=3600",
-		"response_timeout": [1,2],
+		"cache_control": "max-age=3600",
+		"response_timeout": [2,3],
 		"log_errors": false
 	},
 	"rules": [

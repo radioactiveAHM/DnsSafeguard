@@ -88,6 +88,7 @@ pub async fn http3(
     network_interface: &'static Option<String>,
     ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
     hm: config::HttpMethod,
+    response_timeout: u64
 ) {
     let mut endpoint = udp_setup(
         socket_addrs,
@@ -166,6 +167,12 @@ pub async fn http3(
         };
         let dead_conn = Arc::new(Mutex::new(false));
 
+        let dead_conn2 = dead_conn.clone();
+        let watcher = tokio::spawn(async move {
+            println!("H3: {}", h3c.wait_idle().await);
+            *(dead_conn2.lock().await) = true;
+        });
+
         let mut dns_query = [0u8; 512];
         loop {
             // Check if Connection is dead
@@ -177,10 +184,10 @@ pub async fn http3(
                 tokio::spawn(async move {
                     let mut temp = false;
                     if let Err(e) =
-                        send_request(sn, h3, (*dns_query, query_size), addr, uudp, ucpath, ow, hm)
+                        send_request(sn, h3, (*dns_query, query_size), addr, uudp, ucpath, ow, hm, response_timeout)
                             .await
                     {
-                        println!("{e}");
+                        println!("H3 Stream: {e}");
                         temp = true;
                     }
                     if temp {
@@ -208,9 +215,9 @@ pub async fn http3(
                     continue;
                 }
 
-                // Check if connection is closed
                 if *quic_conn_dead.lock().await {
                     tank = Some((Box::new(dns_query), query_size, addr));
+                    watcher.abort();
                     break;
                 }
 
@@ -218,10 +225,10 @@ pub async fn http3(
                 tokio::spawn(async move {
                     let mut temp = false;
                     if let Err(e) =
-                        send_request(sn, h3, (dns_query, query_size), addr, uudp, ucpath, ow, hm)
+                        send_request(sn, h3, (dns_query, query_size), addr, uudp, ucpath, ow, hm, response_timeout)
                             .await
                     {
-                        println!("{e}");
+                        println!("H3 Stream: {e}");
                         temp = true;
                     }
                     if temp {
@@ -230,7 +237,6 @@ pub async fn http3(
                 });
             }
         }
-        println!("H3: {}", h3c.wait_idle().await);
     }
 }
 
@@ -243,6 +249,7 @@ async fn send_request(
     cpath: &'static Option<String>,
     ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
     hm: config::HttpMethod,
+    response_timeout: u64
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut reqs = match hm {
         config::HttpMethod::GET => get(&mut h3, server_name, cpath, dns_query).await?,
@@ -278,7 +285,11 @@ async fn send_request(
 
     reqs.finish().await?;
 
-    if reqs.recv_response().await?.status() == http::status::StatusCode::OK {
+    let resp = timeout(std::time::Duration::from_secs(response_timeout), async {
+        reqs.recv_response().await
+    }).await??;
+
+    if resp.status() == http::status::StatusCode::OK {
         if let Some(body) = reqs.recv_data().await? {
             let mut buff = [0; 4096];
             let body_len = body.reader().read(&mut buff)?;

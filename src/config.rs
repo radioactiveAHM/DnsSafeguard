@@ -150,6 +150,7 @@ pub struct Config {
     pub interface: Option<String>,
     pub udp_socket_addrs: std::net::SocketAddr,
     pub custom_http_path: Option<String>,
+    pub response_timeout: u64,
     pub http_method: HttpMethod,
     pub fragmenting: Fragmenting,
     pub noise: Noise,

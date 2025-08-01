@@ -59,14 +59,14 @@ pub async fn http2(
             continue;
         }
 
-        let (client, h2_) = h2::client::handshake(tls_conn.unwrap()).await.unwrap();
+        let (client, h2c) = h2::client::handshake(tls_conn.unwrap()).await.unwrap();
         println!("H2 Connection Established");
 
         let dead_conn = Arc::new(Mutex::new(false));
         // h2 engine
         let dead_conn_h2 = dead_conn.clone();
-        tokio::spawn(async move {
-            if let Err(e) = h2_.await {
+        let watcher = tokio::spawn(async move {
+            if let Err(e) = h2c.await {
                 *(dead_conn_h2.lock().await) = true;
                 println!("H2: {e}");
             }
@@ -127,6 +127,7 @@ pub async fn http2(
 
                 if *h2_conn_dead.lock().await {
                     tank = Some((Box::new(dns_query), query_size, addr));
+                    watcher.abort();
                     break;
                 }
 

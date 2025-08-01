@@ -138,6 +138,7 @@ async fn main() {
                         network_interface6,
                         uoverwrite,
                         v6.http_method,
+                        conf.response_timeout
                     )
                     .await
                 }
@@ -182,6 +183,7 @@ async fn main() {
                         urules,
                         network_interface6,
                         uoverwrite,
+                        conf.response_timeout
                     )
                     .await;
                 }
@@ -252,6 +254,7 @@ async fn main() {
                 network_interface,
                 uoverwrite,
                 conf.http_method,
+                conf.response_timeout
             )
             .await
         }
@@ -296,6 +299,7 @@ async fn main() {
                 urules,
                 network_interface,
                 uoverwrite,
+                conf.response_timeout
             )
             .await;
         }

@@ -210,7 +210,10 @@ async fn send_req(
                 udp.send_to(&body, addr).await?;
             }
         }
+    } else {
+        println!("H2 Stream: Remote responded with status code of {}", resp.status().as_str());
     }
+
     Ok(())
 }
 

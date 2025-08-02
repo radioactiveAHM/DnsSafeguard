@@ -298,7 +298,10 @@ async fn send_request(
             }
             let _ = udp.send_to(&buff[..body_len], addr).await;
         }
+    } else {
+        println!("H3 Stream: Remote responded with status code of {}", resp.status().as_str());
     }
+
     Ok(())
 }
 

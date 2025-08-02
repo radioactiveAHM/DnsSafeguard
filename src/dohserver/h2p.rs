@@ -10,30 +10,29 @@ use super::DnsQuery;
 
 pub async fn serve_h2(
     stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
-    udp_socket_addrs: SocketAddr,
+    serve_addrs: SocketAddr,
     log: bool,
     cache_control: &'static String,
-    response_timeout: (u64, u64)
+    response_timeout: (u64, u64),
 ) -> tokio::io::Result<()> {
     let peer = stream.get_ref().0.peer_addr()?;
-    let mut conn = match h2::server::handshake(stream).await {
+    let mut h2c = match h2::server::handshake(stream).await {
         Ok(c) => c,
         Err(e) => return Err(tokio::io::Error::other(e)),
     };
-    let mut deadloop: u8 = 0;
     loop {
-        if deadloop == 20 {
-            // dead tcp connection
-            break;
-        }
-        if let Some(Ok((mut req, mut resp))) = conn.accept().await {
-            deadloop = 0;
+        if let Some(Ok((mut req, mut resp))) = h2c.accept().await {
             if req.method() == http::Method::POST {
                 tokio::spawn(async move {
                     if let Some(Ok(body)) = req.body_mut().data().await {
-                        if let Err(e) =
-                            handle_dns_req_post(&mut resp, body, udp_socket_addrs, cache_control, response_timeout)
-                                .await
+                        if let Err(e) = handle_dns_req_post(
+                            &mut resp,
+                            body,
+                            serve_addrs,
+                            cache_control,
+                            response_timeout,
+                        )
+                        .await
                         {
                             if log {
                                 println!(
@@ -52,9 +51,14 @@ pub async fn serve_h2(
                 if let Some(bs4dns) = req.uri().query() {
                     if let Ok(dq) = DnsQuery::new(&bs4dns.as_bytes()[4..]) {
                         tokio::spawn(async move {
-                            if let Err(e) =
-                                handle_dns_req_get(&mut resp, dq, udp_socket_addrs, cache_control, response_timeout)
-                                    .await
+                            if let Err(e) = handle_dns_req_get(
+                                &mut resp,
+                                dq,
+                                serve_addrs,
+                                cache_control,
+                                response_timeout,
+                            )
+                            .await
                             {
                                 if log {
                                     println!(
@@ -74,23 +78,29 @@ pub async fn serve_h2(
                 resp.send_reset(Reason::PROTOCOL_ERROR);
             }
         } else {
-            deadloop += 1;
+            return Err(tokio::io::Error::new(
+                std::io::ErrorKind::ConnectionAborted,
+                "H2C Closed",
+            ));
         }
     }
-
-    Ok(())
 }
 
 #[inline(never)]
 async fn handle_dns_req_post(
     resp: &mut SendResponse<Bytes>,
     body: Bytes,
-    udp_socket_addrs: SocketAddr,
+    serve_addrs: SocketAddr,
     cache_control: &'static String,
-    response_timeout: (u64, u64)
+    response_timeout: (u64, u64),
 ) -> tokio::io::Result<()> {
-    let agent = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
-    agent.connect(udp_socket_addrs).await?;
+    let ipversion_matching = if serve_addrs.is_ipv4() {
+        std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), 0)
+    } else {
+        std::net::SocketAddr::new(std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST), 0)
+    };
+    let agent = crate::udp::udp_socket(ipversion_matching).await?;
+    agent.connect(serve_addrs).await?;
     agent.send(&body).await?;
 
     let mut buff = [0; 4096];
@@ -124,12 +134,17 @@ async fn handle_dns_req_post(
 async fn handle_dns_req_get(
     resp: &mut SendResponse<Bytes>,
     dq: DnsQuery,
-    udp_socket_addrs: SocketAddr,
+    serve_addrs: SocketAddr,
     cache_control: &'static String,
-    response_timeout: (u64, u64)
+    response_timeout: (u64, u64),
 ) -> tokio::io::Result<()> {
-    let agent = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
-    agent.connect(udp_socket_addrs).await?;
+    let ipversion_matching = if serve_addrs.is_ipv4() {
+        std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), 0)
+    } else {
+        std::net::SocketAddr::new(std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST), 0)
+    };
+    let agent = crate::udp::udp_socket(ipversion_matching).await?;
+    agent.connect(serve_addrs).await?;
     agent.send(dq.value()).await?;
 
     let mut buff = [0; 4096];

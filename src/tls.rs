@@ -49,14 +49,14 @@ pub fn tlsfragmenting(
 
 pub async fn tls_conn_gen(
     server_name: String,
-    disable_domain_sni: bool,
+    ip_as_sni: bool,
     socket_addrs: SocketAddr,
     fragmenting: config::Fragmenting,
     ctls: Arc<tokio_rustls::rustls::ClientConfig>,
     connection_cfg: config::Connection,
     network_interface: &'static Option<String>,
 ) -> tokio::io::Result<tokio_rustls::client::TlsStream<tokio::net::TcpStream>> {
-    let example_com = if disable_domain_sni {
+    let example_com = if ip_as_sni {
         (socket_addrs.ip()).into()
     } else {
         (server_name).try_into().expect("Invalid server name")

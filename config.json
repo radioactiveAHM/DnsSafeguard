@@ -1,11 +1,11 @@
 {
 	"protocol": "h2",
 	"server_name": "cloudflare-dns.com",
-	"disable_domain_sni": false,
+	"ip_as_sni": false,
 	"disable_certificate_validation": false,
-	"socket_addrs": "1.1.1.1:443",
+	"remote_addrs": "1.1.1.1:443",
 	"interface": null,
-	"udp_socket_addrs": "127.0.0.1:53",
+	"serve_addrs": "[::1]:53",
 	"custom_http_path": null,
 	"http_method": "GET",
 	"response_timeout": 5,
@@ -23,33 +23,6 @@
 		"packet_length": "1-100",
 		"packets": 8,
 		"sleep": 50
-	},
-	"ipv6": {
-		"enable": false,
-		"protocol": "h2",
-		"server_name": "cloudflare-dns.com",
-		"disable_domain_sni": false,
-		"disable_certificate_validation": false,
-		"socket_addrs": "[2606:4700:4700::1111]:443",
-		"interface": null,
-		"udp_socket_addrs": "[::1]:53",
-		"custom_http_path": null,
-		"http_method": "GET",
-		"fragmenting": {
-			"enable": false,
-			"method": "single",
-			"sleep_interval": "10-100",
-			"fragment_size": "50-100",
-			"segments": 2
-		},
-		"noise": {
-			"enable": false,
-			"ntype": "dns",
-			"content": "google.com",
-			"packet_length": "1-100",
-			"packets": 1,
-			"sleep": 1000
-		}
 	},
 	"quic": {
 		"congestion_controller": "bbr",
@@ -82,7 +55,7 @@
 		"certificate": "cert.crt",
 		"key": "key.pem",
 		"cache_control": "max-age=3600",
-		"response_timeout": [2,3],
+		"response_timeout": [2, 3],
 		"log_errors": false
 	},
 	"rules": [

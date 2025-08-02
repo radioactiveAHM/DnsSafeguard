@@ -1,4 +1,3 @@
-use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Mutex;
@@ -6,40 +5,33 @@ use tokio::time::sleep;
 
 use crate::rule::rulecheck;
 use crate::utils::{convert_two_u8s_to_u16_be, unsafe_staticref};
-use crate::{config, tls, utils::convert_u16_to_two_u8s_be};
+use crate::{tls, utils::convert_u16_to_two_u8s_be};
 
 pub async fn dot_nonblocking(
-    sn: &'static str,
-    disable_domain_sni: bool,
-    dcv: bool,
-    socket_addrs: SocketAddr,
-    udp_socket_addrs: SocketAddr,
-    fragmenting: &config::Fragmenting,
-    connection: config::Connection,
+    config: &'static crate::config::Config,
     rules: &Option<Vec<crate::rule::Rule>>,
-    network_interface: &'static Option<String>,
-    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
 ) {
-    let ctls = tls::tlsconf(vec![b"dot".to_vec()], dcv);
-
-    let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
+    let udp = crate::udp::udp_socket(config.serve_addrs).await.unwrap();
     let uudp = unsafe_staticref(&udp);
-
+    let ctls = tls::tlsconf(vec![b"dot".to_vec()], config.disable_certificate_validation);
     loop {
         println!("DOT Non-Blocking Connecting");
         let tls_conn = tls::tls_conn_gen(
-            sn.to_string(),
-            disable_domain_sni,
-            socket_addrs,
-            fragmenting.clone(),
+            config.server_name.to_string(),
+            config.ip_as_sni,
+            config.remote_addrs,
+            config.fragmenting.clone(),
             ctls.clone(),
-            connection,
-            network_interface,
+            config.connection,
+            &config.interface,
         )
         .await;
         if tls_conn.is_err() {
             println!("{}", tls_conn.unwrap_err());
-            sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
+            sleep(std::time::Duration::from_secs(
+                config.connection.reconnect_sleep,
+            ))
+            .await;
             continue;
         }
         println!("DOT Non-Blocking Connection Established");
@@ -60,6 +52,9 @@ pub async fn dot_nonblocking(
                 // Recv DOT query
                 let mut resp_dot_query = [0; 4096];
                 if let Ok(resp_dot_query_size) = conn_r.read(&mut resp_dot_query).await {
+                    if resp_dot_query_size == 0 {
+                        break;
+                    }
                     if resp_dot_query_size as u16
                         == convert_two_u8s_to_u16_be([resp_dot_query[0], resp_dot_query[1]]) + 2
                     {
@@ -69,10 +64,10 @@ pub async fn dot_nonblocking(
                                 resp_dot_query[3],
                             ]))
                         {
-                            if ow.is_some() {
+                            if config.overwrite.is_some() {
                                 crate::ipoverwrite::overwrite_ip(
                                     &mut resp_dot_query[2..(resp_dot_query_size)],
-                                    ow,
+                                    &config.overwrite,
                                 );
                             }
                             let _ = uudp

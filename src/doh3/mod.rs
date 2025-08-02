@@ -76,30 +76,17 @@ pub async fn udp_setup(
     endpoint
 }
 
-pub async fn http3(
-    sn: &'static str,
-    socket_addrs: SocketAddr,
-    udp_socket_addrs: SocketAddr,
-    quic_conf_file: config::Quic,
-    noise: Noise,
-    connection: config::Connection,
-    rules: &Option<Vec<crate::rule::Rule>>,
-    ucpath: &'static Option<String>,
-    network_interface: &'static Option<String>,
-    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
-    hm: config::HttpMethod,
-    response_timeout: u64
-) {
+pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<crate::rule::Rule>>) {
     let mut endpoint = udp_setup(
-        socket_addrs,
-        &noise,
-        &quic_conf_file,
+        config.remote_addrs,
+        &config.noise,
+        &config.quic,
         "h3",
-        network_interface,
+        &config.interface,
     )
     .await;
 
-    let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
+    let udp = crate::udp::udp_socket(config.serve_addrs).await.unwrap();
     let uudp = unsafe_staticref(&udp);
 
     let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
@@ -108,21 +95,23 @@ pub async fn http3(
     loop {
         if connecting_retry == 5 {
             endpoint = udp_setup(
-                socket_addrs,
-                &noise,
-                &quic_conf_file,
+                config.remote_addrs,
+                &config.noise,
+                &config.quic,
                 "h3",
-                network_interface,
+                &config.interface,
             )
             .await;
         }
         println!("HTTP/3 Connecting");
         // Connect to dns server
-        let connecting = endpoint.connect(socket_addrs, sn).unwrap();
+        let connecting = endpoint
+            .connect(config.remote_addrs, &config.server_name)
+            .unwrap();
 
         let conn = {
             let timing = timeout(
-                std::time::Duration::from_secs(quic_conf_file.connecting_timeout_sec),
+                std::time::Duration::from_secs(config.quic.connecting_timeout_sec),
                 async {
                     let connecting = connecting.into_0rtt();
                     if let Ok((conn, rtt)) = connecting {
@@ -130,7 +119,10 @@ pub async fn http3(
                         println!("HTTP/3 0RTT Connection Established");
                         Ok(conn)
                     } else {
-                        let conn = endpoint.connect(socket_addrs, sn).unwrap().await;
+                        let conn = endpoint
+                            .connect(config.remote_addrs, &config.server_name)
+                            .unwrap()
+                            .await;
                         if conn.is_ok() {
                             println!("HTTP/3 Connection Established");
                         }
@@ -145,7 +137,10 @@ pub async fn http3(
             } else {
                 connecting_retry += 1;
                 println!("Connecting timeout");
-                sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
+                sleep(std::time::Duration::from_secs(
+                    config.connection.reconnect_sleep,
+                ))
+                .await;
                 continue;
             }
         };
@@ -153,7 +148,10 @@ pub async fn http3(
         if conn.is_err() {
             connecting_retry += 1;
             println!("{}", conn.unwrap_err());
-            sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
+            sleep(std::time::Duration::from_secs(
+                config.connection.reconnect_sleep,
+            ))
+            .await;
             continue;
         }
         connecting_retry = 0;
@@ -183,9 +181,18 @@ pub async fn http3(
                 let h3 = h3.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
-                    if let Err(e) =
-                        send_request(sn, h3, (*dns_query, query_size), addr, uudp, ucpath, ow, hm, response_timeout)
-                            .await
+                    if let Err(e) = send_request(
+                        &config.server_name,
+                        h3,
+                        (*dns_query, query_size),
+                        addr,
+                        uudp,
+                        &config.custom_http_path,
+                        &config.overwrite,
+                        config.http_method,
+                        config.response_timeout,
+                    )
+                    .await
                     {
                         println!("H3 Stream: {e}");
                         temp = true;
@@ -224,9 +231,18 @@ pub async fn http3(
                 let h3 = h3.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
-                    if let Err(e) =
-                        send_request(sn, h3, (dns_query, query_size), addr, uudp, ucpath, ow, hm, response_timeout)
-                            .await
+                    if let Err(e) = send_request(
+                        &config.server_name,
+                        h3,
+                        (dns_query, query_size),
+                        addr,
+                        uudp,
+                        &config.custom_http_path,
+                        &config.overwrite,
+                        config.http_method,
+                        config.response_timeout,
+                    )
+                    .await
                     {
                         println!("H3 Stream: {e}");
                         temp = true;
@@ -249,7 +265,7 @@ async fn send_request(
     cpath: &'static Option<String>,
     ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
     hm: config::HttpMethod,
-    response_timeout: u64
+    response_timeout: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut reqs = match hm {
         config::HttpMethod::GET => get(&mut h3, server_name, cpath, dns_query).await?,
@@ -287,7 +303,8 @@ async fn send_request(
 
     let resp = timeout(std::time::Duration::from_secs(response_timeout), async {
         reqs.recv_response().await
-    }).await??;
+    })
+    .await??;
 
     if resp.status() == http::status::StatusCode::OK {
         if let Some(body) = reqs.recv_data().await? {
@@ -299,7 +316,10 @@ async fn send_request(
             let _ = udp.send_to(&buff[..body_len], addr).await;
         }
     } else {
-        println!("H3 Stream: Remote responded with status code of {}", resp.status().as_str());
+        println!(
+            "H3 Stream: Remote responded with status code of {}",
+            resp.status().as_str()
+        );
     }
 
     Ok(())

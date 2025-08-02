@@ -228,7 +228,7 @@ pub struct Rule {
     pub options: Vec<Vec<u8>>,
     pub target: TargetType,
 }
-pub fn convert_rules(config_rules: Option<Vec<crate::config::Rule>>) -> Option<Vec<Rule>> {
+pub fn convert_rules(config_rules: &Option<Vec<crate::config::Rule>>) -> Option<Vec<Rule>> {
     if let Some(cr) = config_rules {
         if !cr.is_empty() {
             let r = cr

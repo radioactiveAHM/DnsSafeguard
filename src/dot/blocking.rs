@@ -4,40 +4,33 @@ use tokio::time::sleep;
 
 use crate::rule::rulecheck_sync;
 use crate::utils::convert_two_u8s_to_u16_be;
-use crate::{config, tls, utils::convert_u16_to_two_u8s_be};
+use crate::{tls, utils::convert_u16_to_two_u8s_be};
 
-pub async fn dot(
-    sn: &'static str,
-    disable_domain_sni: bool,
-    dcv: bool,
-    socket_addrs: SocketAddr,
-    udp_socket_addrs: SocketAddr,
-    fragmenting: &config::Fragmenting,
-    connection: config::Connection,
-    rule: crate::Rules,
-    network_interface: &'static Option<String>,
-    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
-) {
-    let ctls = tls::tlsconf(vec![b"dot".to_vec()], dcv);
-    let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
+pub async fn dot(config: &'static crate::config::Config, rule: crate::Rules) {
+    let udp = crate::udp::udp_socket(config.serve_addrs).await.unwrap();
+    let ctls = tls::tlsconf(vec![b"dot".to_vec()], config.disable_certificate_validation);
     let mut tank: Option<(Box<[u8; 514]>, usize, SocketAddr)> = None;
     loop {
+        println!("DoT Connecting");
         let tls_conn = tls::tls_conn_gen(
-            sn.to_string(),
-            disable_domain_sni,
-            socket_addrs,
-            fragmenting.clone(),
+            config.server_name.to_string(),
+            config.ip_as_sni,
+            config.remote_addrs,
+            config.fragmenting.clone(),
             ctls.clone(),
-            connection,
-            network_interface,
+            config.connection,
+            &config.interface,
         )
         .await;
         if tls_conn.is_err() {
             println!("{}", tls_conn.unwrap_err());
-            sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
+            sleep(std::time::Duration::from_secs(
+                config.connection.reconnect_sleep,
+            ))
+            .await;
             continue;
         }
-        println!("DOT Connection Established");
+        println!("DoT Connection Established");
 
         // Tls Client
         let mut conn = tls_conn.unwrap();
@@ -53,7 +46,7 @@ pub async fn dot(
                     &mut resp_dot_query,
                     query_size,
                     addr,
-                    ow,
+                    &config.overwrite,
                 )
                 .await
                 .is_ok()
@@ -83,7 +76,7 @@ pub async fn dot(
                     &mut resp_dot_query,
                     &query_size,
                     &addr,
-                    ow,
+                    &config.overwrite,
                 )
                 .await
                 {
@@ -110,6 +103,9 @@ async fn handler(
 
     // Recv DOT query
     let resp_dot_query_size = conn.read(resp_dot_query).await?;
+    if resp_dot_query_size == 0 {
+        return Err(tokio::io::Error::other("EOF"));
+    }
     if resp_dot_query_size as u16
         == convert_two_u8s_to_u16_be([resp_dot_query[0], resp_dot_query[1]]) + 2
     {

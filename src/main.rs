@@ -10,10 +10,12 @@ mod dot;
 mod fragment;
 mod h11;
 mod interface;
+mod ioutils;
 mod ipoverwrite;
 mod multi;
 mod rule;
 mod tls;
+mod udp;
 mod utils;
 
 use h11::http1;
@@ -26,7 +28,11 @@ static mut SOCKET_OPT: config::TcpSocketOptions = config::TcpSocketOptions {
     recv_buffer_size: None,
     nodelay: None,
     keepalive: None,
-    linux: config::LinuxSocketOptions { bind_to_device: None, mss: None, congestion: None }
+    linux: config::LinuxSocketOptions {
+        bind_to_device: None,
+        mss: None,
+        congestion: None,
+    },
 };
 
 // I will change this later
@@ -44,264 +50,33 @@ async fn main() {
     // If config file does not exist or malformed, panic occurs.
     let conf = config::load_config();
     // Convert rules to adjust domains like dns query and improve performance
-    let rules = convert_rules(conf.rules);
+    let rules = convert_rules(&conf.rules);
 
-    unsafe { SOCKET_OPT = conf.tcp_socket_options }
+    unsafe { SOCKET_OPT = conf.tcp_socket_options.clone() }
 
-    // unsafe values
-    // since values all avalible during application lifetime
+    // values all avalible during application lifetime
     let urules = unsafe_staticref(&rules);
-    let usn = unsafe_staticref(conf.server_name.as_str());
-    let ucpath = unsafe_staticref(&conf.custom_http_path);
-    let network_interface = unsafe_staticref(&conf.interface);
-    let uoverwrite: &'static Option<Vec<ipoverwrite::IpOverwrite>> =
-        unsafe_staticref(&conf.overwrite);
+    let config: &'static config::Config = unsafe_staticref(&conf);
 
     if conf.doh_server.enable {
         tokio::spawn(async move {
-            dohserver::doh_server(conf.doh_server, conf.udp_socket_addrs).await;
+            dohserver::doh_server(conf.doh_server, conf.serve_addrs).await;
         });
     }
 
-    let v6 = conf.ipv6;
-
-    // unsafe values
-    // since values all avalible during application lifetime
-    let usn6 = unsafe_staticref(v6.server_name.as_str());
-    let ucpath6 = unsafe_staticref(&v6.custom_http_path);
-    let network_interface6 = unsafe_staticref(&v6.interface);
-
-    let quic_conf_file_v6 = conf.quic.clone();
-    let v6rules = rules.clone();
-    tokio::spawn(async move {
-        if v6.enable {
-            match v6.protocol {
-                config::Protocol::h1_multi => {
-                    h1_multi(
-                        usn6,
-                        v6.disable_domain_sni,
-                        v6.disable_certificate_validation,
-                        v6.socket_addrs,
-                        v6.udp_socket_addrs,
-                        &v6.fragmenting,
-                        conf.connection,
-                        urules,
-                        ucpath6,
-                        network_interface6,
-                        uoverwrite,
-                    )
-                    .await
-                }
-                config::Protocol::h1 => {
-                    http1(
-                        usn6,
-                        v6.disable_domain_sni,
-                        v6.disable_certificate_validation,
-                        v6.socket_addrs,
-                        v6.udp_socket_addrs,
-                        &v6.fragmenting,
-                        conf.connection,
-                        v6rules,
-                        ucpath6,
-                        network_interface6,
-                        uoverwrite,
-                    )
-                    .await
-                }
-                config::Protocol::h2 => {
-                    doh2::http2(
-                        usn6,
-                        v6.disable_domain_sni,
-                        v6.disable_certificate_validation,
-                        v6.socket_addrs,
-                        v6.udp_socket_addrs,
-                        &v6.fragmenting,
-                        conf.connection,
-                        urules,
-                        ucpath6,
-                        network_interface6,
-                        uoverwrite,
-                        v6.http_method,
-                    )
-                    .await
-                }
-                config::Protocol::h3 => {
-                    doh3::http3(
-                        usn6,
-                        v6.socket_addrs,
-                        v6.udp_socket_addrs,
-                        quic_conf_file_v6,
-                        v6.noise,
-                        conf.connection,
-                        urules,
-                        ucpath6,
-                        network_interface6,
-                        uoverwrite,
-                        v6.http_method,
-                        conf.response_timeout
-                    )
-                    .await
-                }
-                config::Protocol::dot => {
-                    dot::dot(
-                        usn6,
-                        v6.disable_domain_sni,
-                        v6.disable_certificate_validation,
-                        v6.socket_addrs,
-                        v6.udp_socket_addrs,
-                        &v6.fragmenting,
-                        conf.connection,
-                        v6rules,
-                        network_interface6,
-                        uoverwrite,
-                    )
-                    .await;
-                }
-                config::Protocol::dot_nonblocking => {
-                    dot::dot_nonblocking(
-                        usn6,
-                        v6.disable_domain_sni,
-                        v6.disable_certificate_validation,
-                        v6.socket_addrs,
-                        v6.udp_socket_addrs,
-                        &v6.fragmenting,
-                        conf.connection,
-                        urules,
-                        network_interface6,
-                        uoverwrite,
-                    )
-                    .await;
-                }
-                config::Protocol::doq => {
-                    doq::doq(
-                        usn6,
-                        v6.socket_addrs,
-                        v6.udp_socket_addrs,
-                        quic_conf_file_v6,
-                        v6.noise,
-                        conf.connection,
-                        urules,
-                        network_interface6,
-                        uoverwrite,
-                        conf.response_timeout
-                    )
-                    .await;
-                }
-            }
-        }
-    });
-
     match conf.protocol {
-        config::Protocol::h1_multi => {
-            h1_multi(
-                usn,
-                conf.disable_domain_sni,
-                conf.disable_certificate_validation,
-                conf.socket_addrs,
-                conf.udp_socket_addrs,
-                &conf.fragmenting,
-                conf.connection,
-                urules,
-                ucpath,
-                network_interface,
-                uoverwrite,
-            )
-            .await
-        }
-        config::Protocol::h1 => {
-            http1(
-                usn,
-                conf.disable_domain_sni,
-                conf.disable_certificate_validation,
-                conf.socket_addrs,
-                conf.udp_socket_addrs,
-                &conf.fragmenting,
-                conf.connection,
-                rules,
-                ucpath,
-                network_interface,
-                uoverwrite,
-            )
-            .await
-        }
-        config::Protocol::h2 => {
-            doh2::http2(
-                usn,
-                conf.disable_domain_sni,
-                conf.disable_certificate_validation,
-                conf.socket_addrs,
-                conf.udp_socket_addrs,
-                &conf.fragmenting,
-                conf.connection,
-                urules,
-                ucpath,
-                network_interface,
-                uoverwrite,
-                conf.http_method,
-            )
-            .await
-        }
-        config::Protocol::h3 => {
-            doh3::http3(
-                usn,
-                conf.socket_addrs,
-                conf.udp_socket_addrs,
-                conf.quic,
-                conf.noise,
-                conf.connection,
-                urules,
-                ucpath,
-                network_interface,
-                uoverwrite,
-                conf.http_method,
-                conf.response_timeout
-            )
-            .await
-        }
+        config::Protocol::h1_multi => h1_multi(config, urules).await,
+        config::Protocol::h1 => http1(config, rules).await,
+        config::Protocol::h2 => doh2::http2(config, urules).await,
+        config::Protocol::h3 => doh3::http3(config, urules).await,
         config::Protocol::dot => {
-            dot::dot(
-                usn,
-                conf.disable_domain_sni,
-                conf.disable_certificate_validation,
-                conf.socket_addrs,
-                conf.udp_socket_addrs,
-                &conf.fragmenting,
-                conf.connection,
-                rules,
-                network_interface,
-                uoverwrite,
-            )
-            .await;
+            dot::dot(config, rules).await;
         }
         config::Protocol::dot_nonblocking => {
-            dot::dot_nonblocking(
-                usn,
-                conf.disable_domain_sni,
-                conf.disable_certificate_validation,
-                conf.socket_addrs,
-                conf.udp_socket_addrs,
-                &conf.fragmenting,
-                conf.connection,
-                urules,
-                network_interface,
-                uoverwrite,
-            )
-            .await;
+            dot::dot_nonblocking(config, urules).await;
         }
         config::Protocol::doq => {
-            doq::doq(
-                usn,
-                conf.socket_addrs,
-                conf.udp_socket_addrs,
-                conf.quic,
-                conf.noise,
-                conf.connection,
-                urules,
-                network_interface,
-                uoverwrite,
-                conf.response_timeout
-            )
-            .await;
+            doq::doq(config, urules).await;
         }
     }
 }

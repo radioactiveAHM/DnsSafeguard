@@ -95,11 +95,11 @@ The configuration file is structured in JSON format and includes the following s
   - `dot_nonblocking`: DOT Non-Blocking Connection (DNS over TLS).
   - `doq`: DoQ Connection (DNS over QUIC).
 - `Server Name`: The domain name of the DNS server.
-- `Disable Domain SNI`: When enabled, the server name is not used as SNI, which can be a good alternative to the fragmenting method. Some public DNS servers, like Google, support this. Supported protocols include H1, H2, DoT, DoT_nonblocking, and H1_multi.
+- `IP As SNI`: When enabled, the server name is not used as SNI, which can be a good alternative to the fragmenting method. Some public DNS servers, like Google, support this. Supported protocols include H1, H2, DoT, DoT_nonblocking, and H1_multi.
 - `Disable Certificate Validation`: This option ignores certificate server name matching, enabling the use of domain fronting. For example, you can use `www.google.com` as the server name, which is not blocked by the Great Firewall (GFW). Many DNS servers, such as Google, Quad9, and NextDNS, support this option. However, Cloudflare does not, as it uses SNI guard. This is the best option for bypassing the GFW. **Disable Fragmenting**.
-- `Socket Addresses`: The IP address and port for the DNS server connection.
+- `Remote Addrs`: The IP address and port for the DNS server connection.
 - `Interface`: Name of the Interface/Adapter to bind to. Use `null` for default.
-- `UDP Socket Addresses`: Local UDP address and port for DNS queries.
+- `Serve Addrs`: Local UDP address to listen for DNS queries. Use `[::1]:53` which is dual stack.
 - `Custom Http Path`: Specify a custom HTTP path for HTTP-based protocols such as H1, H2, and H3. Use `null` for default which is the standard DoH path.
   - Examples: `/jsd3n5nb4/dns-query`, `/user/d618995a10e74acec7ed454ac6e39d6eb/dns-query`.
   - Warning: Custom path must end with `/dns-query`.
@@ -111,7 +111,6 @@ The configuration file is structured in JSON format and includes the following s
   - `packet_length`: Specifies the length of each noise packet in bytes for `rand` ntype.
   - `packets`: Indicates the total number of UDP noise packets to send for `rand` ntype.
   - `sleep`: Defines the sleep time (in milliseconds) after each UDP noise packet is sent.
-- `IPv6`: Contains IPv6 specific settings, similar to the IPv4 configuration.
 - `Quic`: Configuration for QUIC protocol.
   - `congestion_controller`: The congestion controller algorithm, options are `bbr`, `cubic` and `newreno`.
   - `keep_alive_interval`: The interval in seconds to keep the connection alive.

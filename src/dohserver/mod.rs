@@ -52,7 +52,7 @@ impl DnsQuery {
     }
 }
 
-pub async fn doh_server(dsc: DohServer, udp_socket_addrs: SocketAddr) {
+pub async fn doh_server(dsc: DohServer, serve_addrs: SocketAddr) {
     sleep(Duration::from_secs(2)).await;
     let certs = CertificateDer::pem_file_iter(dsc.certificate)
         .unwrap()
@@ -87,8 +87,14 @@ pub async fn doh_server(dsc: DohServer, udp_socket_addrs: SocketAddr) {
         match Tc::new(acceptor.clone(), listener.accept().await) {
             Ok(tc) => {
                 tokio::spawn(async move {
-                    if let Err(e) =
-                        tc_handler(tc, udp_socket_addrs, dsc.log_errors, cache_control, dsc.response_timeout).await
+                    if let Err(e) = tc_handler(
+                        tc,
+                        serve_addrs,
+                        dsc.log_errors,
+                        cache_control,
+                        dsc.response_timeout,
+                    )
+                    .await
                     {
                         if dsc.log_errors {
                             println!("DoH server<TLS>: {e}")
@@ -107,17 +113,22 @@ pub async fn doh_server(dsc: DohServer, udp_socket_addrs: SocketAddr) {
 
 async fn tc_handler(
     tc: Tc,
-    udp_socket_addrs: SocketAddr,
+    serve_addrs: SocketAddr,
     log: bool,
     cache_control: &'static String,
-    response_timeout: (u64, u64)
+    response_timeout: (u64, u64),
 ) -> tokio::io::Result<()> {
     let mut stream = tc.accept().await?;
 
     if let Some(alpn) = stream.get_ref().1.alpn_protocol() {
         match alpn {
-            b"h2" => h2p::serve_h2(stream, udp_socket_addrs, log, cache_control, response_timeout).await?,
-            b"http/1.1" => h11p::serve_http11(stream, udp_socket_addrs, log, cache_control, response_timeout).await?,
+            b"h2" => {
+                h2p::serve_h2(stream, serve_addrs, log, cache_control, response_timeout).await?
+            }
+            b"http/1.1" => {
+                h11p::serve_http11(stream, serve_addrs, log, cache_control, response_timeout)
+                    .await?
+            }
             _ => {
                 stream.get_mut().1.send_close_notify();
                 return Err(tokio::io::Error::other(
@@ -126,7 +137,7 @@ async fn tc_handler(
             }
         }
     } else {
-        h11p::serve_http11(stream, udp_socket_addrs, log, cache_control, response_timeout).await?
+        h11p::serve_http11(stream, serve_addrs, log, cache_control, response_timeout).await?
     }
 
     Ok(())

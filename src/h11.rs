@@ -2,7 +2,6 @@ use core::str;
 use std::{net::SocketAddr, sync::Arc};
 
 use crate::chttp::genrequrlh1;
-use crate::config::{Connection, Fragmenting};
 use crate::interface::tcp_connect_handle;
 use crate::rule::{Rules, rulecheck_sync};
 use crate::tls::{self, tlsfragmenting};
@@ -12,42 +11,38 @@ use tokio::{
     time::sleep,
 };
 
-pub async fn http1(
-    sn: &'static str,
-    disable_domain_sni: bool,
-    dcv: bool,
-    socket_addrs: SocketAddr,
-    udp_socket_addrs: SocketAddr,
-    fragmenting: &Fragmenting,
-    connection: Connection,
-    rule: Rules,
-    ucpath: &'static Option<String>,
-    network_interface: &'static Option<String>,
-    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
-) {
+pub async fn http1(config: &'static crate::config::Config, rule: Rules) {
     // TLS Client
-    let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()], dcv);
+    let ctls = tls::tlsconf(
+        vec![b"http/1.1".to_vec()],
+        config.disable_certificate_validation,
+    );
     let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
 
-    let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
+    let udp = crate::udp::udp_socket(config.serve_addrs).await.unwrap();
     loop {
         // TCP socket for TLS
-        let tcp = tcp_connect_handle(socket_addrs, connection, network_interface).await;
+        let tcp =
+            tcp_connect_handle(config.remote_addrs, config.connection, &config.interface).await;
         println!("New HTTP/1.1 connection");
 
-        let example_com = if disable_domain_sni {
-            (socket_addrs.ip()).into()
+        let example_com = if config.ip_as_sni {
+            (config.remote_addrs.ip()).into()
         } else {
-            sn.to_string().try_into().expect("Invalid server name")
+            config
+                .server_name
+                .to_string()
+                .try_into()
+                .expect("Invalid server name")
         };
         // Perform TLS Client Hello fragmenting
         let tls_conn = tokio_rustls::TlsConnector::from(Arc::clone(&ctls))
             .connect_with_stream(example_com, tcp, |tls, tcp| {
                 // Do fragmenting
-                if fragmenting.enable {
+                if config.fragmenting.enable {
                     tokio::task::block_in_place(|| {
                         tokio::runtime::Handle::current().block_on(async {
-                            tlsfragmenting(fragmenting, tls, tcp);
+                            tlsfragmenting(&config.fragmenting, tls, tcp);
                         });
                     });
                 }
@@ -55,7 +50,10 @@ pub async fn http1(
             .await;
         if tls_conn.is_err() {
             println!("{}", tls_conn.unwrap_err());
-            sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
+            sleep(std::time::Duration::from_secs(
+                config.connection.reconnect_sleep,
+            ))
+            .await;
             continue;
         }
         println!("HTTP/1.1 Connection Established");
@@ -71,15 +69,15 @@ pub async fn http1(
                 if handler(
                     &mut c,
                     &udp,
-                    ucpath,
-                    sn,
+                    &config.custom_http_path,
+                    &config.server_name,
                     dns_query.as_ref(),
                     &mut base64_url_temp,
                     &mut url,
                     &mut http_resp,
                     query_size,
                     addr,
-                    ow,
+                    &config.overwrite,
                 )
                 .await
                 .is_ok()
@@ -100,15 +98,15 @@ pub async fn http1(
                 if let Err(e) = handler(
                     &mut c,
                     &udp,
-                    ucpath,
-                    sn,
+                    &config.custom_http_path,
+                    &config.server_name,
                     &dns_query,
                     &mut base64_url_temp,
                     &mut url,
                     &mut http_resp,
                     &query_size,
                     &addr,
-                    ow,
+                    &config.overwrite,
                 )
                 .await
                 {

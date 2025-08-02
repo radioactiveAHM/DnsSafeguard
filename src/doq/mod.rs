@@ -8,34 +8,22 @@ use tokio::{
 };
 
 use crate::{
-    config::{self, Noise},
     doh3::udp_setup,
     rule::rulecheck,
     utils::{convert_u16_to_two_u8s_be, unsafe_staticref},
 };
 
-pub async fn doq(
-    sn: &'static str,
-    socket_addrs: SocketAddr,
-    udp_socket_addrs: SocketAddr,
-    quic_conf_file: config::Quic,
-    noise: Noise,
-    connection: config::Connection,
-    rules: &Option<Vec<crate::rule::Rule>>,
-    network_interface: &'static Option<String>,
-    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
-    response_timeout: u64
-) {
+pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crate::rule::Rule>>) {
     let mut endpoint = udp_setup(
-        socket_addrs,
-        &noise,
-        &quic_conf_file,
+        config.remote_addrs,
+        &config.noise,
+        &config.quic,
         "doq",
-        network_interface,
+        &config.interface,
     )
     .await;
 
-    let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
+    let udp = crate::udp::udp_socket(config.serve_addrs).await.unwrap();
     let uudp = unsafe_staticref(&udp);
 
     let mut tank: Option<(Box<[u8; 514]>, usize, SocketAddr)> = None;
@@ -44,21 +32,23 @@ pub async fn doq(
     loop {
         if connecting_retry == 5 {
             endpoint = udp_setup(
-                socket_addrs,
-                &noise,
-                &quic_conf_file,
+                config.remote_addrs,
+                &config.noise,
+                &config.quic,
                 "doq",
-                network_interface,
+                &config.interface,
             )
             .await;
         }
         println!("QUIC Connecting");
         // Connect to dns server
-        let connecting = endpoint.connect(socket_addrs, sn).unwrap();
+        let connecting = endpoint
+            .connect(config.remote_addrs, &config.server_name)
+            .unwrap();
 
         let conn = {
             let timing = timeout(
-                std::time::Duration::from_secs(quic_conf_file.connecting_timeout_sec),
+                std::time::Duration::from_secs(config.quic.connecting_timeout_sec),
                 async {
                     let connecting = connecting.into_0rtt();
                     if let Ok((conn, rtt)) = connecting {
@@ -66,7 +56,10 @@ pub async fn doq(
                         println!("QUIC 0RTT Connection Established");
                         Ok(conn)
                     } else {
-                        let conn = endpoint.connect(socket_addrs, sn).unwrap().await;
+                        let conn = endpoint
+                            .connect(config.remote_addrs, &config.server_name)
+                            .unwrap()
+                            .await;
                         if conn.is_ok() {
                             println!("QUIC Connection Established");
                         }
@@ -81,7 +74,10 @@ pub async fn doq(
             } else {
                 connecting_retry += 1;
                 println!("DoQ: Connecting timeout");
-                sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
+                sleep(std::time::Duration::from_secs(
+                    config.connection.reconnect_sleep,
+                ))
+                .await;
                 continue;
             }
         };
@@ -89,20 +85,22 @@ pub async fn doq(
         if conn.is_err() {
             connecting_retry += 1;
             println!("DoQ: {}", conn.unwrap_err());
-            sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
+            sleep(std::time::Duration::from_secs(
+                config.connection.reconnect_sleep,
+            ))
+            .await;
             continue;
         }
 
         let quic = conn.unwrap();
         let dead_conn = Arc::new(Mutex::new(false));
-        
+
         let q2 = quic.clone();
         let dead_conn2 = dead_conn.clone();
         let watcher = tokio::spawn(async move {
             println!("DoQ: {}", q2.closed().await);
             *(dead_conn2.lock().await) = true;
         });
-
 
         let mut dns_query = [0u8; 514];
         loop {
@@ -114,8 +112,15 @@ pub async fn doq(
                         let (dns_query, query_size, addr) = tank.unwrap();
                         tokio::spawn(async move {
                             let mut temp = false;
-                            if let Err(e) =
-                                send_dq(bistream, (*dns_query, query_size), addr, uudp, ow, response_timeout).await
+                            if let Err(e) = send_dq(
+                                bistream,
+                                (*dns_query, query_size),
+                                addr,
+                                uudp,
+                                &config.overwrite,
+                                config.response_timeout,
+                            )
+                            .await
                             {
                                 println!("DoQ: {e}");
                                 temp = true;
@@ -153,7 +158,7 @@ pub async fn doq(
 
                 if *dead.lock().await || quic.close_reason().is_some() {
                     if let Some(close_reason) = quic.close_reason() {
-                        println!("DoQ: {}", close_reason);
+                        println!("DoQ: {close_reason}");
                     } else {
                         println!("DoQ: Closed without reason");
                     }
@@ -164,11 +169,17 @@ pub async fn doq(
 
                 match quic.open_bi().await {
                     Ok(bistream) => {
-                        let udp = uudp;
                         tokio::spawn(async move {
                             let mut temp = false;
-                            if let Err(e) =
-                                send_dq(bistream, (dns_query, query_size), addr, udp, ow, response_timeout).await
+                            if let Err(e) = send_dq(
+                                bistream,
+                                (dns_query, query_size),
+                                addr,
+                                uudp,
+                                &config.overwrite,
+                                config.response_timeout,
+                            )
+                            .await
                             {
                                 println!("DoQ: {e}");
                                 temp = true;
@@ -194,7 +205,7 @@ async fn send_dq(
     addr: SocketAddr,
     udp: &'static tokio::net::UdpSocket,
     ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
-    response_timeout: u64
+    response_timeout: u64,
 ) -> tokio::io::Result<()> {
     [dns_query.0[0], dns_query.0[1]] = convert_u16_to_two_u8s_be(dns_query.1 as u16);
     send.write(&dns_query.0[..dns_query.1 + 2]).await?;
@@ -203,7 +214,8 @@ async fn send_dq(
     let mut rb = ReadBuf::new(&mut buff);
     timeout(std::time::Duration::from_secs(response_timeout), async {
         std::future::poll_fn(|cx| recv.poll_read_buf(cx, &mut rb)).await
-    }).await??;
+    })
+    .await??;
     if ow.is_some() {
         crate::ipoverwrite::overwrite_ip(&mut rb.filled_mut()[2..], ow);
     }

@@ -13,24 +13,11 @@ use crate::config;
 use crate::interface::tcp_connect_handle;
 use crate::tls;
 
-pub async fn http2(
-    sn: &'static str,
-    disable_domain_sni: bool,
-    dcv: bool,
-    socket_addrs: SocketAddr,
-    udp_socket_addrs: SocketAddr,
-    fragmenting: &config::Fragmenting,
-    connection: config::Connection,
-    rules: &Option<Vec<crate::rule::Rule>>,
-    ucpath: &'static Option<String>,
-    network_interface: &'static Option<String>,
-    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
-    hm: config::HttpMethod,
-) {
+pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<crate::rule::Rule>>) {
     // TLS Conf
-    let h2tls = tls::tlsconf(vec![b"h2".to_vec()], dcv);
+    let h2tls = tls::tlsconf(vec![b"h2".to_vec()], config.disable_certificate_validation);
 
-    let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
+    let udp = crate::udp::udp_socket(config.serve_addrs).await.unwrap();
     let uudp = unsafe_staticref(&udp);
 
     let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
@@ -38,24 +25,32 @@ pub async fn http2(
     loop {
         // TCP Connection
         // Panic if socket_addrs invalid
-        let tcp = tcp_connect_handle(socket_addrs, connection, network_interface).await;
+        let tcp =
+            tcp_connect_handle(config.remote_addrs, config.connection, &config.interface).await;
         println!("New H2 connection");
 
-        let example_com = if disable_domain_sni {
-            (socket_addrs.ip()).into()
+        let example_com = if config.ip_as_sni {
+            (config.remote_addrs.ip()).into()
         } else {
-            sn.to_string().try_into().expect("Invalid server name")
+            config
+                .server_name
+                .to_string()
+                .try_into()
+                .expect("Invalid server name")
         };
         // TLS Client
         let tls_conn = tokio_rustls::TlsConnector::from(Arc::clone(&h2tls))
             .connect_with_stream(example_com, tcp, |tls, tcp| {
                 // Do fragmenting
-                tlsfragmenting(fragmenting, tls, tcp);
+                tlsfragmenting(&config.fragmenting, tls, tcp);
             })
             .await;
         if tls_conn.is_err() {
             println!("{}", tls_conn.unwrap_err());
-            sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
+            sleep(std::time::Duration::from_secs(
+                config.connection.reconnect_sleep,
+            ))
+            .await;
             continue;
         }
 
@@ -86,14 +81,14 @@ pub async fn http2(
                 tokio::spawn(async move {
                     let mut temp = false;
                     if let Err(e) = send_req(
-                        sn,
+                        &config.server_name,
                         (*dns_query, query_size),
                         h2_client.unwrap(),
                         addr,
                         uudp,
-                        ucpath,
-                        ow,
-                        hm,
+                        &config.custom_http_path,
+                        &config.overwrite,
+                        config.http_method,
                     )
                     .await
                     {
@@ -135,14 +130,14 @@ pub async fn http2(
                 tokio::spawn(async move {
                     let mut temp = false;
                     if let Err(e) = send_req(
-                        sn,
+                        &config.server_name,
                         (dns_query, query_size),
                         h2_client.unwrap(),
                         addr,
                         uudp,
-                        ucpath,
-                        ow,
-                        hm,
+                        &config.custom_http_path,
+                        &config.overwrite,
+                        config.http_method,
                     )
                     .await
                     {
@@ -211,7 +206,10 @@ async fn send_req(
             }
         }
     } else {
-        println!("H2 Stream: Remote responded with status code of {}", resp.status().as_str());
+        println!(
+            "H2 Stream: Remote responded with status code of {}",
+            resp.status().as_str()
+        );
     }
 
     Ok(())

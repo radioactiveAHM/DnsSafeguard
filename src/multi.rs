@@ -1,4 +1,3 @@
-use std::net::SocketAddr;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     time::sleep,
@@ -6,7 +5,6 @@ use tokio::{
 
 use crate::{
     chttp::genrequrlh1,
-    config::{self, Connection},
     rule::rulecheck,
     tls::{self, tls_conn_gen},
     utils::{Buffering, c_len, catch_in_buff, unsafe_staticref},
@@ -19,49 +17,46 @@ type CrossContainer = (
 );
 
 pub async fn h1_multi(
-    sn: &'static str,
-    disable_domain_sni: bool,
-    dcv: bool,
-    socket_addrs: SocketAddr,
-    udp_socket_addrs: SocketAddr,
-    fragmenting: &config::Fragmenting,
-    connection: Connection,
+    config: &'static crate::config::Config,
     rules: &Option<Vec<crate::rule::Rule>>,
-    ucpath: &'static Option<String>,
-    network_interface: &'static Option<String>,
-    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
 ) {
     // TLS Client Config
-    let ctls = tls::tlsconf(vec![b"http/1.1".to_vec()], dcv);
+    let ctls = tls::tlsconf(
+        vec![b"http/1.1".to_vec()],
+        config.disable_certificate_validation,
+    );
 
     // UDP Socket for DNS Query
-    let udp = tokio::net::UdpSocket::bind(udp_socket_addrs).await.unwrap();
+    let udp = crate::udp::udp_socket(config.serve_addrs).await.unwrap();
     let uudp = unsafe_staticref(&udp);
 
     // Channels to send DNS query to one of task with http/1.1 connection
-    let (sender, recver) = crossbeam_channel::bounded(connection.h1_multi_connections as usize);
+    let (sender, recver) = crossbeam_channel::bounded(config.connection.h1_multi_connections);
 
     // Spawn Task for multiple connections
-    for conn_i in 0u8..connection.h1_multi_connections {
+    for conn_i in 0..config.connection.h1_multi_connections {
         let recver_cln: crossbeam_channel::Receiver<CrossContainer> = recver.clone();
         let tls_config = ctls.clone();
-        let frag = (*fragmenting).clone();
+        let frag = config.fragmenting.clone();
         tokio::spawn(async move {
             let task_rcv = recver_cln;
             loop {
                 let tls_conn = tls_conn_gen(
-                    sn.to_string(),
-                    disable_domain_sni,
-                    socket_addrs,
+                    config.server_name.clone(),
+                    config.ip_as_sni,
+                    config.serve_addrs,
                     frag.clone(),
                     tls_config.clone(),
-                    connection,
-                    network_interface,
+                    config.connection,
+                    &config.interface,
                 )
                 .await;
                 if tls_conn.is_err() {
                     println!("{}", tls_conn.unwrap_err());
-                    sleep(std::time::Duration::from_secs(connection.reconnect_sleep)).await;
+                    sleep(std::time::Duration::from_secs(
+                        config.connection.reconnect_sleep,
+                    ))
+                    .await;
                     continue;
                 }
                 println!("HTTP/1.1 Connection {conn_i} Established");
@@ -78,7 +73,12 @@ pub async fn h1_multi(
                             base64_url::encode_to_slice(&query.0[..query.1], &mut temp).unwrap();
                         let mut url = [0; 4096];
                         let mut b = Buffering(&mut url, 0);
-                        let http_req = genrequrlh1(&mut b, sn.as_bytes(), query_bs4url, ucpath);
+                        let http_req = genrequrlh1(
+                            &mut b,
+                            config.server_name.as_bytes(),
+                            query_bs4url,
+                            &config.custom_http_path,
+                        );
 
                         // Send HTTP Req
                         if c.write(http_req).await.is_err() {
@@ -101,10 +101,10 @@ pub async fn h1_multi(
                             let content_length = c_len(&http_resp[..x1]);
                             if content_length != 0 && content_length == body.len() {
                                 // Full body recved
-                                if ow.is_some() {
+                                if config.overwrite.is_some() {
                                     crate::ipoverwrite::overwrite_ip(
                                         &mut http_resp[x2..http_resp_size],
-                                        ow,
+                                        &config.overwrite,
                                     );
                                 }
                                 let _ = udp.send_to(&http_resp[x2..http_resp_size], addr).await;
@@ -114,10 +114,10 @@ pub async fn h1_multi(
                                 if let Ok(size) =
                                     c.read(&mut http_resp[x2 + http_resp_size..]).await
                                 {
-                                    if ow.is_some() {
+                                    if config.overwrite.is_some() {
                                         crate::ipoverwrite::overwrite_ip(
                                             &mut http_resp[x2..http_resp_size + size],
-                                            ow,
+                                            &config.overwrite,
                                         );
                                     }
                                     let _ = udp

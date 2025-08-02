@@ -13,7 +13,7 @@ pub struct TcpSocketOptions {
     pub recv_buffer_size: Option<u32>,
     pub nodelay: Option<bool>,
     pub keepalive: Option<bool>,
-    pub linux: LinuxSocketOptions
+    pub linux: LinuxSocketOptions,
 }
 
 #[derive(serde::Deserialize, Clone, Copy)]
@@ -66,22 +66,6 @@ pub enum Protocol {
     doq,
 }
 
-#[derive(serde::Deserialize)]
-pub struct Ipv6 {
-    pub enable: bool,
-    pub protocol: Protocol,
-    pub server_name: String,
-    pub disable_domain_sni: bool,
-    pub disable_certificate_validation: bool,
-    pub socket_addrs: std::net::SocketAddr,
-    pub interface: Option<String>,
-    pub udp_socket_addrs: std::net::SocketAddr,
-    pub custom_http_path: Option<String>,
-    pub http_method: HttpMethod,
-    pub fragmenting: Fragmenting,
-    pub noise: Noise,
-}
-
 #[derive(serde::Deserialize, Clone, Copy)]
 #[allow(non_camel_case_types)]
 pub enum CongestionController {
@@ -103,7 +87,7 @@ pub struct Quic {
 
 #[derive(serde::Deserialize, Clone, Copy)]
 pub struct Connection {
-    pub h1_multi_connections: u8,
+    pub h1_multi_connections: usize,
     pub reconnect_sleep: u64,
 }
 
@@ -144,17 +128,16 @@ pub enum HttpMethod {
 pub struct Config {
     pub protocol: Protocol,
     pub server_name: String,
-    pub disable_domain_sni: bool,
+    pub ip_as_sni: bool,
     pub disable_certificate_validation: bool,
-    pub socket_addrs: std::net::SocketAddr,
+    pub remote_addrs: std::net::SocketAddr,
     pub interface: Option<String>,
-    pub udp_socket_addrs: std::net::SocketAddr,
+    pub serve_addrs: std::net::SocketAddr,
     pub custom_http_path: Option<String>,
     pub response_timeout: u64,
     pub http_method: HttpMethod,
     pub fragmenting: Fragmenting,
     pub noise: Noise,
-    pub ipv6: Ipv6,
     pub quic: Quic,
     pub connection: Connection,
     pub tcp_socket_options: TcpSocketOptions,

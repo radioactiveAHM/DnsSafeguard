@@ -51,21 +51,21 @@ pub fn set_tcp_socket_options(tcp: &mut tokio::net::TcpSocket) {
     if let Some(keepalive) = options.keepalive {
         tcp.set_keepalive(keepalive).unwrap();
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         if let Some(device) = &options.linux.bind_to_device {
-            if tcp_options::set_tcp_bind_device(tcp, device).is_err(){
+            if tcp_options::set_tcp_bind_device(tcp, device).is_err() {
                 println!("Failed to set bind_to_device socket option");
             }
         }
         if let Some(congestion) = &options.linux.congestion {
-            if tcp_options::set_tcp_congestion(tcp, congestion).is_err(){
+            if tcp_options::set_tcp_congestion(tcp, congestion).is_err() {
                 println!("Failed to set congestion socket option");
             }
         }
         if let Some(mss) = options.linux.mss {
-            if tcp_options::set_tcp_mss(tcp, mss).is_err(){
+            if tcp_options::set_tcp_mss(tcp, mss).is_err() {
                 println!("Failed to set mss socket option");
             }
         }

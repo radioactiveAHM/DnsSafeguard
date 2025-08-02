@@ -10,60 +10,56 @@ use super::DnsQuery;
 
 pub async fn serve_http11(
     mut stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
-    udp_socket_addrs: SocketAddr,
+    serve_addrs: SocketAddr,
     log: bool,
     cache_control: &'static String,
-    response_timeout: (u64, u64)
+    response_timeout: (u64, u64),
 ) -> tokio::io::Result<()> {
     let peer = stream.get_ref().0.peer_addr()?;
-    let agent = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
-    agent.connect(udp_socket_addrs).await?;
+    let ipversion_matching = if serve_addrs.is_ipv4() {
+        std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), 0)
+    } else {
+        std::net::SocketAddr::new(std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST), 0)
+    };
+    let agent = crate::udp::udp_socket(ipversion_matching).await?;
+    agent.connect(serve_addrs).await?;
 
-    let mut deadloop = 0u8;
-    let mut buff = [0; 1024];
+    let mut pinned: std::pin::Pin<&mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>> =
+        std::pin::Pin::new(&mut stream);
+    let mut reqbuff = [0; 1024];
+    let mut readbuf = tokio::io::ReadBuf::new(&mut reqbuff);
     let mut respbuff = [0; 4096];
     loop {
-        if deadloop == 20 {
-            break;
-        }
-        if let Ok(size) = stream.read(&mut buff).await {
-            if size > 39 {
-                deadloop = 0;
-                if let Err(e) = handle_req(
-                    &mut stream,
-                    &buff[..size],
-                    &agent,
-                    &mut respbuff,
-                    log,
-                    &peer,
-                    cache_control,
-                    response_timeout
-                )
-                .await
-                {
-                    if log {
-                        println!("DoH1.1 server<{peer}:stream>: {e}");
-                    }
-                }
-            } else {
-                deadloop += 1;
+        crate::ioutils::read_buffered(&mut readbuf, &mut pinned).await?;
+        if let Err(e) = handle_req(
+            &mut pinned,
+            readbuf.filled(),
+            &agent,
+            &mut respbuff,
+            log,
+            &peer,
+            cache_control,
+            response_timeout,
+        )
+        .await
+        {
+            if log {
+                println!("DoH1.1 server<{peer}:stream>: {e}");
             }
-        } else {
-            deadloop += 1;
         }
+        readbuf.clear();
     }
-    Ok(())
 }
 
 async fn handle_req(
-    stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
+    stream: &mut std::pin::Pin<&mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>>,
     buff: &[u8],
     agent: &UdpSocket,
     respbuff: &mut [u8],
     log: bool,
     peer: &SocketAddr,
     cache_control: &'static String,
-    response_timeout: (u64, u64)
+    response_timeout: (u64, u64),
 ) -> tokio::io::Result<()> {
     let req = {
         match HTTP11::parse(buff, stream).await {
@@ -138,7 +134,7 @@ impl HTTP11 {
     }
     async fn parse(
         buff: &[u8],
-        stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
+        stream: &mut std::pin::Pin<&mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>>,
     ) -> tokio::io::Result<Self> {
         if &buff[..3] == b"GET" {
             if let Some(query) = HTTP11::find_query(buff) {

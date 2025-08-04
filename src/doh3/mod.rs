@@ -93,7 +93,8 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
 
     let mut connecting_retry = 0u8;
     loop {
-        if connecting_retry == 5 {
+        if connecting_retry == 3 {
+            connecting_retry = 0;
             endpoint = udp_setup(
                 config.remote_addrs,
                 &config.noise,

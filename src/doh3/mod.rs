@@ -5,7 +5,7 @@ pub mod transporter;
 use core::str;
 use std::{
     io::Read,
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
+    net::SocketAddr,
     sync::Arc,
 };
 
@@ -56,17 +56,7 @@ pub async fn udp_setup(
     alpn: &str,
     network_interface: &'static Option<String>,
 ) -> quinn::Endpoint {
-    let quic_udp_binding_addr = {
-        if let Some(interface) = network_interface {
-            crate::interface::get_interface(target.is_ipv4(), interface.as_str())
-        } else if target.is_ipv4() {
-            SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0))
-        } else {
-            SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, 0, 0, 0))
-        }
-    };
-
-    let mut endpoint = client_noise(quic_udp_binding_addr, target, noise).await;
+    let mut endpoint = client_noise(crate::udp::udp_addr_to_bind(network_interface, target.is_ipv4()), target, noise).await;
     endpoint.set_default_client_config(
         quinn::ClientConfig::new(qtls::qtls(alpn))
             .transport_config(transporter::tc(quic_conf_file))

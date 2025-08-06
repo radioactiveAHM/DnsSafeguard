@@ -92,6 +92,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
             .await;
             continue;
         }
+        connecting_retry = 0;
 
         let quic = conn.unwrap();
         let dead_conn = Arc::new(Mutex::new(false));

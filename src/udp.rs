@@ -24,3 +24,20 @@ pub async fn udp_socket(
 
     tokio::net::UdpSocket::from_std(socket.into())
 }
+
+pub fn udp_addr_to_bind(
+    network_interface: &'static Option<String>,
+    v4: bool,
+) -> std::net::SocketAddr {
+    if let Some(interface) = network_interface {
+        crate::interface::get_interface(v4, interface.as_str())
+    } else {
+        let default = if v4 {
+            std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)
+        } else {
+            std::net::IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED)
+        };
+
+        std::net::SocketAddr::new(default, 0)
+    }
+}

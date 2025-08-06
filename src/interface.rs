@@ -1,4 +1,4 @@
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::net::{IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
 use tokio::{net::TcpStream, time::sleep};
 
@@ -91,11 +91,14 @@ pub async fn tcp_connect_handle(
                 .bind(get_interface(target.is_ipv4(), interface.as_str()))
                 .expect("Could not bind socket")
         } else {
+            let default = if target.is_ipv4() {
+                std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)
+            } else {
+                std::net::IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED)
+            };
+
             socket
-                .bind(std::net::SocketAddr::V4(SocketAddrV4::new(
-                    Ipv4Addr::UNSPECIFIED,
-                    0,
-                )))
+                .bind(std::net::SocketAddr::new(default, 0))
                 .expect("Could not bind socket")
         };
 
@@ -156,27 +159,6 @@ pub mod tcp_options {
         }
     }
     pub fn set_tcp_bind_device(socket: &tokio::net::TcpSocket, device: &str) -> Result<(), ()> {
-        if let Ok(device) = std::ffi::CString::new(device) {
-            let fd = std::os::unix::io::AsRawFd::as_raw_fd(socket);
-
-            let result = unsafe {
-                libc::setsockopt(
-                    fd,
-                    libc::SOL_SOCKET,
-                    libc::SO_BINDTODEVICE,
-                    device.as_ptr() as *const _,
-                    device.to_bytes().len() as libc::socklen_t,
-                )
-            };
-            if result == -1 {
-                return Err(());
-            }
-            Ok(())
-        } else {
-            Err(())
-        }
-    }
-    pub fn set_udp_bind_device(socket: &tokio::net::UdpSocket, device: &str) -> Result<(), ()> {
         if let Ok(device) = std::ffi::CString::new(device) {
             let fd = std::os::unix::io::AsRawFd::as_raw_fd(socket);
 

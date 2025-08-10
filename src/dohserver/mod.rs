@@ -95,10 +95,9 @@ pub async fn doh_server(dsc: DohServer, serve_addrs: SocketAddr) {
                         dsc.response_timeout,
                     )
                     .await
+                        && dsc.log_errors
                     {
-                        if dsc.log_errors {
-                            println!("DoH server<TLS>: {e}")
-                        }
+                        println!("DoH server<TLS>: {e}")
                     }
                 });
             }

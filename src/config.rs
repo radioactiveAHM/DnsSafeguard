@@ -62,7 +62,6 @@ pub enum Protocol {
     h2,
     h3,
     dot,
-    dot_nonblocking,
     doq,
 }
 
@@ -147,15 +146,14 @@ pub struct Config {
 }
 
 pub fn load_config() -> Config {
-    if let Ok(mut p) = std::env::current_exe() {
-        if p.pop() {
-            let c = p.join("config.json");
-            if c.exists() {
-                let config_file = std::fs::read(c).expect("Can not read config file");
-                let conf: Config =
-                    serde_json::from_slice(&config_file).expect("Malformed config file");
-                return conf;
-            }
+    if let Ok(mut p) = std::env::current_exe()
+        && p.pop()
+    {
+        let c = p.join("config.json");
+        if c.exists() {
+            let config_file = std::fs::read(c).expect("Can not read config file");
+            let conf: Config = serde_json::from_slice(&config_file).expect("Malformed config file");
+            return conf;
         }
     }
     let config_file = std::fs::read("config.json").expect("Can not read config file");

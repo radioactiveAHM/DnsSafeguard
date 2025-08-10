@@ -72,7 +72,7 @@ pub async fn fragment_client_hello_rand<IO: AsyncWriteExt + std::marker::Unpin>(
     // Split TLS Client Hello into chunks
     let mut written = 5;
 
-    let mut fragmented_tls_hello_buf = [0; 512];
+    let mut fragmented_tls_hello_buf = [0; 1024];
     let mut fragmented_tls_hello = Buffering(&mut fragmented_tls_hello_buf, 0);
     // Send TLS Client Hello with random chunks
     loop {
@@ -121,7 +121,7 @@ pub async fn fragment_client_hello_pack<IO: AsyncWriteExt + std::marker::Unpin>(
     let l = c.write_tls(&mut b)?;
 
     let mut written = 5;
-    let mut fragmented_tls_hello_buf = [0; 512];
+    let mut fragmented_tls_hello_buf = [0; 1024];
     let mut fragmented_tls_hello = Buffering(&mut fragmented_tls_hello_buf, 0);
     loop {
         let size = rand::random_range(fragment_size.clone());

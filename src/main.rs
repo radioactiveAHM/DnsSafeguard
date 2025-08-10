@@ -20,7 +20,7 @@ mod utils;
 
 use h11::http1;
 use multi::h1_multi;
-use rule::{Rules, convert_rules};
+use rule::convert_rules;
 use utils::unsafe_staticref;
 
 static mut SOCKET_OPT: config::TcpSocketOptions = config::TcpSocketOptions {
@@ -46,8 +46,6 @@ async fn main() {
     tokio_rustls::rustls::crypto::ring::default_provider()
         .install_default()
         .unwrap();
-    // Load config
-    // If config file does not exist or malformed, panic occurs.
     let conf = config::load_config();
     // Convert rules to adjust domains like dns query and improve performance
     let rules = convert_rules(&conf.rules);
@@ -70,10 +68,7 @@ async fn main() {
         config::Protocol::h2 => doh2::http2(config, urules).await,
         config::Protocol::h3 => doh3::http3(config, urules).await,
         config::Protocol::dot => {
-            dot::dot(config, rules).await;
-        }
-        config::Protocol::dot_nonblocking => {
-            dot::dot_nonblocking(config, urules).await;
+            dot::dot(config, urules).await;
         }
         config::Protocol::doq => {
             doq::doq(config, urules).await;

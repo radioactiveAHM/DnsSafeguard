@@ -24,15 +24,13 @@ pub async fn serve_http11(
     let agent = crate::udp::udp_socket(ipversion_matching).await?;
     agent.connect(serve_addrs).await?;
 
-    let mut pinned: std::pin::Pin<&mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>> =
-        std::pin::Pin::new(&mut stream);
     let mut reqbuff = [0; 1024];
     let mut readbuf = tokio::io::ReadBuf::new(&mut reqbuff);
     let mut respbuff = [0; 4096];
     loop {
-        crate::ioutils::read_buffered(&mut readbuf, &mut pinned).await?;
+        crate::ioutils::read_buffered(&mut readbuf, &mut stream).await?;
         if let Err(e) = handle_req(
-            &mut pinned,
+            &mut stream,
             readbuf.filled(),
             &agent,
             &mut respbuff,
@@ -42,17 +40,16 @@ pub async fn serve_http11(
             response_timeout,
         )
         .await
+            && log
         {
-            if log {
-                println!("DoH1.1 server<{peer}:stream>: {e}");
-            }
+            println!("DoH1.1 server<{peer}:stream>: {e}");
         }
         readbuf.clear();
     }
 }
 
 async fn handle_req(
-    stream: &mut std::pin::Pin<&mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>>,
+    stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     buff: &[u8],
     agent: &UdpSocket,
     respbuff: &mut [u8],
@@ -134,7 +131,7 @@ impl HTTP11 {
     }
     async fn parse(
         buff: &[u8],
-        stream: &mut std::pin::Pin<&mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>>,
+        stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     ) -> tokio::io::Result<Self> {
         if &buff[..3] == b"GET" {
             if let Some(query) = HTTP11::find_query(buff) {

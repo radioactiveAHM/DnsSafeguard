@@ -9,7 +9,7 @@ DnsSafeguard is a fast and secure DNS client written in Rust, designed to interc
 - **Secure Communication:** Utilizes Rustls for encrypted communication (TLS) with DNS servers.
 - **UDP Socket:** Captures DNS queries on a UDP socket for efficient handling.
 - **DoH Protocol:** Transmits DNS queries using the DoH protocol, supporting HTTP versions (HTTP/1.1, H2, H3) to ensure enhanced privacy.
-- **DoT Protocol:** Transmits DNS queries using the DoT protocol with both blocking and non-blocking algorithms.
+- **DoT Protocol:** Transmits DNS queries using the DoT protocol.
 - **DoQ Protocol:** Transmits DNS queries using the DoQ protocol, providing highly secure and efficient communication, avoiding head-of-line blocking.
 - **Rules:** Create rules for groups of domains and keywords to control DNS queries effectively.
 - **Censorship Bypass:** Implements TLS client hello fragmentation with four methods to evade GFW TLS censorship.
@@ -22,7 +22,7 @@ DnsSafeguard is a fast and secure DNS client written in Rust, designed to interc
 - [x] HTTP/2 Support
 - [x] HTTP/2 TLS Fragmentation
 - [x] HTTP/1.1 Multi-Connection
-- [x] DNS over TLS (DoT) with Blocking & Non-Blocking Support
+- [x] DNS over TLS (DoT)
 - [x] UDP Noise Implementation
 - [x] Advanced Rules Management
 - [x] DNS over QUIC (DoQ) Support
@@ -77,11 +77,6 @@ Follow the same steps as Windows except for step 5: open the `/etc/resolv.conf` 
 
 The `config.json` file is a crucial part of the DnsSafeguard application. It contains the necessary settings to control the behavior of the DNS client.
 
-### Protocols Info
-
-- `h1` and `dot` are extremely cost-effective and operate on a single thread. All protocols establish a single connection, except for `h1_multi`, which supports multiple connections.
-- `h3` and `doq` are built on the QUIC protocol and can be configured using the `Quic` section in the configuration file.
-
 ### Structure
 
 The configuration file is structured in JSON format and includes the following settings:
@@ -92,10 +87,9 @@ The configuration file is structured in JSON format and includes the following s
   - `h2`: HTTP/2 Connection.
   - `h3`: HTTP/3 Connection.
   - `dot`: DOT Connection (DNS over TLS).
-  - `dot_nonblocking`: DOT Non-Blocking Connection (DNS over TLS).
   - `doq`: DoQ Connection (DNS over QUIC).
 - `Server Name`: The domain name of the DNS server.
-- `IP As SNI`: When enabled, the server name is not used as SNI, which can be a good alternative to the fragmenting method. Some public DNS servers, like Google, support this. Supported protocols include H1, H2, DoT, DoT_nonblocking, and H1_multi.
+- `IP As SNI`: When enabled, the server name is not used as SNI, which can be a good alternative to the fragmenting method. Some public DNS servers, like Google, support this. Supported protocols include H1, H2, DoT, and H1_multi.
 - `Disable Certificate Validation`: This option ignores certificate server name matching, enabling the use of domain fronting. For example, you can use `www.google.com` as the server name, which is not blocked by the Great Firewall (GFW). Many DNS servers, such as Google, Quad9, and NextDNS, support this option. However, Cloudflare does not, as it uses SNI guard. This is the best option for bypassing the GFW. **Disable Fragmenting**.
 - `Remote Addrs`: The IP address and port for the DNS server connection.
 - `Interface`: Name of the Interface/Adapter to bind to. Use `null` for default.

@@ -14,10 +14,10 @@ pub async fn udp_socket(
     )?;
 
     // Allow dual stack
-    if serve_addrs.is_ipv6() {
-        if let Err(e) = socket.set_only_v6(false) {
-            println!("UDP socket set_only_v6 option: {e}")
-        }
+    if serve_addrs.is_ipv6()
+        && let Err(e) = socket.set_only_v6(false)
+    {
+        println!("UDP socket set_only_v6 option: {e}")
     }
 
     socket.bind(&serve_addrs.into())?;

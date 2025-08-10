@@ -33,15 +33,14 @@ pub async fn serve_h2(
                             response_timeout,
                         )
                         .await
+                            && log
                         {
-                            if log {
-                                println!(
-                                    "DoH2 server<{}:stream(POST):{}>: {}",
-                                    peer,
-                                    resp.stream_id().as_u32(),
-                                    e
-                                );
-                            }
+                            println!(
+                                "DoH2 server<{}:stream(POST):{}>: {}",
+                                peer,
+                                resp.stream_id().as_u32(),
+                                e
+                            );
                         }
                     } else {
                         resp.send_reset(Reason::PROTOCOL_ERROR);
@@ -59,15 +58,14 @@ pub async fn serve_h2(
                                 response_timeout,
                             )
                             .await
+                                && log
                             {
-                                if log {
-                                    println!(
-                                        "DoH2 server<{}:stream(GET):{}>: {}",
-                                        peer,
-                                        resp.stream_id().as_u32(),
-                                        e
-                                    );
-                                }
+                                println!(
+                                    "DoH2 server<{}:stream(GET):{}>: {}",
+                                    peer,
+                                    resp.stream_id().as_u32(),
+                                    e
+                                );
                             }
                         });
                     }

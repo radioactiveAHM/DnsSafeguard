@@ -39,14 +39,12 @@ pub fn c_len(http_head: &[u8]) -> usize {
         if let Some(pos) = line
             .windows(16)
             .position(|window| window.eq_ignore_ascii_case(b"content-length: "))
-        {
-            if let Ok(length) = std::str::from_utf8(&line[pos + 16..])
+            && let Ok(length) = std::str::from_utf8(&line[pos + 16..])
                 .unwrap_or("0")
                 .trim()
                 .parse::<usize>()
-            {
-                return length;
-            }
+        {
+            return length;
         }
     }
     0
@@ -83,10 +81,10 @@ pub fn unsafe_staticref<'a, T: ?Sized>(r: &'a T) -> &'static T {
 
 pub fn parse_range(s: &str) -> Option<std::ops::Range<usize>> {
     let parts: Vec<&str> = s.split("-").collect();
-    if parts.len() == 2 {
-        if let (Ok(start), Ok(end)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>()) {
-            return Some(start..end);
-        }
+    if parts.len() == 2
+        && let (Ok(start), Ok(end)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>())
+    {
+        return Some(start..end);
     }
     None
 }

@@ -19,10 +19,10 @@ pub fn overwrite_ip(dns: &mut [u8], ow: &'static Option<Vec<crate::ipoverwrite::
             match ip {
                 IpAddr::V4(v4) => {
                     let octets = v4.octets();
-                    if let Some((a, b)) = crate::utils::catch_in_buff(&octets, dns) {
-                        if let IpAddr::V4(target) = list.target.0 {
-                            dns[a..b].copy_from_slice(&target.octets());
-                        }
+                    if let Some((a, b)) = crate::utils::catch_in_buff(&octets, dns)
+                        && let IpAddr::V4(target) = list.target.0
+                    {
+                        dns[a..b].copy_from_slice(&target.octets());
                     }
                 }
                 IpAddr::V6(v6) => {

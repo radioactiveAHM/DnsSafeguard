@@ -3,11 +3,7 @@ pub mod qtls;
 pub mod transporter;
 
 use core::str;
-use std::{
-    io::Read,
-    net::SocketAddr,
-    sync::Arc,
-};
+use std::{io::Read, net::SocketAddr, sync::Arc};
 
 use tokio::{
     sync::Mutex,
@@ -56,7 +52,12 @@ pub async fn udp_setup(
     alpn: &str,
     network_interface: &'static Option<String>,
 ) -> quinn::Endpoint {
-    let mut endpoint = client_noise(crate::udp::udp_addr_to_bind(network_interface, target.is_ipv4()), target, noise).await;
+    let mut endpoint = client_noise(
+        crate::udp::udp_addr_to_bind(network_interface, target.is_ipv4()),
+        target,
+        noise,
+    )
+    .await;
     endpoint.set_default_client_config(
         quinn::ClientConfig::new(qtls::qtls(alpn))
             .transport_config(transporter::tc(quic_conf_file))

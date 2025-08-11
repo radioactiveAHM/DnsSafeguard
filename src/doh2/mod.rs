@@ -59,13 +59,29 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
 
         let dead_conn = Arc::new(Mutex::new(false));
         // h2 engine
-        let dead_conn_h2 = dead_conn.clone();
+        let dead_conn2 = dead_conn.clone();
         let watcher = tokio::spawn(async move {
             if let Err(e) = h2c.await {
-                *(dead_conn_h2.lock().await) = true;
+                *(dead_conn2.lock().await) = true;
                 println!("H2: {e}");
             }
         });
+
+        if let Some(dur) = config.http_keep_alive {
+            let dead_conn3 = dead_conn.clone();
+            let client2 = client.clone();
+            tokio::spawn(async move {
+                loop {
+                    let req = http::Request::get(format!("https://{}/", config.server_name.as_str())).body(()).unwrap();
+                    if let Err(e) = client2.clone().send_request(req, true) {
+                        println!("H2: {e}");
+                        *(dead_conn3.lock().await) = true;
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_secs(dur)).await;
+                }
+            });
+        }
 
         let mut dns_query = [0u8; 512];
         loop {

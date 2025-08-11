@@ -134,6 +134,7 @@ pub struct Config {
     pub serve_addrs: std::net::SocketAddr,
     pub custom_http_path: Option<String>,
     pub response_timeout: u64,
+    pub http_keep_alive: Option<u64>,
     pub http_method: HttpMethod,
     pub fragmenting: Fragmenting,
     pub noise: Noise,

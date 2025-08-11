@@ -9,6 +9,7 @@
 	"custom_http_path": null,
 	"http_method": "GET",
 	"response_timeout": 5,
+	"http_keep_alive": null,
 	"fragmenting": {
 		"enable": false,
 		"method": "single",
@@ -18,7 +19,7 @@
 	},
 	"noise": {
 		"enable": false,
-		"ntype": "rand",
+		"ntype": "tftp",
 		"content": "google.com",
 		"packet_length": "1-100",
 		"packets": 8,

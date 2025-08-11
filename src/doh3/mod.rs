@@ -155,6 +155,7 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
                 continue;
             }
         };
+
         let dead_conn = Arc::new(Mutex::new(false));
 
         let dead_conn2 = dead_conn.clone();
@@ -162,6 +163,22 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
             println!("H3: {}", h3c.wait_idle().await);
             *(dead_conn2.lock().await) = true;
         });
+
+        if let Some(dur) = config.http_keep_alive {
+            let dead_conn3 = dead_conn.clone();
+            let h3_2 = h3.clone();
+            tokio::spawn(async move {
+                loop {
+                    let req = http::Request::get(format!("https://{}/", config.server_name.as_str())).body(()).unwrap();
+                    if let Err(e) = h3_2.clone().send_request(req).await {
+                        println!("H3: {e}");
+                        *(dead_conn3.lock().await) = true;
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_secs(dur)).await;
+                }
+            });
+        }
 
         let mut dns_query = [0u8; 512];
         loop {
@@ -298,15 +315,36 @@ async fn send_request(
     })
     .await??;
 
+    let clen: usize = if let Some(clen) = resp.headers().get("content-length") {
+        clen.to_str().unwrap_or("0").parse().unwrap_or(0)
+    } else {
+        0
+    };
+
     if resp.status() == http::status::StatusCode::OK {
+        let mut buff = [0; 1024*8];
+        let mut body_len = 0;
         if let Some(body) = reqs.recv_data().await? {
-            let mut buff = [0; 4096];
-            let body_len = body.reader().read(&mut buff)?;
-            if ow.is_some() {
-                crate::ipoverwrite::overwrite_ip(&mut buff[..body_len], ow);
-            }
-            let _ = udp.send_to(&buff[..body_len], addr).await;
+            body_len += body.reader().read(&mut buff)?;
         }
+
+        if clen > 0 {
+            loop {
+                if body_len >= clen {
+                    break;
+                }
+                if let Some(body) = reqs.recv_data().await? {
+                    body_len += body.reader().read(&mut buff[body_len..])?;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        if ow.is_some() {
+            crate::ipoverwrite::overwrite_ip(&mut buff[..body_len], ow);
+        }
+        let _ = udp.send_to(&buff[..body_len], addr).await;
     } else {
         println!(
             "H3 Stream: Remote responded with status code of {}",

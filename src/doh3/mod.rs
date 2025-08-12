@@ -103,7 +103,7 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
 
         let conn = {
             let timing = timeout(
-                std::time::Duration::from_secs(config.quic.connecting_timeout_sec),
+                std::time::Duration::from_secs(config.quic.connecting_timeout),
                 async {
                     let connecting = connecting.into_0rtt();
                     if let Ok((conn, rtt)) = connecting {
@@ -169,7 +169,10 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
             let h3_2 = h3.clone();
             tokio::spawn(async move {
                 loop {
-                    let req = http::Request::get(format!("https://{}/", config.server_name.as_str())).body(()).unwrap();
+                    let req =
+                        http::Request::get(format!("https://{}/", config.server_name.as_str()))
+                            .body(())
+                            .unwrap();
                     if let Err(e) = h3_2.clone().send_request(req).await {
                         println!("H3: {e}");
                         *(dead_conn3.lock().await) = true;
@@ -322,7 +325,7 @@ async fn send_request(
     };
 
     if resp.status() == http::status::StatusCode::OK {
-        let mut buff = [0; 1024*8];
+        let mut buff = [0; 1024 * 8];
         let mut body_len = 0;
         if let Some(body) = reqs.recv_data().await? {
             body_len += body.reader().read(&mut buff)?;

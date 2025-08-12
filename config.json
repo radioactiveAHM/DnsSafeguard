@@ -5,11 +5,11 @@
 	"disable_certificate_validation": false,
 	"remote_addrs": "1.1.1.1:443",
 	"interface": null,
-	"serve_addrs": "[::1]:53",
+	"serve_addrs": "127.0.0.1:53",
 	"custom_http_path": null,
 	"http_method": "GET",
 	"response_timeout": 5,
-	"http_keep_alive": null,
+	"http_keep_alive": 10,
 	"fragmenting": {
 		"enable": false,
 		"method": "single",
@@ -28,7 +28,7 @@
 	"quic": {
 		"congestion_controller": "bbr",
 		"keep_alive_interval": 10,
-		"connecting_timeout_sec": 2,
+		"connecting_timeout": 2,
 		"datagram_receive_buffer_size": null,
 		"datagram_send_buffer_size": null,
 		"packet_threshold": 12,

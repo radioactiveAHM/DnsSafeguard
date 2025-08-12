@@ -13,7 +13,7 @@ pub fn tlsconf(
         .with_root_certificates(root_store)
         .with_no_client_auth();
     config.alpn_protocols = alpn;
-    config.enable_early_data = true;
+    config.enable_early_data = false;
 
     if dcv {
         config

@@ -77,7 +77,7 @@ pub enum CongestionController {
 pub struct Quic {
     pub congestion_controller: CongestionController,
     pub keep_alive_interval: u64,
-    pub connecting_timeout_sec: u64,
+    pub connecting_timeout: u64,
     pub datagram_receive_buffer_size: Option<usize>,
     pub datagram_send_buffer_size: Option<usize>,
     pub packet_threshold: u32,

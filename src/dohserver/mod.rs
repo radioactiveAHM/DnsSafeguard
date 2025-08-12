@@ -70,14 +70,9 @@ pub async fn doh_server(dsc: DohServer, serve_addrs: SocketAddr) {
         .collect();
     let acceptor = TlsAcceptor::from(Arc::new(config));
 
-    let mut tsocket = if dsc.listen_address.is_ipv4() {
-        tokio::net::TcpSocket::new_v4().unwrap()
-    } else {
-        tokio::net::TcpSocket::new_v6().unwrap()
-    };
-    crate::interface::set_tcp_socket_options(&mut tsocket);
-    tsocket.bind(dsc.listen_address).unwrap();
-    let listener = tsocket.listen(128).unwrap();
+    let listener = tokio::net::TcpListener::bind(dsc.listen_address)
+        .await
+        .unwrap();
 
     println!("DoH server Listening on {}", dsc.listen_address);
 

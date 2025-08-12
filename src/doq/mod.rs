@@ -49,7 +49,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
 
         let conn = {
             let timing = timeout(
-                std::time::Duration::from_secs(config.quic.connecting_timeout_sec),
+                std::time::Duration::from_secs(config.quic.connecting_timeout),
                 async {
                     let connecting = connecting.into_0rtt();
                     if let Ok((conn, rtt)) = connecting {

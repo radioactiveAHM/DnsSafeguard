@@ -72,7 +72,10 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
             let client2 = client.clone();
             tokio::spawn(async move {
                 loop {
-                    let req = http::Request::get(format!("https://{}/", config.server_name.as_str())).body(()).unwrap();
+                    let req =
+                        http::Request::get(format!("https://{}/", config.server_name.as_str()))
+                            .body(())
+                            .unwrap();
                     if let Err(e) = client2.clone().send_request(req, true) {
                         println!("H2: {e}");
                         *(dead_conn3.lock().await) = true;

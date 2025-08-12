@@ -16,13 +16,17 @@ pub async fn serve_http11(
     response_timeout: (u64, u64),
 ) -> tokio::io::Result<()> {
     let peer = stream.get_ref().0.peer_addr()?;
-    let ipversion_matching = if serve_addrs.is_ipv4() {
-        std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), 0)
+    let serving_ip = if serve_addrs.ip() == std::net::Ipv4Addr::UNSPECIFIED {
+        std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
+    } else if serve_addrs.ip() == std::net::Ipv6Addr::UNSPECIFIED {
+        std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST)
     } else {
-        std::net::SocketAddr::new(std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST), 0)
+        serve_addrs.ip()
     };
-    let agent = crate::udp::udp_socket(ipversion_matching).await?;
-    agent.connect(serve_addrs).await?;
+    let agent = crate::udp::udp_socket(std::net::SocketAddr::new(serving_ip, 0)).await?;
+    agent
+        .connect(std::net::SocketAddr::new(serving_ip, serve_addrs.port()))
+        .await?;
 
     let mut reqbuff = [0; 1024];
     let mut readbuf = tokio::io::ReadBuf::new(&mut reqbuff);

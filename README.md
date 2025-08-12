@@ -93,43 +93,43 @@ The configuration file is structured in JSON format and includes the following s
 - `Disable Certificate Validation`: This option ignores certificate server name matching, enabling the use of domain fronting. For example, you can use `www.google.com` as the server name, which is not blocked by the Great Firewall (GFW). Many DNS servers, such as Google, Quad9, and NextDNS, support this option. However, Cloudflare does not, as it uses SNI guard. This is the best option for bypassing the GFW. **Disable Fragmenting**.
 - `Remote Addrs`: The IP address and port for the DNS server connection.
 - `Interface`: Name of the Interface/Adapter to bind to. Use `null` for default.
-- `Serve Addrs`: Local UDP address to listen for DNS queries. Use `[::1]:53` which is dual stack.
+- `Serve Addrs`: Local UDP address to listen for incoming DNS queries. Use `[::]:53` to enable dual-stack support, but note that network changes may require an application restart. For most setups, `127.0.0.1:53` is recommended.
 - `Custom Http Path`: Specify a custom HTTP path for HTTP-based protocols such as H1, H2, and H3. Use `null` for default which is the standard DoH path.
   - Examples: `/jsd3n5nb4/dns-query`, `/user/d618995a10e74acec7ed454ac6e39d6eb/dns-query`.
   - Warning: Custom path must end with `/dns-query`.
 - `Http Method`: Values are `GET` and `POST`. GET is more compatible, it consumes more memory. POST, on the other hand, eliminates the need to encode DNS queries in base64url, resulting in lower memory usage. However, it requires two write system calls.
+- `Response Timeout`: How long to wait for http response for DoQ, H3 and H1.
+- `Http Keep Alive`: Interval (in seconds) for sending periodic `GET /` HTTP requests to keep the connection alive. Useful for remote servers that ignore keep-alive signals from HTTP/2 or QUIC. Data usage is capped at 1MB per 24 hours. Set to `null` to disable.
 - `Fragmenting`: The fragmentation method to use during the TLS handshake. [Fragmenting page](/FRAG.md)
 - `Noise`: UDP noise setting.
   - `ntype`: Noise type. Variants include `dns`, `str`, `lsd`, `tracker`, `stun`, `tftp` and `rand`.
-  - `content`: Domain for `dns` ntype. Text for `str` ntype.
-  - `packet_length`: Specifies the length of each noise packet in bytes for `rand` ntype.
-  - `packets`: Indicates the total number of UDP noise packets to send for `rand` ntype.
-  - `sleep`: Defines the sleep time (in milliseconds) after each UDP noise packet is sent.
+  - `Content`: Domain for `dns` ntype. Text for `str` ntype.
+  - `Packet Length`: Specifies the length of each noise packet in bytes for `rand` ntype.
+  - `Packets`: Indicates the total number of UDP noise packets to send for `rand` ntype.
+  - `Sleep`: Defines the sleep time (in milliseconds) after each UDP noise packet is sent.
 - `Quic`: Configuration for QUIC protocol.
-  - `congestion_controller`: The congestion controller algorithm, options are `bbr`, `cubic` and `newreno`.
-  - `keep_alive_interval`: The interval in seconds to keep the connection alive.
-  - `datagram_receive_buffer_size`: Size of the receive buffer for datagrams. Use `null` for default.
-  - `datagram_send_buffer_size`: Size of the send buffer for datagrams. Use `null` for default.
-  - `connecting_timeout_sec`: Specifies the maximum connection timeout duration in seconds.
-  - `packet_threshold`: Maximum reordering in packet number space before FACK style loss detection considers a packet lost. Should not be less than 3, per RFC5681.
-  - `max_idle_timeout`: Maximum duration in seconds of inactivity to accept before timing out the connection. `null` represents an infinite timeout.
-- `connection`:
-  - `h1_multi_connections`: Number of connections for the `h1 multi` protocol.
-  - `reconnect_sleep`: Duration to sleep before reconnecting (in seconds).
-  - `max_reconnect`: Maximum reconnect attempts before sleeping for a longer duration.
-  - `max_reconnect_sleep`: Duration to sleep when the maximum reconnect attempts are reached.
-- `tcp_socket_options`:
-  - `send_buffer_size`: The size (in bytes) of the socket's send buffer. Use `null` for default.
-  - `recv_buffer_size`: The size (in bytes) of the socket's receive buffer. Use `null` for default.
-  - `nodelay`: Disables Nagle's algorithm when set to true. This reduces latency for small packets. Use `null` for default.
-  - `keepalive`: keepalive enables TCP keepalive probes when set to true. Helps detect dead peers and maintain long-lived connections. Use `null` for default.
+  - `Congestion Controller`: The congestion controller algorithm, options are `bbr`, `cubic` and `newreno`.
+  - `Keep Alive Interval`: The interval in seconds to keep the connection alive.
+  - `Datagram Receive Buffer Size`: Size of the receive buffer for datagrams. Use `null` for default.
+  - `Datagram Send Buffer Size`: Size of the send buffer for datagrams. Use `null` for default.
+  - `Connecting Timeout`: Specifies the maximum connection timeout duration in seconds.
+  - `Packet Threshold`: Maximum reordering in packet number space before FACK style loss detection considers a packet lost. Should not be less than 3, per RFC5681.
+  - `Max Idle Timeout`: Maximum duration in seconds of inactivity to accept before timing out the connection. `null` represents an infinite timeout.
+- `Connection`:
+  - `H1 Multi Connections`: Number of connections for the `h1 multi` protocol.
+  - `Reconnect Sleep`: Duration to sleep before reconnecting (in seconds).
+- `Tcp Socket Options`:
+  - `Send Buffer Size`: The size (in bytes) of the socket's send buffer. Use `null` for default.
+  - `Recv Buffer Size`: The size (in bytes) of the socket's receive buffer. Use `null` for default.
+  - `Nodelay`: Disables Nagle's algorithm when set to true. This reduces latency for small packets. Use `null` for default.
+  - `Keepalive`: keepalive enables TCP keepalive probes when set to true. Helps detect dead peers and maintain long-lived connections. Use `null` for default.
 - `DoH Server`: Local DNS over HTTPS (HTTP/2) server for browsers.
   - `Listen Address`: The IP address and port of the local DoH server (e.g., `127.0.0.1:443`).
   - `ALPN`: Set up the HTTP version to serve. Supported variants are `h2` and `http/1.1`.
   - `Certificate`: Path to the certificate file (e.g., `/path/to/certificate.crt`).
   - `Key`: Path to the key file (e.g., `/path/to/key.key`).
   - `Cache Control`: cache control as response header.
-  - `response_timeout`: List of two durations (in seconds) specifying how long to wait for a response attempt.
+  - `Response Timeout`: List of two durations (in seconds) specifying how long to wait for a response attempt.
   - `Log Errors`: Enable logging DoH sever errors.
 - `Rules`: Block or bypass DNS queries containing specified domains or keywords. [Rules Page](/RULES.md).
 - `Overwrite`: Overwrite IPs from DNS responses. [Overwrite Page](/OVERWRITE.md).

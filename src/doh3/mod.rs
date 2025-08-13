@@ -164,25 +164,6 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
             *(dead_conn2.lock().await) = true;
         });
 
-        if let Some(dur) = config.http_keep_alive {
-            let dead_conn3 = dead_conn.clone();
-            let h3_2 = h3.clone();
-            tokio::spawn(async move {
-                loop {
-                    let req =
-                        http::Request::get(format!("https://{}/", config.server_name.as_str()))
-                            .body(())
-                            .unwrap();
-                    if let Err(e) = h3_2.clone().send_request(req).await {
-                        println!("H3: {e}");
-                        *(dead_conn3.lock().await) = true;
-                        break;
-                    }
-                    tokio::time::sleep(std::time::Duration::from_secs(dur)).await;
-                }
-            });
-        }
-
         let mut dns_query = [0u8; 512];
         loop {
             // Check if Connection is dead
@@ -218,8 +199,32 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
                 continue;
             }
 
-            // Recive dns query
-            if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
+            let message = if let Some(dur) = config.http_keep_alive {
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(dur),
+                    udp.recv_from(&mut dns_query),
+                )
+                .await
+                {
+                    Ok(message) => Some(message),
+                    Err(_) => {
+                        let mut h3 = h3.clone();
+                        let req =
+                            http::Request::get(format!("https://{}/", config.server_name.as_str()))
+                                .body(())
+                                .unwrap();
+                        if let Err(e) = h3.send_request(req).await {
+                            println!("H3: {e}");
+                            *(quic_conn_dead.lock().await) = true;
+                        }
+                        None
+                    }
+                }
+            } else {
+                Some(udp.recv_from(&mut dns_query).await)
+            };
+
+            if let Some(Ok((query_size, addr))) = message {
                 // rule check
                 if (rules.is_some()
                     && rulecheck(

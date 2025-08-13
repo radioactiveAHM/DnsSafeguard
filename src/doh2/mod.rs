@@ -1,14 +1,14 @@
 use crate::{
     chttp::genrequrl,
-    rule::rulecheck,
-    utils::{unsafe_staticref, Buffering},
     config,
-    tls
+    rule::rulecheck,
+    tls,
+    utils::{Buffering, unsafe_staticref},
 };
 use core::str;
 use h2::client::SendRequest;
 use std::{net::SocketAddr, sync::Arc};
-use tokio::{time::sleep, sync::Mutex};
+use tokio::{sync::Mutex, time::sleep};
 
 pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<crate::rule::Rule>>) {
     // TLS Conf
@@ -53,25 +53,6 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
             }
         });
 
-        if let Some(dur) = config.http_keep_alive {
-            let dead_conn3 = dead_conn.clone();
-            let client2 = client.clone();
-            tokio::spawn(async move {
-                loop {
-                    let req =
-                        http::Request::get(format!("https://{}/", config.server_name.as_str()))
-                            .body(())
-                            .unwrap();
-                    if let Err(e) = client2.clone().send_request(req, true) {
-                        println!("H2: {e}");
-                        *(dead_conn3.lock().await) = true;
-                        break;
-                    }
-                    tokio::time::sleep(std::time::Duration::from_secs(dur)).await;
-                }
-            });
-        }
-
         let mut dns_query = [0u8; 512];
         loop {
             let h2_client = client.clone().ready().await;
@@ -109,8 +90,33 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
                 tank = None;
                 continue;
             }
-            // Recive dns query
-            if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
+
+            let message = if let Some(dur) = config.http_keep_alive {
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(dur),
+                    udp.recv_from(&mut dns_query),
+                )
+                .await
+                {
+                    Ok(message) => Some(message),
+                    Err(_) => {
+                        let mut h2 = client.clone();
+                        let req =
+                            http::Request::get(format!("https://{}/", config.server_name.as_str()))
+                                .body(())
+                                .unwrap();
+                        if let Err(e) = h2.send_request(req, true) {
+                            println!("H2: {e}");
+                            *(h2_conn_dead.lock().await) = true;
+                        }
+                        None
+                    }
+                }
+            } else {
+                Some(udp.recv_from(&mut dns_query).await)
+            };
+
+            if let Some(Ok((query_size, addr))) = message {
                 // rule check
                 if (rules.is_some()
                     && rulecheck(

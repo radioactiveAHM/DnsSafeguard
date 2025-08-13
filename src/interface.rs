@@ -1,4 +1,4 @@
-use std::net::{IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::net::SocketAddr;
 
 use tokio::{net::TcpStream, time::sleep};
 
@@ -15,7 +15,10 @@ pub fn get_interface(ipv4: bool, interface: &str) -> SocketAddr {
         }
     });
 
-    if ip.is_none() {
+    if let Some(ip) = ip {
+        println!("{} Selected for binding", ip.1);
+        SocketAddr::new(ip.1, 0)
+    } else {
         println!(
             "interface not found or interface does not provide IPv6.\nAvailable interface are:"
         );
@@ -23,17 +26,6 @@ pub fn get_interface(ipv4: bool, interface: &str) -> SocketAddr {
             println!("{}: {}", interface.0, interface.1);
         }
         std::process::exit(1);
-    }
-
-    match ip.unwrap().1 {
-        IpAddr::V4(ip) => {
-            println!("{ip} Selected for binding");
-            std::net::SocketAddr::V4(SocketAddrV4::new(ip, 0))
-        }
-        IpAddr::V6(ip) => {
-            println!("[{ip}] Selected for binding");
-            std::net::SocketAddr::V6(SocketAddrV6::new(ip, 0, 0, 0))
-        }
     }
 }
 
@@ -73,7 +65,7 @@ pub fn set_tcp_socket_options(tcp: &mut tokio::net::TcpSocket) {
 }
 
 pub async fn tcp_connect_handle(
-    target: std::net::SocketAddr,
+    target: SocketAddr,
     connection_cfg: crate::config::Connection,
     network_interface: &'static Option<String>,
 ) -> TcpStream {
@@ -98,10 +90,11 @@ pub async fn tcp_connect_handle(
             };
 
             socket
-                .bind(std::net::SocketAddr::new(default, 0))
+                .bind(SocketAddr::new(default, 0))
                 .expect("Could not bind socket")
         };
 
+        println!("TCP socket connecting to {target}");
         match socket.connect(target).await {
             Ok(stream) => {
                 return stream;

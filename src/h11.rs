@@ -1,16 +1,14 @@
 use core::str;
-use std::{net::SocketAddr, sync::Arc};
+use std::net::SocketAddr;
 
 use crate::chttp::genrequrlh1;
-use crate::interface::tcp_connect_handle;
 use crate::rule::{Rules, rulecheck_sync};
-use crate::tls::{self, tlsfragmenting};
 use crate::utils::{Buffering, c_len, catch_in_buff};
 use tokio::{io::AsyncWriteExt, time::sleep};
 
 pub async fn http1(config: &'static crate::config::Config, rule: Rules) {
     // TLS Client
-    let ctls = tls::tlsconf(
+    let ctls = crate::tls::tlsconf(
         vec![b"http/1.1".to_vec()],
         config.disable_certificate_validation,
     );
@@ -18,35 +16,19 @@ pub async fn http1(config: &'static crate::config::Config, rule: Rules) {
 
     let udp = crate::udp::udp_socket(config.serve_addrs).await.unwrap();
     loop {
-        // TCP socket for TLS
-        let tcp =
-            tcp_connect_handle(config.remote_addrs, config.connection, &config.interface).await;
-        println!("New HTTP/1.1 connection");
-
-        let example_com = if config.ip_as_sni {
-            (config.remote_addrs.ip()).into()
-        } else {
-            config
-                .server_name
-                .to_string()
-                .try_into()
-                .expect("Invalid server name")
-        };
-        // Perform TLS Client Hello fragmenting
-        let tls_conn = tokio_rustls::TlsConnector::from(Arc::clone(&ctls))
-            .connect_with_stream(example_com, tcp, |tls, tcp| {
-                // Do fragmenting
-                if config.fragmenting.enable {
-                    tokio::task::block_in_place(|| {
-                        tokio::runtime::Handle::current().block_on(async {
-                            tlsfragmenting(&config.fragmenting, tls, tcp);
-                        });
-                    });
-                }
-            })
-            .await;
-        if tls_conn.is_err() {
-            println!("{}", tls_conn.unwrap_err());
+        println!("HTTP/1.1 Connecting");
+        let tls = crate::tls::tls_conn_gen(
+            config.server_name.to_string(),
+            config.ip_as_sni,
+            config.remote_addrs,
+            config.fragmenting.clone(),
+            ctls.clone(),
+            config.connection,
+            &config.interface,
+        )
+        .await;
+        if tls.is_err() {
+            println!("{}", tls.unwrap_err());
             sleep(std::time::Duration::from_secs(
                 config.connection.reconnect_sleep,
             ))
@@ -55,7 +37,7 @@ pub async fn http1(config: &'static crate::config::Config, rule: Rules) {
         }
         println!("HTTP/1.1 Connection Established");
 
-        let mut c = tls_conn.unwrap();
+        let mut tls = tls.unwrap();
 
         let mut dns_query = [0u8; 512];
         let mut base64_url_temp = [0u8; 1024 * 2];
@@ -66,7 +48,7 @@ pub async fn http1(config: &'static crate::config::Config, rule: Rules) {
         loop {
             if let Some((dns_query, query_size, addr)) = &tank {
                 if handler(
-                    &mut c,
+                    &mut tls,
                     &udp,
                     &config.custom_http_path,
                     &config.server_name,
@@ -96,7 +78,7 @@ pub async fn http1(config: &'static crate::config::Config, rule: Rules) {
                 }
 
                 if let Err(e) = handler(
-                    &mut c,
+                    &mut tls,
                     &udp,
                     &config.custom_http_path,
                     &config.server_name,

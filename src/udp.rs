@@ -20,6 +20,11 @@ pub async fn udp_socket(
         println!("UDP socket set_only_v6 option: {e}")
     }
 
+    // Set Nonblocking
+    if let Err(e) = socket.set_nonblocking(true) {
+        println!("UDP Set Nonblocking: {e}")
+    }
+
     socket.bind(&serve_addrs.into())?;
 
     tokio::net::UdpSocket::from_std(socket.into())

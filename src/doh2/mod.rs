@@ -1,17 +1,14 @@
-use crate::chttp::genrequrl;
-use crate::rule::rulecheck;
-use crate::tls::tlsfragmenting;
-use crate::utils::Buffering;
-use crate::utils::unsafe_staticref;
+use crate::{
+    chttp::genrequrl,
+    rule::rulecheck,
+    utils::{unsafe_staticref, Buffering},
+    config,
+    tls
+};
 use core::str;
 use h2::client::SendRequest;
 use std::{net::SocketAddr, sync::Arc};
-use tokio::sync::Mutex;
-use tokio::time::sleep;
-
-use crate::config;
-use crate::interface::tcp_connect_handle;
-use crate::tls;
+use tokio::{time::sleep, sync::Mutex};
 
 pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<crate::rule::Rule>>) {
     // TLS Conf
@@ -23,30 +20,19 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
     let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
 
     loop {
-        // TCP Connection
-        // Panic if socket_addrs invalid
-        let tcp =
-            tcp_connect_handle(config.remote_addrs, config.connection, &config.interface).await;
-        println!("New H2 connection");
-
-        let example_com = if config.ip_as_sni {
-            (config.remote_addrs.ip()).into()
-        } else {
-            config
-                .server_name
-                .to_string()
-                .try_into()
-                .expect("Invalid server name")
-        };
-        // TLS Client
-        let tls_conn = tokio_rustls::TlsConnector::from(Arc::clone(&h2tls))
-            .connect_with_stream(example_com, tcp, |tls, tcp| {
-                // Do fragmenting
-                tlsfragmenting(&config.fragmenting, tls, tcp);
-            })
-            .await;
-        if tls_conn.is_err() {
-            println!("{}", tls_conn.unwrap_err());
+        println!("H2 connecting");
+        let tls = crate::tls::tls_conn_gen(
+            config.server_name.to_string(),
+            config.ip_as_sni,
+            config.remote_addrs,
+            config.fragmenting.clone(),
+            h2tls.clone(),
+            config.connection,
+            &config.interface,
+        )
+        .await;
+        if tls.is_err() {
+            println!("{}", tls.unwrap_err());
             sleep(std::time::Duration::from_secs(
                 config.connection.reconnect_sleep,
             ))
@@ -54,7 +40,7 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
             continue;
         }
 
-        let (client, h2c) = h2::client::handshake(tls_conn.unwrap()).await.unwrap();
+        let (client, h2c) = h2::client::handshake(tls.unwrap()).await.unwrap();
         println!("H2 Connection Established");
 
         let dead_conn = Arc::new(Mutex::new(false));

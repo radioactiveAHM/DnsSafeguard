@@ -10,6 +10,7 @@
 	"http_method": "GET",
 	"response_timeout": 5,
 	"http_keep_alive": 10,
+	"native_tls": false,
 	"fragmenting": {
 		"enable": false,
 		"method": "single",

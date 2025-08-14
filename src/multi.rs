@@ -20,14 +20,16 @@ pub async fn h1_multi(
     for conn_i in 0..config.connection.h1_multi_connections {
         let recver_locker = recver_locker.clone();
         let tls_config = ctls.clone();
-        let frag = config.fragmenting.clone();
         tokio::spawn(async move {
             loop {
-                let tls_conn = crate::tls::tls_conn_gen(
-                    config.server_name.clone(),
+                let tls_conn = crate::tls::dynamic_tls_conn_gen(
+                    config.native_tls,
+                    config.server_name.to_string(),
+                    &["http/1.1"],
+                    config.disable_certificate_validation,
                     config.ip_as_sni,
                     config.remote_addrs,
-                    frag.clone(),
+                    config.fragmenting.clone(),
                     tls_config.clone(),
                     config.connection,
                     &config.interface,

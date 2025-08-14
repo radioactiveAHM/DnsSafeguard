@@ -117,7 +117,7 @@ impl HTTP11 {
         Some(&buff[a.1..b.0])
     }
     async fn parse(
-        mut reqbuff: &mut tokio::io::ReadBuf<'_>,
+        reqbuff: &mut tokio::io::ReadBuf<'_>,
         mut stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     ) -> tokio::io::Result<Self> {
         if &reqbuff.filled()[..3] == b"GET" {
@@ -132,18 +132,23 @@ impl HTTP11 {
                 Err(tokio::io::Error::other(HTTP11Errors::NoDnsQuery))
             }
         } else if &reqbuff.filled()[..4] == b"POST" {
-            if let Some(body_pos) = catch_in_buff(b"\r\n\r\n", &reqbuff.filled()) {
+            if let Some(body_pos) = catch_in_buff(b"\r\n\r\n", reqbuff.filled()) {
                 let content_length = c_len(&reqbuff.filled()[..body_pos.0]);
                 if content_length > 0 {
                     loop {
                         if reqbuff.filled()[body_pos.1..].len() >= content_length {
                             break;
                         }
-                        crate::ioutils::read_buffered_timeout(&mut reqbuff, &mut stream, std::time::Duration::from_secs(5)).await?;
+                        crate::ioutils::read_buffered_timeout(
+                            reqbuff,
+                            &mut stream,
+                            std::time::Duration::from_secs(5),
+                        )
+                        .await?;
                     }
-                    return Ok(Self {
+                    Ok(Self {
                         method: Method::Post(body_pos.1),
-                    });
+                    })
                 } else {
                     Err(tokio::io::Error::other(HTTP11Errors::MalformedHttp))
                 }

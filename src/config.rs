@@ -136,6 +136,7 @@ pub struct Config {
     pub response_timeout: u64,
     pub http_keep_alive: Option<u64>,
     pub http_method: HttpMethod,
+    pub native_tls: bool,
     pub fragmenting: Fragmenting,
     pub noise: Noise,
     pub quic: Quic,

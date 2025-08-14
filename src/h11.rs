@@ -17,8 +17,11 @@ pub async fn http1(config: &'static crate::config::Config, rule: Rules) {
     let udp = crate::udp::udp_socket(config.serve_addrs).await.unwrap();
     loop {
         println!("HTTP/1.1 Connecting");
-        let tls = crate::tls::tls_conn_gen(
+        let tls = crate::tls::dynamic_tls_conn_gen(
+            config.native_tls,
             config.server_name.to_string(),
+            &["http/1.1"],
+            config.disable_certificate_validation,
             config.ip_as_sni,
             config.remote_addrs,
             config.fragmenting.clone(),
@@ -102,8 +105,8 @@ pub async fn http1(config: &'static crate::config::Config, rule: Rules) {
     }
 }
 
-pub async fn handler(
-    c: &mut tokio_rustls::client::TlsStream<tokio::net::TcpStream>,
+pub async fn handler<IO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(
+    c: &mut IO,
     udp: &tokio::net::UdpSocket,
     ucpath: &'static Option<String>,
     sn: &'static str,

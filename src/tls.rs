@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{error::Error, fmt::Debug, net::SocketAddr, sync::Arc};
 
 use crate::{config, interface::tcp_connect_handle};
 
@@ -47,35 +47,68 @@ pub fn tlsfragmenting(
     }
 }
 
-pub async fn tls_conn_gen(
+pub trait AsyncIo:
+    tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Debug + Send + 'static
+{
+}
+impl AsyncIo for tokio_native_tls::TlsStream<tokio::net::TcpStream> {}
+impl AsyncIo for tokio_rustls::client::TlsStream<tokio::net::TcpStream> {}
+
+pub async fn dynamic_tls_conn_gen(
+    native: bool,
     server_name: String,
+    alpn: &[&str],
+    insecure: bool,
     ip_as_sni: bool,
     socket_addrs: SocketAddr,
     fragmenting: config::Fragmenting,
     ctls: Arc<tokio_rustls::rustls::ClientConfig>,
     connection_cfg: config::Connection,
     network_interface: &'static Option<String>,
-) -> tokio::io::Result<tokio_rustls::client::TlsStream<tokio::net::TcpStream>> {
-    let example_com = if ip_as_sni {
-        (socket_addrs.ip()).into()
+) -> Result<Box<dyn AsyncIo>, Box<dyn Error + Send + Sync>> {
+    if native {
+        let sni = if ip_as_sni {
+            socket_addrs.ip().to_string()
+        } else {
+            server_name
+        };
+        Ok(Box::new(
+            tokio_native_tls::TlsConnector::from(
+                native_tls::TlsConnector::builder()
+                    .request_alpns(alpn)
+                    .danger_accept_invalid_certs(insecure)
+                    .build()?,
+            )
+            .connect(
+                &sni,
+                tcp_connect_handle(socket_addrs, connection_cfg, network_interface).await,
+            )
+            .await?,
+        ))
     } else {
-        (server_name).try_into().expect("Invalid server name")
-    };
+        let example_com = if ip_as_sni {
+            (socket_addrs.ip()).into()
+        } else {
+            (server_name).try_into().expect("Invalid server name")
+        };
 
-    tokio_rustls::TlsConnector::from(ctls)
-        .connect_with_stream(
-            example_com,
-            tcp_connect_handle(socket_addrs, connection_cfg, network_interface).await,
-            |tls, tcp| {
-                // Do fragmenting
-                if fragmenting.enable {
-                    tokio::task::block_in_place(|| {
-                        tlsfragmenting(&fragmenting, tls, tcp);
-                    });
-                }
-            },
-        )
-        .await
+        Ok(Box::new(
+            tokio_rustls::TlsConnector::from(ctls)
+                .connect_with_stream(
+                    example_com,
+                    tcp_connect_handle(socket_addrs, connection_cfg, network_interface).await,
+                    |tls, tcp| {
+                        // Do fragmenting
+                        if fragmenting.enable {
+                            tokio::task::block_in_place(|| {
+                                tlsfragmenting(&fragmenting, tls, tcp);
+                            });
+                        }
+                    },
+                )
+                .await?,
+        ))
+    }
 }
 
 #[derive(Debug)]

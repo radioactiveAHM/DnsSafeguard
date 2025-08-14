@@ -21,8 +21,11 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
 
     loop {
         println!("H2 connecting");
-        let tls = crate::tls::tls_conn_gen(
+        let tls = crate::tls::dynamic_tls_conn_gen(
+            config.native_tls,
             config.server_name.to_string(),
+            &["h2"],
+            config.disable_certificate_validation,
             config.ip_as_sni,
             config.remote_addrs,
             config.fragmenting.clone(),

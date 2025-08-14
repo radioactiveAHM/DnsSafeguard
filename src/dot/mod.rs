@@ -21,8 +21,11 @@ pub async fn dot(
     let ctls = tls::tlsconf(vec![b"dot".to_vec()], config.disable_certificate_validation);
     loop {
         println!("DOT Connecting");
-        let tls_conn = tls::tls_conn_gen(
+        let tls = crate::tls::dynamic_tls_conn_gen(
+            config.native_tls,
             config.server_name.to_string(),
+            &["dot"],
+            config.disable_certificate_validation,
             config.ip_as_sni,
             config.remote_addrs,
             config.fragmenting.clone(),
@@ -31,8 +34,8 @@ pub async fn dot(
             &config.interface,
         )
         .await;
-        if tls_conn.is_err() {
-            println!("{}", tls_conn.unwrap_err());
+        if tls.is_err() {
+            println!("{}", tls.unwrap_err());
             tokio::time::sleep(std::time::Duration::from_secs(
                 config.connection.reconnect_sleep,
             ))
@@ -41,7 +44,7 @@ pub async fn dot(
         }
         println!("DOT Connection Established");
 
-        let (r, w) = tokio::io::split(tls_conn.unwrap());
+        let (r, w) = tokio::io::split(tls.unwrap());
 
         // Hold dns message ID with it's dns resolver Addr to match
         let waiters: Arc<Mutex<std::collections::HashMap<u16, IdType>>> =
@@ -64,9 +67,9 @@ pub async fn dot(
     }
 }
 
-async fn recv_query(
+async fn recv_query<R: tokio::io::AsyncRead + Unpin>(
     udp: &'static tokio::net::UdpSocket,
-    mut r: tokio::io::ReadHalf<tokio_rustls::client::TlsStream<tokio::net::TcpStream>>,
+    mut r: R,
     waiters: Arc<Mutex<std::collections::HashMap<u16, IdType>>>,
     ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
 ) -> tokio::io::Result<()> {
@@ -118,10 +121,10 @@ async fn recv_query(
     }
 }
 
-async fn send_query(
+async fn send_query<W: tokio::io::AsyncWrite + Unpin + Send>(
     udp: &'static tokio::net::UdpSocket,
     rules: &Option<Vec<crate::rule::Rule>>,
-    mut w: tokio::io::WriteHalf<tokio_rustls::client::TlsStream<tokio::net::TcpStream>>,
+    mut w: W,
     waiters: Arc<Mutex<std::collections::HashMap<u16, IdType>>>,
 ) -> tokio::io::Result<()> {
     let mut query = [0; 514];

@@ -1,12 +1,7 @@
 use std::{fmt::Display, net::SocketAddr};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::UdpSocket,
-};
+use tokio::{io::AsyncWriteExt, net::UdpSocket};
 
 use crate::utils::{Buffering, c_len, catch_in_buff, recv_timeout};
-
-use super::DnsQuery;
 
 pub async fn serve_http11(
     mut stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
@@ -29,17 +24,15 @@ pub async fn serve_http11(
         .await?;
 
     let mut reqbuff = [0; 1024];
-    let mut readbuf = tokio::io::ReadBuf::new(&mut reqbuff);
+    let mut reqbuff: tokio::io::ReadBuf<'_> = tokio::io::ReadBuf::new(&mut reqbuff);
     let mut respbuff = [0; 4096];
     loop {
-        crate::ioutils::read_buffered(&mut readbuf, &mut stream).await?;
+        crate::ioutils::read_buffered(&mut reqbuff, &mut stream).await?;
         if let Err(e) = handle_req(
             &mut stream,
-            readbuf.filled(),
+            &mut reqbuff,
             &agent,
             &mut respbuff,
-            log,
-            &peer,
             cache_control,
             response_timeout,
         )
@@ -48,32 +41,23 @@ pub async fn serve_http11(
         {
             println!("DoH1.1 server<{peer}:stream>: {e}");
         }
-        readbuf.clear();
+        reqbuff.clear();
     }
 }
 
 async fn handle_req(
     stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
-    buff: &[u8],
+    reqbuff: &mut tokio::io::ReadBuf<'_>,
     agent: &UdpSocket,
     respbuff: &mut [u8],
-    log: bool,
-    peer: &SocketAddr,
     cache_control: &'static String,
     response_timeout: (u64, u64),
 ) -> tokio::io::Result<()> {
-    let req = {
-        match HTTP11::parse(buff, stream).await {
-            Ok(h) => h,
-            Err(e) => {
-                if log {
-                    println!("DoH1.1 server<{peer}:stream>: {e}");
-                }
-                return Ok(());
-            }
-        }
+    let req = HTTP11::parse(reqbuff, stream).await?;
+    let dqbuff = match &req.method {
+        Method::Get(dq) => dq.as_slice(),
+        Method::Post(body_pos) => &reqbuff.filled()[*body_pos..],
     };
-    let dqbuff = req.getbuff();
 
     agent.send(dqbuff).await?;
 
@@ -119,10 +103,9 @@ impl Display for HTTP11Errors {
 }
 impl std::error::Error for HTTP11Errors {}
 
-#[allow(clippy::large_enum_variant)]
 enum Method {
-    Get(DnsQuery),
-    Post([u8; 512], usize),
+    Get(Vec<u8>),
+    Post(usize),
 }
 struct HTTP11 {
     method: Method,
@@ -134,51 +117,41 @@ impl HTTP11 {
         Some(&buff[a.1..b.0])
     }
     async fn parse(
-        buff: &[u8],
-        stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
+        mut reqbuff: &mut tokio::io::ReadBuf<'_>,
+        mut stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     ) -> tokio::io::Result<Self> {
-        if &buff[..3] == b"GET" {
-            if let Some(query) = HTTP11::find_query(buff) {
-                Ok(Self {
-                    method: Method::Get(DnsQuery::new(query)?),
-                })
+        if &reqbuff.filled()[..3] == b"GET" {
+            if let Some(bs4dns) = HTTP11::find_query(reqbuff.filled()) {
+                match base64_url::decode(bs4dns) {
+                    Ok(q) => Ok(Self {
+                        method: Method::Get(q),
+                    }),
+                    Err(e) => Err(tokio::io::Error::other(e)),
+                }
             } else {
                 Err(tokio::io::Error::other(HTTP11Errors::NoDnsQuery))
             }
-        } else if &buff[..4] == b"POST" {
-            if let Some(body_pos) = catch_in_buff(b"\r\n\r\n", buff) {
-                let content_length = c_len(&buff[..body_pos.0]);
-                if content_length == 0 {
-                    Err(tokio::io::Error::other(HTTP11Errors::MalformedHttp))
-                } else {
-                    let mut dns = [0u8; 512];
-                    dns[..buff[body_pos.1..].len()].copy_from_slice(&buff[body_pos.1..]);
-                    if content_length != buff[body_pos.1..].len() {
-                        let mut b2 = [0; 512];
-                        let size = stream.read(&mut b2).await?;
-                        dns[buff[body_pos.1..].len()..buff[body_pos.1..].len() + size]
-                            .copy_from_slice(&b2[..size]);
-                        Ok(Self {
-                            method: Method::Post(dns, buff[body_pos.1..].len() + size),
-                        })
-                    } else {
-                        Ok(Self {
-                            method: Method::Post(dns, buff[body_pos.1..].len()),
-                        })
+        } else if &reqbuff.filled()[..4] == b"POST" {
+            if let Some(body_pos) = catch_in_buff(b"\r\n\r\n", &reqbuff.filled()) {
+                let content_length = c_len(&reqbuff.filled()[..body_pos.0]);
+                if content_length > 0 {
+                    loop {
+                        if reqbuff.filled()[body_pos.1..].len() >= content_length {
+                            break;
+                        }
+                        crate::ioutils::read_buffered_timeout(&mut reqbuff, &mut stream, std::time::Duration::from_secs(5)).await?;
                     }
+                    return Ok(Self {
+                        method: Method::Post(body_pos.1),
+                    });
+                } else {
+                    Err(tokio::io::Error::other(HTTP11Errors::MalformedHttp))
                 }
             } else {
                 Err(tokio::io::Error::other(HTTP11Errors::MalformedHttp))
             }
         } else {
             Err(tokio::io::Error::other(HTTP11Errors::InvalidMethod))
-        }
-    }
-
-    fn getbuff(&self) -> &[u8] {
-        match &self.method {
-            Method::Get(dq) => dq.value(),
-            Method::Post(buff, size) => &buff[..*size],
         }
     }
 }

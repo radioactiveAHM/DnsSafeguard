@@ -10,7 +10,7 @@ use tokio::{
 use crate::{
     doh3::udp_setup,
     rule::rulecheck,
-    utils::{convert_u16_to_two_u8s_be, unsafe_staticref},
+    utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be, unsafe_staticref},
 };
 
 pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crate::rule::Rule>>) {
@@ -218,6 +218,26 @@ async fn send_dq(
         std::future::poll_fn(|cx| recv.poll_read_buf(cx, &mut rb)).await
     })
     .await??;
+    if rb.filled().len() < 2 {
+        return Ok(());
+    }
+
+    let message_size = convert_two_u8s_to_u16_be([rb.filled()[0], rb.filled()[1]]) as usize;
+    if message_size == 0 {
+        return Err(tokio::io::Error::other("malformed dns query response"));
+    }
+
+    loop {
+        if rb.filled().len() - 2 >= message_size {
+            break;
+        }
+
+        timeout(std::time::Duration::from_secs(response_timeout), async {
+            std::future::poll_fn(|cx| recv.poll_read_buf(cx, &mut rb)).await
+        })
+        .await??;
+    }
+
     if ow.is_some() {
         crate::ipoverwrite::overwrite_ip(&mut rb.filled_mut()[2..], ow);
     }

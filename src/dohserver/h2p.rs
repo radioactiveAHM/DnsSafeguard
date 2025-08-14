@@ -1,12 +1,9 @@
 use bytes::Bytes;
-use h2::server::SendResponse;
-use h2::{Reason, SendStream};
+use h2::{Reason, SendStream, server::SendResponse};
 use http::Response;
 use std::net::SocketAddr;
 
 use crate::utils::recv_timeout;
-
-use super::DnsQuery;
 
 pub async fn serve_h2(
     stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
@@ -48,7 +45,7 @@ pub async fn serve_h2(
                 });
             } else if req.method() == http::Method::GET {
                 if let Some(bs4dns) = req.uri().query() {
-                    if let Ok(dq) = DnsQuery::new(&bs4dns.as_bytes()[4..]) {
+                    if let Ok(dq) = base64_url::decode(&bs4dns.as_bytes()[4..]) {
                         tokio::spawn(async move {
                             if let Err(e) = handle_dns_req_get(
                                 &mut resp,
@@ -135,7 +132,7 @@ async fn handle_dns_req_post(
 #[inline(never)]
 async fn handle_dns_req_get(
     resp: &mut SendResponse<Bytes>,
-    dq: DnsQuery,
+    dq: Vec<u8>,
     serve_addrs: SocketAddr,
     cache_control: &'static String,
     response_timeout: (u64, u64),
@@ -151,7 +148,7 @@ async fn handle_dns_req_get(
     agent
         .connect(std::net::SocketAddr::new(serving_ip, serve_addrs.port()))
         .await?;
-    agent.send(dq.value()).await?;
+    agent.send(&dq).await?;
 
     let mut buff = [0; 4096];
     let size: usize;

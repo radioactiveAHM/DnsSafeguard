@@ -33,25 +33,6 @@ impl Tc {
     }
 }
 
-pub struct DnsQuery([u8; 768], usize);
-impl DnsQuery {
-    pub fn new(bs4dns: &[u8]) -> tokio::io::Result<Self> {
-        // (512*4)/3=683
-        let mut buff = [0; 768];
-        match base64_url::decode_to_slice(bs4dns, &mut buff) {
-            Ok(b) => {
-                let mut dq = Self([0; 768], b.len());
-                dq.0[..b.len()].clone_from_slice(b);
-                Ok(dq)
-            }
-            Err(e) => Err(tokio::io::Error::other(e)),
-        }
-    }
-    pub fn value(&self) -> &[u8] {
-        &self.0[..self.1]
-    }
-}
-
 pub async fn doh_server(dsc: DohServer, serve_addrs: SocketAddr) {
     sleep(Duration::from_secs(2)).await;
     let certs = CertificateDer::pem_file_iter(dsc.certificate)

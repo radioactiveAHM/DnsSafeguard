@@ -42,5 +42,5 @@ pub async fn read_buffered_timeout<R: tokio::io::AsyncRead + Unpin>(
     r: &mut R,
     timeout: std::time::Duration,
 ) -> tokio::io::Result<()> {
-    tokio::time::timeout(timeout, async { read_buffered(buf, r).await }).await?
+    tokio::time::timeout(timeout, read_buffered(buf, r)).await?
 }

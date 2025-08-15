@@ -100,6 +100,7 @@ The configuration file is structured in JSON format and includes the following s
 - `Http Method`: Values are `GET` and `POST`. GET is more compatible, it consumes more memory. POST, on the other hand, eliminates the need to encode DNS queries in base64url, resulting in lower memory usage. However, it requires two write system calls.
 - `Response Timeout`: How long to wait for http response for DoQ, H3 and H1.
 - `Http Keep Alive`: Interval (in seconds) for sending periodic `GET /` HTTP requests to keep the connection alive. Useful for remote servers that ignore keep-alive signals from HTTP/2 or QUIC. Data usage is capped at 1MB per 24 hours. Set to `null` to disable.
+- `Native Tls`: Enables Native TLS using SChannel on Windows, Security.framework on macOS, and OpenSSL elsewhere; fragmenting is not supported. Compatible with `h1`, `h2`, and `dot`.
 - `Fragmenting`: The fragmentation method to use during the TLS handshake. [Fragmenting page](/FRAG.md)
 - `Noise`: UDP noise setting.
   - `ntype`: Noise type. Variants include `dns`, `str`, `lsd`, `tracker`, `stun`, `tftp` and `rand`.

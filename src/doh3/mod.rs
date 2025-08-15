@@ -95,7 +95,7 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
             )
             .await;
         }
-        println!("HTTP/3 Connecting");
+        log::info!("HTTP/3 Connecting");
         // Connect to dns server
         let connecting = endpoint
             .connect(config.remote_addrs, &config.server_name)
@@ -108,7 +108,7 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
                     let connecting = connecting.into_0rtt();
                     if let Ok((conn, rtt)) = connecting {
                         rtt.await;
-                        println!("HTTP/3 0RTT Connection Established");
+                        log::info!("HTTP/3 0RTT Connection Established");
                         Ok(conn)
                     } else {
                         let conn = endpoint
@@ -116,7 +116,7 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
                             .unwrap()
                             .await;
                         if conn.is_ok() {
-                            println!("HTTP/3 Connection Established");
+                            log::info!("HTTP/3 Connection Established");
                         }
                         conn
                     }
@@ -128,7 +128,7 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
                 pending
             } else {
                 connecting_retry += 1;
-                println!("Connecting timeout");
+                log::error!("H3: Connecting timeout");
                 sleep(std::time::Duration::from_secs(
                     config.connection.reconnect_sleep,
                 ))
@@ -139,7 +139,7 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
 
         if conn.is_err() {
             connecting_retry += 1;
-            println!("{}", conn.unwrap_err());
+            log::error!("H3: {}", conn.unwrap_err());
             sleep(std::time::Duration::from_secs(
                 config.connection.reconnect_sleep,
             ))
@@ -151,7 +151,7 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
         let (mut h3c, h3) = match h3::client::new(h3_quinn::Connection::new(conn.unwrap())).await {
             Ok(conn) => conn,
             Err(e) => {
-                println!("H3: {e}");
+                log::error!("H3: {e}");
                 continue;
             }
         };
@@ -160,7 +160,7 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
 
         let dead_conn2 = dead_conn.clone();
         let watcher = tokio::spawn(async move {
-            println!("H3: {}", h3c.wait_idle().await);
+            log::error!("H3: {}", h3c.wait_idle().await);
             *(dead_conn2.lock().await) = true;
         });
 
@@ -187,7 +187,7 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
                     )
                     .await
                     {
-                        println!("H3 Stream: {e}");
+                        log::error!("H3 Stream: {e}");
                         temp = true;
                     }
                     if temp {
@@ -214,7 +214,7 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
                                 .body(())
                                 .unwrap();
                         if let Err(e) = h3.send_request(req).await {
-                            println!("H3: {e}");
+                            log::error!("H3: {e}");
                             *(quic_conn_dead.lock().await) = true;
                         }
                         None
@@ -261,7 +261,7 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
                     )
                     .await
                     {
-                        println!("H3 Stream: {e}");
+                        log::error!("H3 Stream: {e}");
                         temp = true;
                     }
                     if temp {
@@ -354,7 +354,7 @@ async fn send_request(
         }
         let _ = udp.send_to(&buff[..body_len], addr).await;
     } else {
-        println!(
+        log::error!(
             "H3 Stream: Remote responded with status code of {}",
             resp.status().as_str()
         );

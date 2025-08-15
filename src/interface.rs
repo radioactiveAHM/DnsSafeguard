@@ -16,10 +16,10 @@ pub fn get_interface(ipv4: bool, interface: &str) -> SocketAddr {
     });
 
     if let Some(ip) = ip {
-        println!("{} Selected for binding", ip.1);
+        log::info!("{} Selected for binding", ip.1);
         SocketAddr::new(ip.1, 0)
     } else {
-        println!(
+        log::error!(
             "interface not found or interface does not provide IPv6.\nAvailable interface are:"
         );
         for interface in interfaces {
@@ -48,17 +48,17 @@ pub fn set_tcp_socket_options(tcp: &mut tokio::net::TcpSocket) {
     {
         if let Some(device) = &options.linux.bind_to_device {
             if tcp_options::set_tcp_bind_device(tcp, device).is_err() {
-                println!("Failed to set bind_to_device socket option");
+                log::error!("Failed to set bind_to_device socket option");
             }
         }
         if let Some(congestion) = &options.linux.congestion {
             if tcp_options::set_tcp_congestion(tcp, congestion).is_err() {
-                println!("Failed to set congestion socket option");
+                log::error!("Failed to set congestion socket option");
             }
         }
         if let Some(mss) = options.linux.mss {
             if tcp_options::set_tcp_mss(tcp, mss).is_err() {
-                println!("Failed to set mss socket option");
+                log::error!("Failed to set mss socket option");
             }
         }
     }
@@ -94,13 +94,14 @@ pub async fn tcp_connect_handle(
                 .expect("Could not bind socket")
         };
 
-        println!("TCP socket connecting to {target}");
+        log::info!("TCP socket connecting to {target}");
         match socket.connect(target).await {
             Ok(stream) => {
+                log::info!("TCP socket connected to {target}");
                 return stream;
             }
             Err(e) => {
-                println!("TCP Connection: {e}");
+                log::error!("TCP Connection: {e}");
                 sleep(std::time::Duration::from_secs(
                     connection_cfg.reconnect_sleep,
                 ))

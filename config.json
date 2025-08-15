@@ -1,4 +1,5 @@
 {
+	"log": "info",
 	"protocol": "h2",
 	"server_name": "cloudflare-dns.com",
 	"ip_as_sni": false,

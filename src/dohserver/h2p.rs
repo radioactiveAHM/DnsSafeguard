@@ -32,7 +32,7 @@ pub async fn serve_h2(
                         .await
                             && log
                         {
-                            println!(
+                            log::error!(
                                 "DoH2 server<{}:stream(POST):{}>: {}",
                                 peer,
                                 resp.stream_id().as_u32(),
@@ -57,7 +57,7 @@ pub async fn serve_h2(
                             .await
                                 && log
                             {
-                                println!(
+                                log::error!(
                                     "DoH2 server<{}:stream(GET):{}>: {}",
                                     peer,
                                     resp.stream_id().as_u32(),

@@ -39,7 +39,7 @@ pub async fn serve_http11(
         .await
             && log
         {
-            println!("DoH1.1 server<{peer}:stream>: {e}");
+            log::error!("DoH1.1 server<{peer}:stream>: {e}");
         }
         reqbuff.clear();
     }

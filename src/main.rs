@@ -47,6 +47,14 @@ async fn main() {
         .install_default()
         .unwrap();
     let conf = config::load_config();
+
+    // Setup LOG
+    unsafe {
+        std::env::set_var("RUST_LOG", &conf.log);
+    }
+    // Level order: Error, Warn, Info, Debug, Trace
+    env_logger::init();
+
     // Convert rules to adjust domains like dns query and improve performance
     let rules = convert_rules(&conf.rules);
 

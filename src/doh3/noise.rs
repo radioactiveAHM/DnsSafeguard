@@ -207,9 +207,9 @@ pub async fn noiser(noise: &Noise, target: SocketAddr, socket: &socket2::Socket)
         NoiseType::stun => socket.send_to(&stun(), &target.into()),
         NoiseType::tftp => socket.send_to(&tftp(), &target.into()),
     } {
-        println!("{sent_bytes} bytes sent as noise");
+        log::info!("{sent_bytes} bytes sent as noise");
         sleep(std::time::Duration::from_millis(noise.sleep)).await;
     } else {
-        println!("Noise failed");
+        log::error!("Noise failed");
     }
 }

@@ -41,7 +41,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
             )
             .await;
         }
-        println!("QUIC Connecting");
+        log::info!("QUIC Connecting");
         // Connect to dns server
         let connecting = endpoint
             .connect(config.remote_addrs, &config.server_name)
@@ -54,7 +54,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
                     let connecting = connecting.into_0rtt();
                     if let Ok((conn, rtt)) = connecting {
                         rtt.await;
-                        println!("QUIC 0RTT Connection Established");
+                        log::info!("QUIC 0RTT Connection Established");
                         Ok(conn)
                     } else {
                         let conn = endpoint
@@ -62,7 +62,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
                             .unwrap()
                             .await;
                         if conn.is_ok() {
-                            println!("QUIC Connection Established");
+                            log::info!("QUIC Connection Established");
                         }
                         conn
                     }
@@ -74,7 +74,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
                 pending
             } else {
                 connecting_retry += 1;
-                println!("DoQ: Connecting timeout");
+                log::error!("DoQ: Connecting timeout");
                 sleep(std::time::Duration::from_secs(
                     config.connection.reconnect_sleep,
                 ))
@@ -85,7 +85,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
 
         if conn.is_err() {
             connecting_retry += 1;
-            println!("DoQ: {}", conn.unwrap_err());
+            log::error!("DoQ: {}", conn.unwrap_err());
             sleep(std::time::Duration::from_secs(
                 config.connection.reconnect_sleep,
             ))
@@ -100,7 +100,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
         let q2 = quic.clone();
         let dead_conn2 = dead_conn.clone();
         let watcher = tokio::spawn(async move {
-            println!("DoQ: {}", q2.closed().await);
+            log::error!("DoQ: {}", q2.closed().await);
             *(dead_conn2.lock().await) = true;
         });
 
@@ -124,7 +124,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
                             )
                             .await
                             {
-                                println!("DoQ: {e}");
+                                log::error!("DoQ: {e}");
                                 temp = true;
                             }
                             if temp {
@@ -133,7 +133,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
                         });
                     }
                     Err(e) => {
-                        println!("DoQ: {e}");
+                        log::error!("DoQ: {e}");
                         break;
                     }
                 }
@@ -160,9 +160,9 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
 
                 if *dead.lock().await || quic.close_reason().is_some() {
                     if let Some(close_reason) = quic.close_reason() {
-                        println!("DoQ: {close_reason}");
+                        log::error!("DoQ: {close_reason}");
                     } else {
-                        println!("DoQ: Closed without reason");
+                        log::error!("DoQ: Closed without reason");
                     }
                     tank = Some((Box::new(dns_query), query_size, addr));
                     watcher.abort();
@@ -183,7 +183,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
                             )
                             .await
                             {
-                                println!("DoQ: {e}");
+                                log::error!("DoQ: {e}");
                                 temp = true;
                             }
                             if temp {
@@ -192,7 +192,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
                         });
                     }
                     Err(e) => {
-                        println!("DoQ: {e}");
+                        log::error!("DoQ: {e}");
                         break;
                     }
                 }

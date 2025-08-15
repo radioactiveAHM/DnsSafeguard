@@ -20,7 +20,7 @@ pub async fn dot(
     let uudp = unsafe_staticref(&udp);
     let ctls = tls::tlsconf(vec![b"dot".to_vec()], config.disable_certificate_validation);
     loop {
-        println!("DOT Connecting");
+        log::info!("DOT Connecting");
         let tls = crate::tls::dynamic_tls_conn_gen(
             config.native_tls,
             config.server_name.to_string(),
@@ -35,14 +35,14 @@ pub async fn dot(
         )
         .await;
         if tls.is_err() {
-            println!("{}", tls.unwrap_err());
+            log::error!("DoT: {}", tls.unwrap_err());
             tokio::time::sleep(std::time::Duration::from_secs(
                 config.connection.reconnect_sleep,
             ))
             .await;
             continue;
         }
-        println!("DOT Connection Established");
+        log::info!("DOT Connection Established");
 
         let (r, w) = tokio::io::split(tls.unwrap());
 
@@ -55,12 +55,12 @@ pub async fn dot(
         tokio::select! {
             recver = tokio::spawn(async move { recv_query(uudp, r, waiters2, &config.overwrite).await }) => {
                 if let Err(e) = recver {
-                    println!("DoT: {e}")
+                    log::error!("DoT: {e}")
                 }
             }
             sender = send_query(uudp, rules, w, waiters) => {
                 if let Err(e) = sender {
-                    println!("DoT: {e}")
+                    log::error!("DoT: {e}")
                 }
             }
         }

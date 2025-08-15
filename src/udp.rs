@@ -17,12 +17,12 @@ pub async fn udp_socket(
     if serve_addrs.is_ipv6()
         && let Err(e) = socket.set_only_v6(false)
     {
-        println!("UDP socket set_only_v6 option: {e}")
+        log::error!("UDP socket set_only_v6 option: {e}")
     }
 
     // Set Nonblocking
     if let Err(e) = socket.set_nonblocking(true) {
-        println!("UDP Set Nonblocking: {e}")
+        log::error!("UDP Set Nonblocking: {e}")
     }
 
     socket.bind(&serve_addrs.into())?;

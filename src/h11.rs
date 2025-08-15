@@ -16,7 +16,7 @@ pub async fn http1(config: &'static crate::config::Config, rule: Rules) {
 
     let udp = crate::udp::udp_socket(config.serve_addrs).await.unwrap();
     loop {
-        println!("HTTP/1.1 Connecting");
+        log::info!("HTTP/1.1 Connecting");
         let tls = crate::tls::dynamic_tls_conn_gen(
             config.native_tls,
             config.server_name.to_string(),
@@ -31,14 +31,14 @@ pub async fn http1(config: &'static crate::config::Config, rule: Rules) {
         )
         .await;
         if tls.is_err() {
-            println!("{}", tls.unwrap_err());
+            log::error!("{}", tls.unwrap_err());
             sleep(std::time::Duration::from_secs(
                 config.connection.reconnect_sleep,
             ))
             .await;
             continue;
         }
-        println!("HTTP/1.1 Connection Established");
+        log::info!("HTTP/1.1 Connection Established");
 
         let mut tls = tls.unwrap();
 
@@ -96,7 +96,7 @@ pub async fn http1(config: &'static crate::config::Config, rule: Rules) {
                 )
                 .await
                 {
-                    println!("HTTP/1.1: {e}");
+                    log::error!("HTTP/1.1: {e}");
                     tank = Some((Box::new(dns_query), query_size, addr));
                     break;
                 }

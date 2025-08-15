@@ -55,7 +55,7 @@ pub async fn doh_server(dsc: DohServer, serve_addrs: SocketAddr) {
         .await
         .unwrap();
 
-    println!("DoH server Listening on {}", dsc.listen_address);
+    log::info!("DoH server Listening on {}", dsc.listen_address);
 
     let cache_control: &'static String = unsafe_staticref(&dsc.cache_control);
 
@@ -73,13 +73,13 @@ pub async fn doh_server(dsc: DohServer, serve_addrs: SocketAddr) {
                     .await
                         && dsc.log_errors
                     {
-                        println!("DoH server<TLS>: {e}")
+                        log::error!("DoH server<TLS>: {e}")
                     }
                 });
             }
             Err(e) => {
                 if dsc.log_errors {
-                    println!("DoH server<TLS>: {e}")
+                    log::error!("DoH server<TLS>: {e}")
                 }
             }
         }

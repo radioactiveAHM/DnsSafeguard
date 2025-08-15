@@ -36,14 +36,14 @@ pub async fn h1_multi(
                 )
                 .await;
                 if tls_conn.is_err() {
-                    println!("{}", tls_conn.unwrap_err());
+                    log::error!("{}", tls_conn.unwrap_err());
                     tokio::time::sleep(std::time::Duration::from_secs(
                         config.connection.reconnect_sleep,
                     ))
                     .await;
                     continue;
                 }
-                println!("HTTP/1.1 Connection {conn_i} Established");
+                log::info!("HTTP/1.1 Connection {conn_i} Established");
                 let mut c = tls_conn.unwrap();
 
                 let mut base64_url_temp = [0u8; 4096];
@@ -69,7 +69,7 @@ pub async fn h1_multi(
                         )
                         .await
                     {
-                        println!("HTTP/1.1 Connection {conn_i}: {e}");
+                        log::error!("HTTP/1.1 Connection {conn_i}: {e}");
                         break;
                     }
                 }

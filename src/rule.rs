@@ -66,7 +66,7 @@ pub async fn rulecheck(
                         let dns_server = *dns_server;
                         tokio::spawn(async move {
                             if let Err(e) = handle_bypass(dq, client_addr, dns_server, udp).await {
-                                println!("Bypass<{dns_server}>: {e}");
+                                log::error!("Bypass<{dns_server}>: {e}");
                             };
                         });
                         return true;
@@ -162,7 +162,7 @@ pub async fn rulecheck_sync(
                     if catch_in_buff(option, dq).is_some() {
                         if let Err(e) = handle_bypass_sync(dq, client_addr, *dns_server, udp).await
                         {
-                            println!("{e}");
+                            log::error!("{e}");
                         };
                         return true;
                     }

@@ -125,6 +125,7 @@ pub enum HttpMethod {
 
 #[derive(serde::Deserialize)]
 pub struct Config {
+    pub log: String,
     pub protocol: Protocol,
     pub server_name: String,
     pub ip_as_sni: bool,

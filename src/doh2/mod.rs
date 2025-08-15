@@ -20,7 +20,7 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
     let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
 
     loop {
-        println!("H2 connecting");
+        log::info!("H2 connecting");
         let tls = crate::tls::dynamic_tls_conn_gen(
             config.native_tls,
             config.server_name.to_string(),
@@ -35,7 +35,7 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
         )
         .await;
         if tls.is_err() {
-            println!("{}", tls.unwrap_err());
+            log::error!("{}", tls.unwrap_err());
             sleep(std::time::Duration::from_secs(
                 config.connection.reconnect_sleep,
             ))
@@ -44,7 +44,7 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
         }
 
         let (client, h2c) = h2::client::handshake(tls.unwrap()).await.unwrap();
-        println!("H2 Connection Established");
+        log::info!("H2 Connection Established");
 
         let dead_conn = Arc::new(Mutex::new(false));
         // h2 engine
@@ -52,7 +52,7 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
         let watcher = tokio::spawn(async move {
             if let Err(e) = h2c.await {
                 *(dead_conn2.lock().await) = true;
-                println!("H2: {e}");
+                log::error!("H2: {e}");
             }
         });
 
@@ -60,7 +60,7 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
         loop {
             let h2_client = client.clone().ready().await;
             if let Err(e) = h2_client {
-                println!("H2: {e}");
+                log::error!("H2: {e}");
                 break;
             }
             // Check if Connection is dead
@@ -81,7 +81,7 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
                     )
                     .await
                     {
-                        println!("{e}");
+                        log::error!("H2: {e}");
                         temp = true;
                         // for some weird reason if i try to lock dead_conn_arc here error occur
                     }
@@ -109,7 +109,7 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
                                 .body(())
                                 .unwrap();
                         if let Err(e) = h2.send_request(req, true) {
-                            println!("H2: {e}");
+                            log::error!("H2: {e}");
                             *(h2_conn_dead.lock().await) = true;
                         }
                         None
@@ -155,7 +155,7 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
                     )
                     .await
                     {
-                        println!("{e}");
+                        log::error!("H2: {e}");
                         temp = true;
                         // for some weird reason if i try to lock dead_conn_arc here error occur
                     }
@@ -220,7 +220,7 @@ async fn send_req(
             }
         }
     } else {
-        println!(
+        log::error!(
             "H2 Stream: Remote responded with status code of {}",
             resp.status().as_str()
         );

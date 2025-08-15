@@ -40,7 +40,7 @@ pub fn tlsfragmenting(
                         crate::fragment::fragment_client_hello_pack(tls, tcp, fragmenting).await
                     }
                 } {
-                    println!("TLS Fragmenting: {e}");
+                    log::error!("TLS Fragmenting: {e}");
                 }
             });
         });

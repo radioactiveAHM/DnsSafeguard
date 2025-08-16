@@ -33,6 +33,7 @@ pub async fn h1_multi(
                     tls_config.clone(),
                     config.connection,
                     &config.interface,
+                    &config.tcp_socket_options,
                 )
                 .await;
                 if tls_conn.is_err() {

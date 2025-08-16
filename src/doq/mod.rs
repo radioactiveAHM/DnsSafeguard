@@ -2,7 +2,6 @@ use std::{net::SocketAddr, sync::Arc};
 
 use quinn::{RecvStream, SendStream};
 use tokio::{
-    io::ReadBuf,
     sync::Mutex,
     time::{sleep, timeout},
 };
@@ -100,7 +99,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
         let q2 = quic.clone();
         let dead_conn2 = dead_conn.clone();
         let watcher = tokio::spawn(async move {
-            log::error!("DoQ: {}", q2.closed().await);
+            log::error!("DoQ Watcher: {}", q2.closed().await);
             *(dead_conn2.lock().await) = true;
         });
 
@@ -124,7 +123,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
                             )
                             .await
                             {
-                                log::error!("DoQ: {e}");
+                                log::error!("DoQ Stream: {e}");
                                 temp = true;
                             }
                             if temp {
@@ -133,7 +132,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
                         });
                     }
                     Err(e) => {
-                        log::error!("DoQ: {e}");
+                        log::error!("DoQ Connection: {e}");
                         break;
                     }
                 }
@@ -142,8 +141,35 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
                 continue;
             }
 
+            let message = if let Some(dur) = config.connection_keep_alive {
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(dur),
+                    udp.recv_from(&mut dns_query[2..]),
+                )
+                .await
+                {
+                    Ok(message) => Some(message),
+                    Err(_) => {
+                        match quic.open_bi().await {
+                            Ok((mut send, mut recv)) => {
+                                let _ = send.write(&[]).await;
+                                let _ = send.finish();
+                                let _ = recv.read_chunk(1024 * 4, false).await;
+                            }
+                            Err(e) => {
+                                log::error!("DoQ Connection: {e}");
+                                *(dead.lock().await) = true;
+                            }
+                        };
+                        None
+                    }
+                }
+            } else {
+                Some(udp.recv_from(&mut dns_query[2..]).await)
+            };
+
             // Recive dns query
-            if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query[2..]).await {
+            if let Some(Ok((query_size, addr))) = message {
                 // rule check
                 if (rules.is_some()
                     && rulecheck(
@@ -160,9 +186,9 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
 
                 if *dead.lock().await || quic.close_reason().is_some() {
                     if let Some(close_reason) = quic.close_reason() {
-                        log::error!("DoQ: {close_reason}");
+                        log::error!("DoQ Connection: {close_reason}");
                     } else {
-                        log::error!("DoQ: Closed without reason");
+                        log::error!("DoQ Connection: Closed without reason");
                     }
                     tank = Some((Box::new(dns_query), query_size, addr));
                     watcher.abort();
@@ -183,7 +209,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
                             )
                             .await
                             {
-                                log::error!("DoQ: {e}");
+                                log::error!("DoQ Stream: {e}");
                                 temp = true;
                             }
                             if temp {
@@ -192,7 +218,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
                         });
                     }
                     Err(e) => {
-                        log::error!("DoQ: {e}");
+                        log::error!("DoQ Connection: {e}");
                         break;
                     }
                 }
@@ -212,35 +238,44 @@ async fn send_dq(
     [dns_query.0[0], dns_query.0[1]] = convert_u16_to_two_u8s_be(dns_query.1 as u16);
     send.write(&dns_query.0[..dns_query.1 + 2]).await?;
     send.finish()?;
+
     let mut buff = [0u8; 4096];
-    let mut rb = ReadBuf::new(&mut buff);
-    timeout(std::time::Duration::from_secs(response_timeout), async {
-        std::future::poll_fn(|cx| recv.poll_read_buf(cx, &mut rb)).await
-    })
-    .await??;
-    if rb.filled().len() < 2 {
-        return Ok(());
+    let mut size = 0;
+    if let Some(recved) = timeout(
+        std::time::Duration::from_secs(response_timeout),
+        recv.read(&mut buff[size..]),
+    )
+    .await??
+    {
+        size += recved;
+    } else {
+        return Err(tokio::io::Error::other("closed without data"));
     }
 
-    let message_size = convert_two_u8s_to_u16_be([rb.filled()[0], rb.filled()[1]]) as usize;
+    let message_size = convert_two_u8s_to_u16_be([buff[0], buff[1]]) as usize;
     if message_size == 0 {
         return Err(tokio::io::Error::other("malformed dns query response"));
     }
 
     loop {
-        if rb.filled().len() - 2 >= message_size {
+        if size - 2 >= message_size {
             break;
         }
 
-        timeout(std::time::Duration::from_secs(response_timeout), async {
-            std::future::poll_fn(|cx| recv.poll_read_buf(cx, &mut rb)).await
-        })
-        .await??;
+        match timeout(
+            std::time::Duration::from_secs(response_timeout),
+            recv.read(&mut buff[size..]),
+        )
+        .await??
+        {
+            Some(recved) => size += recved,
+            None => return Err(tokio::io::Error::other("closed with incomplete data")),
+        }
     }
 
     if ow.is_some() {
-        crate::ipoverwrite::overwrite_ip(&mut rb.filled_mut()[2..], ow);
+        crate::ipoverwrite::overwrite_ip(&mut buff[..size], ow);
     }
-    let _ = udp.send_to(&rb.filled()[2..], addr).await;
+    let _ = udp.send_to(&buff[2..size], addr).await;
     Ok(())
 }

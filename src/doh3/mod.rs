@@ -199,7 +199,7 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
                 continue;
             }
 
-            let message = if let Some(dur) = config.http_keep_alive {
+            let message = if let Some(dur) = config.connection_keep_alive {
                 match tokio::time::timeout(
                     std::time::Duration::from_secs(dur),
                     udp.recv_from(&mut dns_query),
@@ -318,9 +318,10 @@ async fn send_request(
 
     reqs.finish().await?;
 
-    let resp = timeout(std::time::Duration::from_secs(response_timeout), async {
-        reqs.recv_response().await
-    })
+    let resp = timeout(
+        std::time::Duration::from_secs(response_timeout),
+        reqs.recv_response(),
+    )
     .await??;
 
     let clen: usize = if let Some(clen) = resp.headers().get("content-length") {

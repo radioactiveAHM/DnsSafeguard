@@ -1,5 +1,8 @@
 {
-	"log": "info",
+	"log": {
+		"level": "info",
+		"file": ".log"
+	},
 	"protocol": "h2",
 	"server_name": "cloudflare-dns.com",
 	"ip_as_sni": false,
@@ -10,8 +13,8 @@
 	"custom_http_path": null,
 	"http_method": "GET",
 	"response_timeout": 5,
-	"http_keep_alive": 10,
 	"native_tls": false,
+	"connection_keep_alive": 10,
 	"fragmenting": {
 		"enable": false,
 		"method": "single",
@@ -29,7 +32,7 @@
 	},
 	"quic": {
 		"congestion_controller": "bbr",
-		"keep_alive_interval": 10,
+		"keep_alive_interval": 15,
 		"connecting_timeout": 2,
 		"datagram_receive_buffer_size": null,
 		"datagram_send_buffer_size": null,

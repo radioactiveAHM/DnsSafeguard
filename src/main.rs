@@ -23,24 +23,6 @@ use multi::h1_multi;
 use rule::convert_rules;
 use utils::unsafe_staticref;
 
-static mut SOCKET_OPT: config::TcpSocketOptions = config::TcpSocketOptions {
-    send_buffer_size: None,
-    recv_buffer_size: None,
-    nodelay: None,
-    keepalive: None,
-    linux: config::LinuxSocketOptions {
-        bind_to_device: None,
-        mss: None,
-        congestion: None,
-    },
-};
-
-// I will change this later
-#[allow(static_mut_refs)]
-fn get_socket_op() -> &'static config::TcpSocketOptions {
-    unsafe { &SOCKET_OPT }
-}
-
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
     tokio_rustls::rustls::crypto::ring::default_provider()
@@ -50,15 +32,31 @@ async fn main() {
 
     // Setup LOG
     unsafe {
-        std::env::set_var("RUST_LOG", &conf.log);
+        std::env::set_var("RUST_LOG", &conf.log.level);
     }
+
     // Level order: Error, Warn, Info, Debug, Trace
-    env_logger::init();
+    if let Some(file) = &conf.log.file {
+        env_logger::builder()
+            .target(env_logger::Target::Pipe(Box::new(
+                std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(file)
+                    .unwrap(),
+            )))
+            .init();
+    } else {
+        env_logger::init();
+    }
 
-    // Convert rules to adjust domains like dns query and improve performance
+    // Log panic info
+    std::panic::set_hook(Box::new(|message| {
+        log::error!("{message}");
+    }));
+
+    // Convert rules
     let rules = convert_rules(&conf.rules);
-
-    unsafe { SOCKET_OPT = conf.tcp_socket_options.clone() }
 
     // values all avalible during application lifetime
     let urules = unsafe_staticref(&rules);

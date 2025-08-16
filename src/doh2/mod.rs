@@ -32,6 +32,7 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
             h2tls.clone(),
             config.connection,
             &config.interface,
+            &config.tcp_socket_options,
         )
         .await;
         if tls.is_err() {
@@ -94,7 +95,7 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
                 continue;
             }
 
-            let message = if let Some(dur) = config.http_keep_alive {
+            let message = if let Some(dur) = config.connection_keep_alive {
                 match tokio::time::timeout(
                     std::time::Duration::from_secs(dur),
                     udp.recv_from(&mut dns_query),

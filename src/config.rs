@@ -124,8 +124,14 @@ pub enum HttpMethod {
 }
 
 #[derive(serde::Deserialize)]
+pub struct Log {
+    pub level: String,
+    pub file: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
 pub struct Config {
-    pub log: String,
+    pub log: Log,
     pub protocol: Protocol,
     pub server_name: String,
     pub ip_as_sni: bool,
@@ -135,8 +141,8 @@ pub struct Config {
     pub serve_addrs: std::net::SocketAddr,
     pub custom_http_path: Option<String>,
     pub response_timeout: u64,
-    pub http_keep_alive: Option<u64>,
     pub http_method: HttpMethod,
+    pub connection_keep_alive: Option<u64>,
     pub native_tls: bool,
     pub fragmenting: Fragmenting,
     pub noise: Noise,

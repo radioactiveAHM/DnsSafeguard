@@ -28,6 +28,7 @@ pub async fn http1(config: &'static crate::config::Config, rule: Rules) {
             ctls.clone(),
             config.connection,
             &config.interface,
+            &config.tcp_socket_options,
         )
         .await;
         if tls.is_err() {

@@ -65,6 +65,7 @@ pub async fn dynamic_tls_conn_gen(
     ctls: Arc<tokio_rustls::rustls::ClientConfig>,
     connection_cfg: config::Connection,
     network_interface: &'static Option<String>,
+    options: &crate::config::TcpSocketOptions,
 ) -> Result<Box<dyn AsyncIo>, Box<dyn Error + Send + Sync>> {
     if native {
         let sni = if ip_as_sni {
@@ -81,7 +82,7 @@ pub async fn dynamic_tls_conn_gen(
             )
             .connect(
                 &sni,
-                tcp_connect_handle(socket_addrs, connection_cfg, network_interface).await,
+                tcp_connect_handle(socket_addrs, connection_cfg, network_interface, options).await,
             )
             .await?,
         ))
@@ -96,7 +97,8 @@ pub async fn dynamic_tls_conn_gen(
             tokio_rustls::TlsConnector::from(ctls)
                 .connect_with_stream(
                     example_com,
-                    tcp_connect_handle(socket_addrs, connection_cfg, network_interface).await,
+                    tcp_connect_handle(socket_addrs, connection_cfg, network_interface, options)
+                        .await,
                     |tls, tcp| {
                         // Do fragmenting
                         if fragmenting.enable {

@@ -59,10 +59,8 @@ pub async fn recv_timeout(
     buff: &mut [u8],
     timeout_sec: u64,
 ) -> tokio::io::Result<usize> {
-    if let Ok(v) = tokio::time::timeout(std::time::Duration::from_secs(timeout_sec), async {
-        udp.recv(buff).await
-    })
-    .await
+    if let Ok(v) =
+        tokio::time::timeout(std::time::Duration::from_secs(timeout_sec), udp.recv(buff)).await
     {
         v
     } else {

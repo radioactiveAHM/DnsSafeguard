@@ -32,6 +32,7 @@ pub async fn dot(
             ctls.clone(),
             config.connection,
             &config.interface,
+            &config.tcp_socket_options,
         )
         .await;
         if tls.is_err() {
@@ -58,7 +59,7 @@ pub async fn dot(
                     log::error!("DoT: {e}")
                 }
             }
-            sender = send_query(uudp, rules, w, waiters) => {
+            sender = send_query(uudp, rules, w, waiters, config.connection_keep_alive) => {
                 if let Err(e) = sender {
                     log::error!("DoT: {e}")
                 }
@@ -126,26 +127,46 @@ async fn send_query<W: tokio::io::AsyncWrite + Unpin + Send>(
     rules: &Option<Vec<crate::rule::Rule>>,
     mut w: W,
     waiters: Arc<Mutex<std::collections::HashMap<u16, IdType>>>,
+    keep_alive: Option<u64>,
 ) -> tokio::io::Result<()> {
     let mut query = [0; 514];
     loop {
-        let (size, addr) = udp.recv_from(&mut query[2..]).await?;
-        if (rules.is_some()
-            && rulecheck(rules, crate::rule::RuleDqt::Tls(query, size), addr, udp).await)
-            || size < 12
-        {
-            continue;
-        }
-
-        [query[0], query[1]] = convert_u16_to_two_u8s_be(size as u16);
-        let mut id = convert_two_u8s_to_u16_be([query[2], query[3]]);
-        if id == 0 {
-            id = rand::rng().random::<u16>();
-            [query[2], query[3]] = convert_u16_to_two_u8s_be(id);
-            waiters.lock().await.insert(id, IdType::ZeroID(addr));
+        let message = if let Some(dur) = keep_alive {
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(dur),
+                udp.recv_from(&mut query[2..]),
+            )
+            .await
+            {
+                Ok(message) => Some(message),
+                Err(_) => {
+                    let _ = w
+                        .write(&[0, 12, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]) // Empty dns query
+                        .await?;
+                    None
+                }
+            }
         } else {
-            waiters.lock().await.insert(id, IdType::WithID(addr));
+            Some(udp.recv_from(&mut query[2..]).await)
+        };
+
+        if let Some(Ok((size, addr))) = message {
+            if (rules.is_some()
+                && rulecheck(rules, crate::rule::RuleDqt::Tls(query, size), addr, udp).await)
+                || size < 12
+            {
+                continue;
+            }
+            [query[0], query[1]] = convert_u16_to_two_u8s_be(size as u16);
+            let mut id = convert_two_u8s_to_u16_be([query[2], query[3]]);
+            if id == 0 {
+                id = rand::rng().random::<u16>();
+                [query[2], query[3]] = convert_u16_to_two_u8s_be(id);
+                waiters.lock().await.insert(id, IdType::ZeroID(addr));
+            } else {
+                waiters.lock().await.insert(id, IdType::WithID(addr));
+            }
+            let _ = w.write(&query[..size + 2]).await?;
         }
-        let _ = w.write(&query[..size + 2]).await?;
     }
 }

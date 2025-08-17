@@ -5,8 +5,6 @@ use crate::{
     utils::{Buffering, catch_in_buff, recv_timeout},
 };
 
-pub type Rules = Option<Vec<Rule>>;
-
 pub enum RuleDqt {
     Http([u8; 512], usize),
     Tls([u8; 514], usize),
@@ -27,12 +25,12 @@ impl RuleDqt {
 }
 
 pub async fn rulecheck(
-    rules: &Option<Vec<crate::rule::Rule>>,
+    rules: std::sync::Arc<Option<Vec<Rule>>>,
     mut dq: RuleDqt,
     client_addr: SocketAddr,
     udp: &'static tokio::net::UdpSocket,
 ) -> bool {
-    for rule in rules.as_ref().unwrap() {
+    for rule in rules.as_deref().unwrap() {
         match &rule.target {
             TargetType::block(t) => {
                 for option in &rule.options {

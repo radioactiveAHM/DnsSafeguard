@@ -7,22 +7,23 @@ use tokio::{
 };
 
 use crate::{
+    CONFIG,
     doh3::udp_setup,
     rule::rulecheck,
     utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be, unsafe_staticref},
 };
 
-pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crate::rule::Rule>>) {
+pub async fn doq(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
     let mut endpoint = udp_setup(
-        config.remote_addrs,
-        &config.noise,
-        &config.quic,
+        CONFIG.remote_addrs,
+        &CONFIG.noise,
+        &CONFIG.quic,
         "doq",
-        &config.interface,
+        &CONFIG.interface,
     )
     .await;
 
-    let udp = crate::udp::udp_socket(config.serve_addrs).await.unwrap();
+    let udp = crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap();
     let uudp = unsafe_staticref(&udp);
 
     let mut tank: Option<(Box<[u8; 514]>, usize, SocketAddr)> = None;
@@ -32,23 +33,23 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
         if connecting_retry == 3 {
             connecting_retry = 0;
             endpoint = udp_setup(
-                config.remote_addrs,
-                &config.noise,
-                &config.quic,
+                CONFIG.remote_addrs,
+                &CONFIG.noise,
+                &CONFIG.quic,
                 "doq",
-                &config.interface,
+                &CONFIG.interface,
             )
             .await;
         }
         log::info!("QUIC Connecting");
         // Connect to dns server
         let connecting = endpoint
-            .connect(config.remote_addrs, &config.server_name)
+            .connect(CONFIG.remote_addrs, &CONFIG.server_name)
             .unwrap();
 
         let conn = {
             let timing = timeout(
-                std::time::Duration::from_secs(config.quic.connecting_timeout),
+                std::time::Duration::from_secs(CONFIG.quic.connecting_timeout),
                 async {
                     let connecting = connecting.into_0rtt();
                     if let Ok((conn, rtt)) = connecting {
@@ -57,7 +58,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
                         Ok(conn)
                     } else {
                         let conn = endpoint
-                            .connect(config.remote_addrs, &config.server_name)
+                            .connect(CONFIG.remote_addrs, &CONFIG.server_name)
                             .unwrap()
                             .await;
                         if conn.is_ok() {
@@ -75,7 +76,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
                 connecting_retry += 1;
                 log::error!("DoQ: Connecting timeout");
                 sleep(std::time::Duration::from_secs(
-                    config.connection.reconnect_sleep,
+                    CONFIG.connection.reconnect_sleep,
                 ))
                 .await;
                 continue;
@@ -86,7 +87,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
             connecting_retry += 1;
             log::error!("DoQ: {}", conn.unwrap_err());
             sleep(std::time::Duration::from_secs(
-                config.connection.reconnect_sleep,
+                CONFIG.connection.reconnect_sleep,
             ))
             .await;
             continue;
@@ -113,15 +114,8 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
                         let (dns_query, query_size, addr) = tank.unwrap();
                         tokio::spawn(async move {
                             let mut temp = false;
-                            if let Err(e) = send_dq(
-                                bistream,
-                                (*dns_query, query_size),
-                                addr,
-                                uudp,
-                                &config.overwrite,
-                                config.response_timeout,
-                            )
-                            .await
+                            if let Err(e) =
+                                send_dq(bistream, (*dns_query, query_size), addr, uudp).await
                             {
                                 log::error!("DoQ Stream: {e}");
                                 temp = true;
@@ -141,7 +135,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
                 continue;
             }
 
-            let message = if let Some(dur) = config.connection_keep_alive {
+            let message = if let Some(dur) = CONFIG.connection_keep_alive {
                 match tokio::time::timeout(
                     std::time::Duration::from_secs(dur),
                     udp.recv_from(&mut dns_query[2..]),
@@ -173,7 +167,7 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
                 // rule check
                 if (rules.is_some()
                     && rulecheck(
-                        rules,
+                        rules.clone(),
                         crate::rule::RuleDqt::Tls(dns_query, query_size),
                         addr,
                         uudp,
@@ -199,15 +193,8 @@ pub async fn doq(config: &'static crate::config::Config, rules: &Option<Vec<crat
                     Ok(bistream) => {
                         tokio::spawn(async move {
                             let mut temp = false;
-                            if let Err(e) = send_dq(
-                                bistream,
-                                (dns_query, query_size),
-                                addr,
-                                uudp,
-                                &config.overwrite,
-                                config.response_timeout,
-                            )
-                            .await
+                            if let Err(e) =
+                                send_dq(bistream, (dns_query, query_size), addr, uudp).await
                             {
                                 log::error!("DoQ Stream: {e}");
                                 temp = true;
@@ -232,8 +219,6 @@ async fn send_dq(
     mut dns_query: ([u8; 514], usize),
     addr: SocketAddr,
     udp: &'static tokio::net::UdpSocket,
-    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
-    response_timeout: u64,
 ) -> tokio::io::Result<()> {
     [dns_query.0[0], dns_query.0[1]] = convert_u16_to_two_u8s_be(dns_query.1 as u16);
     send.write(&dns_query.0[..dns_query.1 + 2]).await?;
@@ -242,7 +227,7 @@ async fn send_dq(
     let mut buff = [0u8; 4096];
     let mut size = 0;
     if let Some(recved) = timeout(
-        std::time::Duration::from_secs(response_timeout),
+        std::time::Duration::from_secs(CONFIG.response_timeout),
         recv.read(&mut buff[size..]),
     )
     .await??
@@ -263,7 +248,7 @@ async fn send_dq(
         }
 
         match timeout(
-            std::time::Duration::from_secs(response_timeout),
+            std::time::Duration::from_secs(CONFIG.response_timeout),
             recv.read(&mut buff[size..]),
         )
         .await??
@@ -273,8 +258,8 @@ async fn send_dq(
         }
     }
 
-    if ow.is_some() {
-        crate::ipoverwrite::overwrite_ip(&mut buff[..size], ow);
+    if CONFIG.overwrite.is_some() {
+        crate::ipoverwrite::overwrite_ip(&mut buff[..size], &CONFIG.overwrite);
     }
     let _ = udp.send_to(&buff[2..size], addr).await;
     Ok(())

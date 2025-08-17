@@ -7,7 +7,7 @@ pub struct IpOverwrite {
 }
 
 /// must check if ow is some
-pub fn overwrite_ip(dns: &mut [u8], ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>) {
+pub fn overwrite_ip(dns: &mut [u8], ow: &Option<Vec<crate::ipoverwrite::IpOverwrite>>) {
     // ignore if there is no ow setup
     let ow = ow.as_ref().unwrap();
     if ow.is_empty() {

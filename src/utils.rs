@@ -1,6 +1,3 @@
-use core::str;
-use std::str::Utf8Error;
-
 #[inline(always)]
 pub fn convert_u16_to_two_u8s_be(integer: u16) -> [u8; 2] {
     [(integer >> 8) as u8, integer as u8]
@@ -20,7 +17,7 @@ impl Buffering<'_> {
     pub fn get(&self) -> &[u8] {
         &self.0[..self.1]
     }
-    pub fn str(&self) -> Result<&str, Utf8Error> {
+    pub fn str(&self) -> Result<&str, std::str::Utf8Error> {
         str::from_utf8(&self.0[..self.1])
     }
     pub fn mutate(&mut self, indx: usize, value: u8) -> &mut Self {
@@ -74,9 +71,9 @@ pub fn unsafe_staticref<'a, T: ?Sized>(r: &'a T) -> &'static T {
 }
 
 pub fn parse_range(s: &str) -> Option<std::ops::Range<usize>> {
-    let parts: Vec<&str> = s.split("-").collect();
-    if parts.len() == 2
-        && let (Ok(start), Ok(end)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>())
+    let mut parts = s.split("-");
+    if let (Some(a), Some(b)) = (parts.next(), parts.next())
+        && let (Ok(start), Ok(end)) = (a.parse::<usize>(), b.parse::<usize>())
     {
         return Some(start..end);
     }

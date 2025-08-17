@@ -1,6 +1,6 @@
-use std::{error::Error, fmt::Debug, net::SocketAddr, sync::Arc};
+use std::{error::Error, fmt::Debug, sync::Arc};
 
-use crate::{config, interface::tcp_connect_handle};
+use crate::interface::tcp_connect_handle;
 
 pub fn tlsconf(
     alpn: Vec<Vec<u8>>,
@@ -47,65 +47,67 @@ pub fn tlsfragmenting(
     }
 }
 
-pub trait AsyncIo:
+pub trait AsyncIO:
     tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Debug + Send + 'static
 {
 }
-impl AsyncIo for tokio_native_tls::TlsStream<tokio::net::TcpStream> {}
-impl AsyncIo for tokio_rustls::client::TlsStream<tokio::net::TcpStream> {}
+impl AsyncIO for tokio_native_tls::TlsStream<tokio::net::TcpStream> {}
+impl AsyncIO for tokio_rustls::client::TlsStream<tokio::net::TcpStream> {}
 
 pub async fn dynamic_tls_conn_gen(
-    native: bool,
-    server_name: String,
     alpn: &[&str],
-    insecure: bool,
-    ip_as_sni: bool,
-    socket_addrs: SocketAddr,
-    fragmenting: config::Fragmenting,
     ctls: Arc<tokio_rustls::rustls::ClientConfig>,
-    connection_cfg: config::Connection,
-    network_interface: &'static Option<String>,
-    options: &crate::config::TcpSocketOptions,
-) -> Result<Box<dyn AsyncIo>, Box<dyn Error + Send + Sync>> {
-    if native {
-        let sni = if ip_as_sni {
-            socket_addrs.ip().to_string()
+) -> Result<Box<dyn AsyncIO>, Box<dyn Error + Send + Sync>> {
+    let config = &crate::CONFIG;
+    if config.native_tls {
+        let sni = if config.ip_as_sni {
+            config.remote_addrs.ip().to_string()
         } else {
-            server_name
+            config.server_name.clone()
         };
+
         Ok(Box::new(
             tokio_native_tls::TlsConnector::from(
                 native_tls::TlsConnector::builder()
                     .request_alpns(alpn)
-                    .danger_accept_invalid_certs(insecure)
+                    .danger_accept_invalid_certs(config.disable_certificate_validation)
                     .build()?,
             )
             .connect(
                 &sni,
-                tcp_connect_handle(socket_addrs, connection_cfg, network_interface, options).await,
+                tcp_connect_handle(
+                    config.remote_addrs,
+                    config.connection,
+                    &config.interface,
+                    &config.tcp_socket_options,
+                )
+                .await,
             )
             .await?,
         ))
     } else {
-        let example_com = if ip_as_sni {
-            (socket_addrs.ip()).into()
+        let example_com = if config.ip_as_sni {
+            (config.remote_addrs.ip()).into()
         } else {
-            (server_name).try_into().expect("Invalid server name")
+            (config.server_name.clone())
+                .try_into()
+                .expect("Invalid server name")
         };
 
         Ok(Box::new(
             tokio_rustls::TlsConnector::from(ctls)
                 .connect_with_stream(
                     example_com,
-                    tcp_connect_handle(socket_addrs, connection_cfg, network_interface, options)
-                        .await,
+                    tcp_connect_handle(
+                        config.remote_addrs,
+                        config.connection,
+                        &config.interface,
+                        &config.tcp_socket_options,
+                    )
+                    .await,
                     |tls, tcp| {
                         // Do fragmenting
-                        if fragmenting.enable {
-                            tokio::task::block_in_place(|| {
-                                tlsfragmenting(&fragmenting, tls, tcp);
-                            });
-                        }
+                        tlsfragmenting(&config.fragmenting, tls, tcp);
                     },
                 )
                 .await?,

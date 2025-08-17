@@ -1,4 +1,5 @@
 use crate::{
+    CONFIG,
     chttp::genrequrl,
     config,
     rule::rulecheck,
@@ -10,35 +11,22 @@ use h2::client::SendRequest;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::{sync::Mutex, time::sleep};
 
-pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<crate::rule::Rule>>) {
+pub async fn http2(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
     // TLS Conf
-    let h2tls = tls::tlsconf(vec![b"h2".to_vec()], config.disable_certificate_validation);
+    let h2tls = tls::tlsconf(vec![b"h2".to_vec()], CONFIG.disable_certificate_validation);
 
-    let udp = crate::udp::udp_socket(config.serve_addrs).await.unwrap();
+    let udp = crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap();
     let uudp = unsafe_staticref(&udp);
 
     let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
 
     loop {
         log::info!("H2 connecting");
-        let tls = crate::tls::dynamic_tls_conn_gen(
-            config.native_tls,
-            config.server_name.to_string(),
-            &["h2"],
-            config.disable_certificate_validation,
-            config.ip_as_sni,
-            config.remote_addrs,
-            config.fragmenting.clone(),
-            h2tls.clone(),
-            config.connection,
-            &config.interface,
-            &config.tcp_socket_options,
-        )
-        .await;
+        let tls = crate::tls::dynamic_tls_conn_gen(&["h2"], h2tls.clone()).await;
         if tls.is_err() {
             log::error!("{}", tls.unwrap_err());
             sleep(std::time::Duration::from_secs(
-                config.connection.reconnect_sleep,
+                CONFIG.connection.reconnect_sleep,
             ))
             .await;
             continue;
@@ -70,17 +58,8 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
             if let Some((dns_query, query_size, addr)) = tank {
                 tokio::spawn(async move {
                     let mut temp = false;
-                    if let Err(e) = send_req(
-                        &config.server_name,
-                        (*dns_query, query_size),
-                        h2_client.unwrap(),
-                        addr,
-                        uudp,
-                        &config.custom_http_path,
-                        &config.overwrite,
-                        config.http_method,
-                    )
-                    .await
+                    if let Err(e) =
+                        send_req((*dns_query, query_size), h2_client.unwrap(), addr, uudp).await
                     {
                         log::error!("H2: {e}");
                         temp = true;
@@ -95,7 +74,7 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
                 continue;
             }
 
-            let message = if let Some(dur) = config.connection_keep_alive {
+            let message = if let Some(dur) = CONFIG.connection_keep_alive {
                 match tokio::time::timeout(
                     std::time::Duration::from_secs(dur),
                     udp.recv_from(&mut dns_query),
@@ -106,7 +85,7 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
                     Err(_) => {
                         let mut h2 = client.clone();
                         let req =
-                            http::Request::get(format!("https://{}/", config.server_name.as_str()))
+                            http::Request::get(format!("https://{}/", CONFIG.server_name.as_str()))
                                 .body(())
                                 .unwrap();
                         if let Err(e) = h2.send_request(req, true) {
@@ -124,7 +103,7 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
                 // rule check
                 if (rules.is_some()
                     && rulecheck(
-                        rules,
+                        rules.clone(),
                         crate::rule::RuleDqt::Http(dns_query, query_size),
                         addr,
                         uudp,
@@ -144,17 +123,8 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
                 // Base64url dns query
                 tokio::spawn(async move {
                     let mut temp = false;
-                    if let Err(e) = send_req(
-                        &config.server_name,
-                        (dns_query, query_size),
-                        h2_client.unwrap(),
-                        addr,
-                        uudp,
-                        &config.custom_http_path,
-                        &config.overwrite,
-                        config.http_method,
-                    )
-                    .await
+                    if let Err(e) =
+                        send_req((dns_query, query_size), h2_client.unwrap(), addr, uudp).await
                     {
                         log::error!("H2: {e}");
                         temp = true;
@@ -170,20 +140,24 @@ pub async fn http2(config: &'static crate::config::Config, rules: &Option<Vec<cr
 }
 
 async fn send_req(
-    server_name: &'static str,
     dns_query: ([u8; 512], usize),
     mut h2_client: SendRequest<bytes::Bytes>,
     addr: SocketAddr,
     udp: &'static tokio::net::UdpSocket,
-    ucpath: &'static Option<String>,
-    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
-    hm: config::HttpMethod,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Sending request
-    let mut resp = match hm {
-        config::HttpMethod::GET => get(&mut h2_client, server_name, ucpath, dns_query).await?,
+    let mut resp = match CONFIG.http_method {
+        config::HttpMethod::GET => {
+            get(
+                &mut h2_client,
+                &CONFIG.server_name,
+                &CONFIG.custom_http_path,
+                dns_query,
+            )
+            .await?
+        }
         config::HttpMethod::POST => {
-            let p = if let Some(path) = ucpath {
+            let p = if let Some(path) = &CONFIG.custom_http_path {
                 path.as_str()
             } else {
                 "/dns-query"
@@ -192,7 +166,7 @@ async fn send_req(
                 http::Request::post(
                     http::Uri::builder()
                         .scheme("https")
-                        .authority(server_name)
+                        .authority(CONFIG.server_name.as_str())
                         .path_and_query(p)
                         .build()?,
                 )
@@ -210,11 +184,11 @@ async fn send_req(
 
     if resp.status() == http::status::StatusCode::OK {
         if let Some(Ok(body)) = resp.body_mut().data().await {
-            if ow.is_some() {
+            if CONFIG.overwrite.is_some() {
                 let b: &[u8] = &body;
                 let mut buff = [0; 1024 * 4];
                 buff[..b.len()].copy_from_slice(b);
-                crate::ipoverwrite::overwrite_ip(&mut buff[..b.len()], ow);
+                crate::ipoverwrite::overwrite_ip(&mut buff[..b.len()], &CONFIG.overwrite);
                 udp.send_to(&buff[..b.len()], addr).await?;
             } else {
                 udp.send_to(&body, addr).await?;

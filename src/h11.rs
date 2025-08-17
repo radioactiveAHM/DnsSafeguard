@@ -1,40 +1,28 @@
-use core::str;
 use std::net::SocketAddr;
 
-use crate::chttp::genrequrlh1;
-use crate::rule::{Rules, rulecheck_sync};
-use crate::utils::{Buffering, c_len, catch_in_buff};
+use crate::{
+    CONFIG,
+    chttp::genrequrlh1,
+    utils::{Buffering, c_len, catch_in_buff},
+};
 use tokio::{io::AsyncWriteExt, time::sleep};
 
-pub async fn http1(config: &'static crate::config::Config, rule: Rules) {
+pub async fn http1(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
     // TLS Client
     let ctls = crate::tls::tlsconf(
         vec![b"http/1.1".to_vec()],
-        config.disable_certificate_validation,
+        CONFIG.disable_certificate_validation,
     );
     let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
 
-    let udp = crate::udp::udp_socket(config.serve_addrs).await.unwrap();
+    let udp = crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap();
     loop {
         log::info!("HTTP/1.1 Connecting");
-        let tls = crate::tls::dynamic_tls_conn_gen(
-            config.native_tls,
-            config.server_name.to_string(),
-            &["http/1.1"],
-            config.disable_certificate_validation,
-            config.ip_as_sni,
-            config.remote_addrs,
-            config.fragmenting.clone(),
-            ctls.clone(),
-            config.connection,
-            &config.interface,
-            &config.tcp_socket_options,
-        )
-        .await;
+        let tls = crate::tls::dynamic_tls_conn_gen(&["http/1.1"], ctls.clone()).await;
         if tls.is_err() {
             log::error!("{}", tls.unwrap_err());
             sleep(std::time::Duration::from_secs(
-                config.connection.reconnect_sleep,
+                CONFIG.connection.reconnect_sleep,
             ))
             .await;
             continue;
@@ -54,16 +42,11 @@ pub async fn http1(config: &'static crate::config::Config, rule: Rules) {
                 if handler(
                     &mut tls,
                     &udp,
-                    &config.custom_http_path,
-                    &config.server_name,
-                    dns_query.as_ref(),
+                    &dns_query[..*query_size],
                     &mut base64_url_temp,
                     &mut url,
                     &mut bf_http_resp,
-                    query_size,
                     addr,
-                    &config.overwrite,
-                    config.response_timeout,
                 )
                 .await
                 .is_ok()
@@ -74,8 +57,14 @@ pub async fn http1(config: &'static crate::config::Config, rule: Rules) {
             }
             if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
                 // rule check
-                if (rule.is_some()
-                    && rulecheck_sync(&rule, &mut dns_query[..query_size], addr, &udp).await)
+                if (rules.is_some()
+                    && crate::rule::rulecheck_sync(
+                        &rules,
+                        &mut dns_query[..query_size],
+                        addr,
+                        &udp,
+                    )
+                    .await)
                     || query_size < 12
                 {
                     continue;
@@ -84,16 +73,11 @@ pub async fn http1(config: &'static crate::config::Config, rule: Rules) {
                 if let Err(e) = handler(
                     &mut tls,
                     &udp,
-                    &config.custom_http_path,
-                    &config.server_name,
-                    &dns_query,
+                    &dns_query[..query_size],
                     &mut base64_url_temp,
                     &mut url,
                     &mut bf_http_resp,
-                    &query_size,
                     &addr,
-                    &config.overwrite,
-                    config.response_timeout,
                 )
                 .await
                 {
@@ -106,36 +90,40 @@ pub async fn http1(config: &'static crate::config::Config, rule: Rules) {
     }
 }
 
+#[inline(always)]
 pub async fn handler<IO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(
     c: &mut IO,
     udp: &tokio::net::UdpSocket,
-    ucpath: &'static Option<String>,
-    sn: &'static str,
     dns_query: &[u8],
     base64_url_temp: &mut [u8],
     url: &mut [u8],
     bf_http_resp: &mut tokio::io::ReadBuf<'_>,
-    query_size: &usize,
     addr: &SocketAddr,
-    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
-    timeout: u64,
 ) -> tokio::io::Result<()> {
-    let query_bs4url = match base64_url::encode_to_slice(&dns_query[..*query_size], base64_url_temp)
-    {
+    let query_bs4url = match base64_url::encode_to_slice(&dns_query, base64_url_temp) {
         Ok(bs4) => bs4,
         Err(e) => {
             return Err(tokio::io::Error::other(e));
         }
     };
     let mut b = Buffering(url, 0);
-    let http_req = genrequrlh1(&mut b, sn.as_bytes(), query_bs4url, ucpath);
+    let http_req = genrequrlh1(
+        &mut b,
+        CONFIG.server_name.as_bytes(),
+        query_bs4url,
+        &CONFIG.custom_http_path,
+    );
 
     let _ = c.write(http_req).await?;
 
     // Handle Reciving Data
     bf_http_resp.clear();
-    crate::ioutils::read_buffered_timeout(bf_http_resp, c, std::time::Duration::from_secs(timeout))
-        .await?;
+    crate::ioutils::read_buffered_timeout(
+        bf_http_resp,
+        c,
+        std::time::Duration::from_secs(CONFIG.response_timeout),
+    )
+    .await?;
     let mut http_resp_size = bf_http_resp.filled().len();
     let mut http_resp = bf_http_resp.filled_mut();
     if let Some((heads_end, body_start)) = catch_in_buff(b"\r\n\r\n", http_resp) {
@@ -152,7 +140,7 @@ pub async fn handler<IO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(
                 crate::ioutils::read_buffered_timeout(
                     bf_http_resp,
                     c,
-                    std::time::Duration::from_secs(timeout),
+                    std::time::Duration::from_secs(CONFIG.response_timeout),
                 )
                 .await?;
             }
@@ -160,8 +148,11 @@ pub async fn handler<IO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(
             http_resp = bf_http_resp.filled_mut();
         }
 
-        if ow.is_some() {
-            crate::ipoverwrite::overwrite_ip(&mut http_resp[body_start..http_resp_size], ow);
+        if CONFIG.overwrite.is_some() {
+            crate::ipoverwrite::overwrite_ip(
+                &mut http_resp[body_start..http_resp_size],
+                &CONFIG.overwrite,
+            );
         }
         let _ = udp
             .send_to(&http_resp[body_start..http_resp_size], addr)

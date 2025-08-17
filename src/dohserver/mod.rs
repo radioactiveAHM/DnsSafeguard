@@ -33,13 +33,13 @@ impl Tc {
     }
 }
 
-pub async fn doh_server(dsc: DohServer, serve_addrs: SocketAddr) {
+pub async fn doh_server(dsc: &DohServer, serve_addrs: SocketAddr) {
     sleep(Duration::from_secs(2)).await;
-    let certs = CertificateDer::pem_file_iter(dsc.certificate)
+    let certs = CertificateDer::pem_file_iter(&dsc.certificate)
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
-    let key = PrivateKeyDer::from_pem_file(dsc.key).unwrap();
+    let key = PrivateKeyDer::from_pem_file(&dsc.key).unwrap();
     let mut config = rustls::ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(certs, key)
@@ -59,19 +59,17 @@ pub async fn doh_server(dsc: DohServer, serve_addrs: SocketAddr) {
 
     let cache_control: &'static String = unsafe_staticref(&dsc.cache_control);
 
+    let log_errors = dsc.log_errors;
+    let response_timeout = dsc.response_timeout;
+
     loop {
         match Tc::new(acceptor.clone(), listener.accept().await) {
             Ok(tc) => {
                 tokio::spawn(async move {
-                    if let Err(e) = tc_handler(
-                        tc,
-                        serve_addrs,
-                        dsc.log_errors,
-                        cache_control,
-                        dsc.response_timeout,
-                    )
-                    .await
-                        && dsc.log_errors
+                    if let Err(e) =
+                        tc_handler(tc, serve_addrs, log_errors, cache_control, response_timeout)
+                            .await
+                        && log_errors
                     {
                         log::error!("DoH server<TLS>: {e}")
                     }

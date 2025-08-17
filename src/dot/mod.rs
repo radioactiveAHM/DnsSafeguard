@@ -3,42 +3,30 @@ use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Mutex;
 
-use crate::rule::rulecheck;
-use crate::utils::{convert_two_u8s_to_u16_be, unsafe_staticref};
-use crate::{tls, utils::convert_u16_to_two_u8s_be};
+use crate::{
+    CONFIG,
+    rule::rulecheck,
+    tls,
+    utils::convert_u16_to_two_u8s_be,
+    utils::{convert_two_u8s_to_u16_be, unsafe_staticref},
+};
 
 enum IdType {
     ZeroID(std::net::SocketAddr),
     WithID(std::net::SocketAddr),
 }
 
-pub async fn dot(
-    config: &'static crate::config::Config,
-    rules: &'static Option<Vec<crate::rule::Rule>>,
-) {
-    let udp = crate::udp::udp_socket(config.serve_addrs).await.unwrap();
+pub async fn dot(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
+    let udp = crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap();
     let uudp = unsafe_staticref(&udp);
-    let ctls = tls::tlsconf(vec![b"dot".to_vec()], config.disable_certificate_validation);
+    let ctls = tls::tlsconf(vec![b"dot".to_vec()], CONFIG.disable_certificate_validation);
     loop {
         log::info!("DOT Connecting");
-        let tls = crate::tls::dynamic_tls_conn_gen(
-            config.native_tls,
-            config.server_name.to_string(),
-            &["dot"],
-            config.disable_certificate_validation,
-            config.ip_as_sni,
-            config.remote_addrs,
-            config.fragmenting.clone(),
-            ctls.clone(),
-            config.connection,
-            &config.interface,
-            &config.tcp_socket_options,
-        )
-        .await;
+        let tls = crate::tls::dynamic_tls_conn_gen(&["dot"], ctls.clone()).await;
         if tls.is_err() {
             log::error!("DoT: {}", tls.unwrap_err());
             tokio::time::sleep(std::time::Duration::from_secs(
-                config.connection.reconnect_sleep,
+                CONFIG.connection.reconnect_sleep,
             ))
             .await;
             continue;
@@ -54,12 +42,12 @@ pub async fn dot(
         let waiters2 = waiters.clone();
 
         tokio::select! {
-            recver = tokio::spawn(async move { recv_query(uudp, r, waiters2, &config.overwrite).await }) => {
+            recver = tokio::spawn(async move { recv_query(uudp, r, waiters2).await }) => {
                 if let Err(e) = recver {
                     log::error!("DoT: {e}")
                 }
             }
-            sender = send_query(uudp, rules, w, waiters, config.connection_keep_alive) => {
+            sender = send_query(uudp, rules.clone(), w, waiters) => {
                 if let Err(e) = sender {
                     log::error!("DoT: {e}")
                 }
@@ -72,7 +60,6 @@ async fn recv_query<R: tokio::io::AsyncRead + Unpin>(
     udp: &'static tokio::net::UdpSocket,
     mut r: R,
     waiters: Arc<Mutex<std::collections::HashMap<u16, IdType>>>,
-    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
 ) -> tokio::io::Result<()> {
     let mut buffer = vec![0; 1024 * 8];
     let mut size: usize = 0;
@@ -99,8 +86,8 @@ async fn recv_query<R: tokio::io::AsyncRead + Unpin>(
             let message = &mut buffer[2..message_size + 2];
             let id = convert_two_u8s_to_u16_be([message[0], message[1]]);
             if let Some(addr) = waiters.lock().await.remove(&id) {
-                if ow.is_some() {
-                    crate::ipoverwrite::overwrite_ip(message, ow);
+                if CONFIG.overwrite.is_some() {
+                    crate::ipoverwrite::overwrite_ip(message, &CONFIG.overwrite);
                 }
                 match addr {
                     IdType::WithID(addr) => {
@@ -124,14 +111,13 @@ async fn recv_query<R: tokio::io::AsyncRead + Unpin>(
 
 async fn send_query<W: tokio::io::AsyncWrite + Unpin + Send>(
     udp: &'static tokio::net::UdpSocket,
-    rules: &Option<Vec<crate::rule::Rule>>,
+    rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>,
     mut w: W,
     waiters: Arc<Mutex<std::collections::HashMap<u16, IdType>>>,
-    keep_alive: Option<u64>,
 ) -> tokio::io::Result<()> {
     let mut query = [0; 514];
     loop {
-        let message = if let Some(dur) = keep_alive {
+        let message = if let Some(dur) = CONFIG.connection_keep_alive {
             match tokio::time::timeout(
                 std::time::Duration::from_secs(dur),
                 udp.recv_from(&mut query[2..]),
@@ -152,7 +138,13 @@ async fn send_query<W: tokio::io::AsyncWrite + Unpin + Send>(
 
         if let Some(Ok((size, addr))) = message {
             if (rules.is_some()
-                && rulecheck(rules, crate::rule::RuleDqt::Tls(query, size), addr, udp).await)
+                && rulecheck(
+                    rules.clone(),
+                    crate::rule::RuleDqt::Tls(query, size),
+                    addr,
+                    udp,
+                )
+                .await)
                 || size < 12
             {
                 continue;

@@ -1,45 +1,32 @@
+use crate::CONFIG;
+
 type RcLocker = std::sync::Arc<
     tokio::sync::Mutex<tokio::sync::mpsc::Receiver<([u8; 512], usize, std::net::SocketAddr)>>,
 >;
 
-pub async fn h1_multi(
-    config: &'static crate::config::Config,
-    rules: &Option<Vec<crate::rule::Rule>>,
-) {
+pub async fn h1_multi(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
     let ctls = crate::tls::tlsconf(
         vec![b"http/1.1".to_vec()],
-        config.disable_certificate_validation,
+        CONFIG.disable_certificate_validation,
     );
 
-    let udp = crate::udp::udp_socket(config.serve_addrs).await.unwrap();
+    let udp = crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap();
     let uudp = crate::utils::unsafe_staticref(&udp);
 
-    let (sender, recver) = tokio::sync::mpsc::channel(config.connection.h1_multi_connections);
+    let (sender, recver) = tokio::sync::mpsc::channel(CONFIG.connection.h1_multi_connections);
     let recver_locker: RcLocker = std::sync::Arc::new(tokio::sync::Mutex::new(recver));
 
-    for conn_i in 0..config.connection.h1_multi_connections {
+    for conn_i in 0..CONFIG.connection.h1_multi_connections {
         let recver_locker = recver_locker.clone();
         let tls_config = ctls.clone();
         tokio::spawn(async move {
             loop {
-                let tls_conn = crate::tls::dynamic_tls_conn_gen(
-                    config.native_tls,
-                    config.server_name.to_string(),
-                    &["http/1.1"],
-                    config.disable_certificate_validation,
-                    config.ip_as_sni,
-                    config.remote_addrs,
-                    config.fragmenting.clone(),
-                    tls_config.clone(),
-                    config.connection,
-                    &config.interface,
-                    &config.tcp_socket_options,
-                )
-                .await;
+                let tls_conn =
+                    crate::tls::dynamic_tls_conn_gen(&["http/1.1"], tls_config.clone()).await;
                 if tls_conn.is_err() {
                     log::error!("{}", tls_conn.unwrap_err());
                     tokio::time::sleep(std::time::Duration::from_secs(
-                        config.connection.reconnect_sleep,
+                        CONFIG.connection.reconnect_sleep,
                     ))
                     .await;
                     continue;
@@ -57,16 +44,11 @@ pub async fn h1_multi(
                         && let Err(e) = crate::h11::handler(
                             &mut c,
                             uudp,
-                            &config.custom_http_path,
-                            &config.server_name,
-                            &query,
+                            &query[..size],
                             &mut base64_url_temp,
                             &mut url,
                             &mut bf_http_resp,
-                            &size,
                             &addr,
-                            &config.overwrite,
-                            config.response_timeout,
                         )
                         .await
                     {
@@ -84,7 +66,7 @@ pub async fn h1_multi(
             // rule check
             if (rules.is_some()
                 && crate::rule::rulecheck(
-                    rules,
+                    rules.clone(),
                     crate::rule::RuleDqt::Http(dns_query, query_size),
                     addr,
                     uudp,

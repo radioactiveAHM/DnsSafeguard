@@ -109,8 +109,8 @@ pub struct DohServer {
     pub enable: bool,
     pub alpn: Vec<String>,
     pub listen_address: std::net::SocketAddr,
-    pub certificate: String,
-    pub key: String,
+    pub certificate: std::path::PathBuf,
+    pub key: std::path::PathBuf,
     pub cache_control: String,
     pub response_timeout: (u64, u64),
     pub log_errors: bool,
@@ -126,7 +126,7 @@ pub enum HttpMethod {
 #[derive(serde::Deserialize)]
 pub struct Log {
     pub level: String,
-    pub file: Option<String>,
+    pub file: Option<std::path::PathBuf>,
 }
 
 #[derive(serde::Deserialize)]

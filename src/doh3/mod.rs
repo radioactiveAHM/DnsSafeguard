@@ -14,6 +14,7 @@ use bytes::Buf;
 use h3::client::SendRequest;
 
 use crate::{
+    CONFIG,
     chttp::genrequrl,
     config::{self, Noise},
     rule::rulecheck,
@@ -67,17 +68,17 @@ pub async fn udp_setup(
     endpoint
 }
 
-pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<crate::rule::Rule>>) {
+pub async fn http3(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
     let mut endpoint = udp_setup(
-        config.remote_addrs,
-        &config.noise,
-        &config.quic,
+        CONFIG.remote_addrs,
+        &CONFIG.noise,
+        &CONFIG.quic,
         "h3",
-        &config.interface,
+        &CONFIG.interface,
     )
     .await;
 
-    let udp = crate::udp::udp_socket(config.serve_addrs).await.unwrap();
+    let udp = crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap();
     let uudp = unsafe_staticref(&udp);
 
     let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
@@ -87,23 +88,23 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
         if connecting_retry == 3 {
             connecting_retry = 0;
             endpoint = udp_setup(
-                config.remote_addrs,
-                &config.noise,
-                &config.quic,
+                CONFIG.remote_addrs,
+                &CONFIG.noise,
+                &CONFIG.quic,
                 "h3",
-                &config.interface,
+                &CONFIG.interface,
             )
             .await;
         }
         log::info!("HTTP/3 Connecting");
         // Connect to dns server
         let connecting = endpoint
-            .connect(config.remote_addrs, &config.server_name)
+            .connect(CONFIG.remote_addrs, &CONFIG.server_name)
             .unwrap();
 
         let conn = {
             let timing = timeout(
-                std::time::Duration::from_secs(config.quic.connecting_timeout),
+                std::time::Duration::from_secs(CONFIG.quic.connecting_timeout),
                 async {
                     let connecting = connecting.into_0rtt();
                     if let Ok((conn, rtt)) = connecting {
@@ -112,7 +113,7 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
                         Ok(conn)
                     } else {
                         let conn = endpoint
-                            .connect(config.remote_addrs, &config.server_name)
+                            .connect(CONFIG.remote_addrs, &CONFIG.server_name)
                             .unwrap()
                             .await;
                         if conn.is_ok() {
@@ -130,7 +131,7 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
                 connecting_retry += 1;
                 log::error!("H3: Connecting timeout");
                 sleep(std::time::Duration::from_secs(
-                    config.connection.reconnect_sleep,
+                    CONFIG.connection.reconnect_sleep,
                 ))
                 .await;
                 continue;
@@ -141,7 +142,7 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
             connecting_retry += 1;
             log::error!("H3: {}", conn.unwrap_err());
             sleep(std::time::Duration::from_secs(
-                config.connection.reconnect_sleep,
+                CONFIG.connection.reconnect_sleep,
             ))
             .await;
             continue;
@@ -174,19 +175,7 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
                 let h3 = h3.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
-                    if let Err(e) = send_request(
-                        &config.server_name,
-                        h3,
-                        (*dns_query, query_size),
-                        addr,
-                        uudp,
-                        &config.custom_http_path,
-                        &config.overwrite,
-                        config.http_method,
-                        config.response_timeout,
-                    )
-                    .await
-                    {
+                    if let Err(e) = send_request(h3, (*dns_query, query_size), addr, uudp).await {
                         log::error!("H3 Stream: {e}");
                         temp = true;
                     }
@@ -199,7 +188,7 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
                 continue;
             }
 
-            let message = if let Some(dur) = config.connection_keep_alive {
+            let message = if let Some(dur) = CONFIG.connection_keep_alive {
                 match tokio::time::timeout(
                     std::time::Duration::from_secs(dur),
                     udp.recv_from(&mut dns_query),
@@ -210,7 +199,7 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
                     Err(_) => {
                         let mut h3 = h3.clone();
                         let req =
-                            http::Request::get(format!("https://{}/", config.server_name.as_str()))
+                            http::Request::get(format!("https://{}/", CONFIG.server_name.as_str()))
                                 .body(())
                                 .unwrap();
                         if let Err(e) = h3.send_request(req).await {
@@ -228,7 +217,7 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
                 // rule check
                 if (rules.is_some()
                     && rulecheck(
-                        rules,
+                        rules.clone(),
                         crate::rule::RuleDqt::Http(dns_query, query_size),
                         addr,
                         uudp,
@@ -248,19 +237,7 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
                 let h3 = h3.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
-                    if let Err(e) = send_request(
-                        &config.server_name,
-                        h3,
-                        (dns_query, query_size),
-                        addr,
-                        uudp,
-                        &config.custom_http_path,
-                        &config.overwrite,
-                        config.http_method,
-                        config.response_timeout,
-                    )
-                    .await
-                    {
+                    if let Err(e) = send_request(h3, (dns_query, query_size), addr, uudp).await {
                         log::error!("H3 Stream: {e}");
                         temp = true;
                     }
@@ -274,20 +251,23 @@ pub async fn http3(config: &'static crate::config::Config, rules: &Option<Vec<cr
 }
 
 async fn send_request(
-    server_name: &'static str,
     mut h3: SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
     dns_query: ([u8; 512], usize),
     addr: SocketAddr,
     udp: &'static tokio::net::UdpSocket,
-    cpath: &'static Option<String>,
-    ow: &'static Option<Vec<crate::ipoverwrite::IpOverwrite>>,
-    hm: config::HttpMethod,
-    response_timeout: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut reqs = match hm {
-        config::HttpMethod::GET => get(&mut h3, server_name, cpath, dns_query).await?,
+    let mut reqs = match CONFIG.http_method {
+        config::HttpMethod::GET => {
+            get(
+                &mut h3,
+                &CONFIG.server_name,
+                &CONFIG.custom_http_path,
+                dns_query,
+            )
+            .await?
+        }
         config::HttpMethod::POST => {
-            let p = if let Some(path) = cpath {
+            let p = if let Some(path) = &CONFIG.custom_http_path {
                 path.as_str()
             } else {
                 "/dns-query"
@@ -297,7 +277,7 @@ async fn send_request(
                     http::Request::post(
                         http::Uri::builder()
                             .scheme("https")
-                            .authority(server_name)
+                            .authority(CONFIG.server_name.as_str())
                             .path_and_query(p)
                             .build()?,
                     )
@@ -319,7 +299,7 @@ async fn send_request(
     reqs.finish().await?;
 
     let resp = timeout(
-        std::time::Duration::from_secs(response_timeout),
+        std::time::Duration::from_secs(CONFIG.response_timeout),
         reqs.recv_response(),
     )
     .await??;
@@ -350,8 +330,8 @@ async fn send_request(
             }
         }
 
-        if ow.is_some() {
-            crate::ipoverwrite::overwrite_ip(&mut buff[..body_len], ow);
+        if CONFIG.overwrite.is_some() {
+            crate::ipoverwrite::overwrite_ip(&mut buff[..body_len], &CONFIG.overwrite);
         }
         let _ = udp.send_to(&buff[..body_len], addr).await;
     } else {

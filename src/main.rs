@@ -1,5 +1,3 @@
-#![allow(clippy::too_many_arguments)]
-
 mod chttp;
 mod config;
 mod doh2;
@@ -21,22 +19,22 @@ mod utils;
 use h11::http1;
 use multi::h1_multi;
 use rule::convert_rules;
-use utils::unsafe_staticref;
+
+static CONFIG: std::sync::LazyLock<config::Config> = std::sync::LazyLock::new(config::load_config);
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
     tokio_rustls::rustls::crypto::ring::default_provider()
         .install_default()
         .unwrap();
-    let conf = config::load_config();
 
     // Setup LOG
     unsafe {
-        std::env::set_var("RUST_LOG", &conf.log.level);
+        std::env::set_var("RUST_LOG", &CONFIG.log.level);
     }
 
     // Level order: Error, Warn, Info, Debug, Trace
-    if let Some(file) = &conf.log.file {
+    if let Some(file) = &CONFIG.log.file {
         env_logger::builder()
             .target(env_logger::Target::Pipe(Box::new(
                 std::fs::OpenOptions::new()
@@ -55,29 +53,20 @@ async fn main() {
         log::error!("{message}");
     }));
 
-    // Convert rules
-    let rules = convert_rules(&conf.rules);
-
-    // values all avalible during application lifetime
-    let urules = unsafe_staticref(&rules);
-    let config: &'static config::Config = unsafe_staticref(&conf);
-
-    if conf.doh_server.enable {
+    if CONFIG.doh_server.enable {
         tokio::spawn(async move {
-            dohserver::doh_server(conf.doh_server, conf.serve_addrs).await;
+            dohserver::doh_server(&CONFIG.doh_server, CONFIG.serve_addrs).await;
         });
     }
 
-    match conf.protocol {
-        config::Protocol::h1_multi => h1_multi(config, urules).await,
-        config::Protocol::h1 => http1(config, rules).await,
-        config::Protocol::h2 => doh2::http2(config, urules).await,
-        config::Protocol::h3 => doh3::http3(config, urules).await,
-        config::Protocol::dot => {
-            dot::dot(config, urules).await;
-        }
-        config::Protocol::doq => {
-            doq::doq(config, urules).await;
-        }
-    }
+    let converted_rules = std::sync::Arc::new(convert_rules(&CONFIG.rules));
+
+    match CONFIG.protocol {
+        config::Protocol::h1_multi => h1_multi(converted_rules).await,
+        config::Protocol::h1 => http1(converted_rules).await,
+        config::Protocol::h2 => doh2::http2(converted_rules).await,
+        config::Protocol::h3 => doh3::http3(converted_rules).await,
+        config::Protocol::dot => dot::dot(converted_rules).await,
+        config::Protocol::doq => doq::doq(converted_rules).await,
+    };
 }

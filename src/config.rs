@@ -124,8 +124,32 @@ pub enum HttpMethod {
 }
 
 #[derive(serde::Deserialize)]
+#[allow(non_camel_case_types)]
+pub enum LevelFilter {
+    off,
+    error,
+    warn,
+    info,
+    debug,
+    trace,
+}
+
+impl LevelFilter {
+    pub fn convert(&self) -> log::LevelFilter {
+        match self {
+            Self::off => log::LevelFilter::Off,
+            Self::error => log::LevelFilter::Error,
+            Self::warn => log::LevelFilter::Warn,
+            Self::info => log::LevelFilter::Info,
+            Self::debug => log::LevelFilter::Debug,
+            Self::trace => log::LevelFilter::Trace
+        }
+    }
+}
+
+#[derive(serde::Deserialize)]
 pub struct Log {
-    pub level: String,
+    pub level: LevelFilter,
     pub file: Option<std::path::PathBuf>,
 }
 

@@ -7,8 +7,7 @@ use crate::{
     CONFIG,
     rule::rulecheck,
     tls,
-    utils::convert_u16_to_two_u8s_be,
-    utils::{convert_two_u8s_to_u16_be, unsafe_staticref},
+    utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be},
 };
 
 enum IdType {
@@ -17,8 +16,7 @@ enum IdType {
 }
 
 pub async fn dot(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
-    let udp = crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap();
-    let uudp = unsafe_staticref(&udp);
+    let udp = Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
     let ctls = tls::tlsconf(vec![b"dot".to_vec()], CONFIG.disable_certificate_validation);
     loop {
         log::info!("DOT Connecting");
@@ -40,14 +38,14 @@ pub async fn dot(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
             Arc::new(Mutex::new(std::collections::HashMap::new()));
 
         let waiters2 = waiters.clone();
-
+        let udp2 = udp.clone();
         tokio::select! {
-            recver = tokio::spawn(async move { recv_query(uudp, r, waiters2).await }) => {
+            recver = tokio::spawn(async move { recv_query(udp2, r, waiters2).await }) => {
                 if let Err(e) = recver {
                     log::error!("DoT: {e}")
                 }
             }
-            sender = send_query(uudp, rules.clone(), w, waiters) => {
+            sender = send_query(udp.clone(), rules.clone(), w, waiters) => {
                 if let Err(e) = sender {
                     log::error!("DoT: {e}")
                 }
@@ -57,7 +55,7 @@ pub async fn dot(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
 }
 
 async fn recv_query<R: tokio::io::AsyncRead + Unpin>(
-    udp: &'static tokio::net::UdpSocket,
+    udp: Arc<tokio::net::UdpSocket>,
     mut r: R,
     waiters: Arc<Mutex<std::collections::HashMap<u16, IdType>>>,
 ) -> tokio::io::Result<()> {
@@ -110,7 +108,7 @@ async fn recv_query<R: tokio::io::AsyncRead + Unpin>(
 }
 
 async fn send_query<W: tokio::io::AsyncWrite + Unpin + Send>(
-    udp: &'static tokio::net::UdpSocket,
+    udp: Arc<tokio::net::UdpSocket>,
     rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>,
     mut w: W,
     waiters: Arc<Mutex<std::collections::HashMap<u16, IdType>>>,
@@ -142,7 +140,7 @@ async fn send_query<W: tokio::io::AsyncWrite + Unpin + Send>(
                     rules.clone(),
                     crate::rule::RuleDqt::Tls(query, size),
                     addr,
-                    udp,
+                    udp.clone(),
                 )
                 .await)
                 || size < 12

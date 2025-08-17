@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 mod chttp;
 mod config;
 mod doh2;
@@ -28,11 +30,6 @@ async fn main() {
         .install_default()
         .unwrap();
 
-    // Setup LOG
-    unsafe {
-        std::env::set_var("RUST_LOG", &CONFIG.log.level);
-    }
-
     // Level order: Error, Warn, Info, Debug, Trace
     if let Some(file) = &CONFIG.log.file {
         env_logger::builder()
@@ -43,9 +40,12 @@ async fn main() {
                     .open(file)
                     .unwrap(),
             )))
+            .filter_level(CONFIG.log.level.convert())
             .init();
     } else {
-        env_logger::init();
+        env_logger::builder()
+        .filter_level(CONFIG.log.level.convert())
+        .init();
     }
 
     // Log panic info

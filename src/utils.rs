@@ -65,11 +65,6 @@ pub async fn recv_timeout(
     }
 }
 
-#[inline(always)]
-pub fn unsafe_staticref<'a, T: ?Sized>(r: &'a T) -> &'static T {
-    unsafe { std::mem::transmute::<&'a T, &'static T>(r) }
-}
-
 pub fn parse_range(s: &str) -> Option<std::ops::Range<usize>> {
     let mut parts = s.split("-");
     if let (Some(a), Some(b)) = (parts.next(), parts.next())

@@ -10,10 +10,12 @@ use crate::{
     CONFIG,
     doh3::udp_setup,
     rule::rulecheck,
-    utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be, unsafe_staticref},
+    utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be},
 };
 
 pub async fn doq(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
+    let udp = Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
+
     let mut endpoint = udp_setup(
         CONFIG.remote_addrs,
         &CONFIG.noise,
@@ -22,9 +24,6 @@ pub async fn doq(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
         &CONFIG.interface,
     )
     .await;
-
-    let udp = crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap();
-    let uudp = unsafe_staticref(&udp);
 
     let mut tank: Option<(Box<[u8; 514]>, usize, SocketAddr)> = None;
 
@@ -107,6 +106,7 @@ pub async fn doq(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
         let mut dns_query = [0u8; 514];
         loop {
             let dead = dead_conn.clone();
+            let udp = udp.clone();
 
             if tank.is_some() {
                 match quic.open_bi().await {
@@ -115,7 +115,7 @@ pub async fn doq(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
                         tokio::spawn(async move {
                             let mut temp = false;
                             if let Err(e) =
-                                send_dq(bistream, (*dns_query, query_size), addr, uudp).await
+                                send_dq(bistream, (*dns_query, query_size), addr, udp).await
                             {
                                 log::error!("DoQ Stream: {e}");
                                 temp = true;
@@ -170,7 +170,7 @@ pub async fn doq(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
                         rules.clone(),
                         crate::rule::RuleDqt::Tls(dns_query, query_size),
                         addr,
-                        uudp,
+                        udp.clone(),
                     )
                     .await)
                     || query_size < 12
@@ -194,7 +194,7 @@ pub async fn doq(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
                         tokio::spawn(async move {
                             let mut temp = false;
                             if let Err(e) =
-                                send_dq(bistream, (dns_query, query_size), addr, uudp).await
+                                send_dq(bistream, (dns_query, query_size), addr, udp).await
                             {
                                 log::error!("DoQ Stream: {e}");
                                 temp = true;
@@ -218,7 +218,7 @@ async fn send_dq(
     (mut send, mut recv): (SendStream, RecvStream),
     mut dns_query: ([u8; 514], usize),
     addr: SocketAddr,
-    udp: &'static tokio::net::UdpSocket,
+    udp: Arc<tokio::net::UdpSocket>,
 ) -> tokio::io::Result<()> {
     [dns_query.0[0], dns_query.0[1]] = convert_u16_to_two_u8s_be(dns_query.1 as u16);
     send.write(&dns_query.0[..dns_query.1 + 2]).await?;

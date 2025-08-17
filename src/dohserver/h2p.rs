@@ -3,13 +3,12 @@ use h2::{Reason, SendStream, server::SendResponse};
 use http::Response;
 use std::net::SocketAddr;
 
-use crate::utils::recv_timeout;
+use crate::{CONFIG, utils::recv_timeout};
 
 pub async fn serve_h2(
     stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     serve_addrs: SocketAddr,
     log: bool,
-    cache_control: &'static String,
     response_timeout: (u64, u64),
 ) -> tokio::io::Result<()> {
     let peer = stream.get_ref().0.peer_addr()?;
@@ -22,14 +21,9 @@ pub async fn serve_h2(
             if req.method() == http::Method::POST {
                 tokio::spawn(async move {
                     if let Some(Ok(body)) = req.body_mut().data().await {
-                        if let Err(e) = handle_dns_req_post(
-                            &mut resp,
-                            body,
-                            serve_addrs,
-                            cache_control,
-                            response_timeout,
-                        )
-                        .await
+                        if let Err(e) =
+                            handle_dns_req_post(&mut resp, body, serve_addrs, response_timeout)
+                                .await
                             && log
                         {
                             log::error!(
@@ -47,14 +41,9 @@ pub async fn serve_h2(
                 if let Some(bs4dns) = req.uri().query() {
                     if let Ok(dq) = base64_url::decode(&bs4dns.as_bytes()[4..]) {
                         tokio::spawn(async move {
-                            if let Err(e) = handle_dns_req_get(
-                                &mut resp,
-                                dq,
-                                serve_addrs,
-                                cache_control,
-                                response_timeout,
-                            )
-                            .await
+                            if let Err(e) =
+                                handle_dns_req_get(&mut resp, dq, serve_addrs, response_timeout)
+                                    .await
                                 && log
                             {
                                 log::error!(
@@ -86,7 +75,6 @@ async fn handle_dns_req_post(
     resp: &mut SendResponse<Bytes>,
     body: Bytes,
     serve_addrs: SocketAddr,
-    cache_control: &'static String,
     response_timeout: (u64, u64),
 ) -> tokio::io::Result<()> {
     let serving_ip = if serve_addrs.ip() == std::net::Ipv4Addr::UNSPECIFIED {
@@ -122,7 +110,7 @@ async fn handle_dns_req_post(
         };
     }
 
-    if let Err(e) = handle_resp(resp, &buff, size, cache_control).await {
+    if let Err(e) = handle_resp(resp, &buff, size).await {
         return Err(tokio::io::Error::other(e));
     }
 
@@ -134,7 +122,6 @@ async fn handle_dns_req_get(
     resp: &mut SendResponse<Bytes>,
     dq: Vec<u8>,
     serve_addrs: SocketAddr,
-    cache_control: &'static String,
     response_timeout: (u64, u64),
 ) -> tokio::io::Result<()> {
     let serving_ip = if serve_addrs.ip() == std::net::Ipv4Addr::UNSPECIFIED {
@@ -170,7 +157,7 @@ async fn handle_dns_req_get(
         };
     }
 
-    handle_resp(resp, &buff, size, cache_control).await
+    handle_resp(resp, &buff, size).await
 }
 
 struct SendResponseHeader<'a>(&'a mut SendResponse<Bytes>, http::Response<()>);
@@ -238,13 +225,12 @@ async fn handle_resp(
     rframe: &mut SendResponse<Bytes>,
     buff: &[u8],
     size: usize,
-    cache_control: &'static String,
 ) -> tokio::io::Result<()> {
     let heads = Response::builder()
         .version(http::Version::HTTP_2)
         .status(http::status::StatusCode::OK)
         .header("Content-Type", "application/dns-message")
-        .header("Cache-Control", cache_control)
+        .header("Cache-Control", &CONFIG.doh_server.cache_control)
         .header("Access-Control-Allow-Origin", "*")
         .header("content-length", size)
         .body(())

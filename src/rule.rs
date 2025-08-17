@@ -1,4 +1,7 @@
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::{
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    sync::Arc,
+};
 
 use crate::{
     config::TargetType,
@@ -28,7 +31,7 @@ pub async fn rulecheck(
     rules: std::sync::Arc<Option<Vec<Rule>>>,
     mut dq: RuleDqt,
     client_addr: SocketAddr,
-    udp: &'static tokio::net::UdpSocket,
+    udp: Arc<tokio::net::UdpSocket>,
 ) -> bool {
     for rule in rules.as_deref().unwrap() {
         match &rule.target {
@@ -111,7 +114,7 @@ async fn handle_bypass(
     dq: RuleDqt,
     client_addr: SocketAddr,
     bypass_target: SocketAddr,
-    udp: &'static tokio::net::UdpSocket,
+    udp: Arc<tokio::net::UdpSocket>,
 ) -> tokio::io::Result<()> {
     let agent = tokio::net::UdpSocket::bind("0.0.0.0:0").await?;
     agent.connect(bypass_target).await?;

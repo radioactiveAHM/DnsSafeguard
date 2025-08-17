@@ -1,11 +1,4 @@
-use crate::{
-    CONFIG,
-    chttp::genrequrl,
-    config,
-    rule::rulecheck,
-    tls,
-    utils::{Buffering, unsafe_staticref},
-};
+use crate::{CONFIG, chttp::genrequrl, config, rule::rulecheck, tls, utils::Buffering};
 use core::str;
 use h2::client::SendRequest;
 use std::{net::SocketAddr, sync::Arc};
@@ -15,8 +8,7 @@ pub async fn http2(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
     // TLS Conf
     let h2tls = tls::tlsconf(vec![b"h2".to_vec()], CONFIG.disable_certificate_validation);
 
-    let udp = crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap();
-    let uudp = unsafe_staticref(&udp);
+    let udp = Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
 
     let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
 
@@ -52,14 +44,15 @@ pub async fn http2(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
                 log::error!("H2: {e}");
                 break;
             }
-            // Check if Connection is dead
+
             let h2_conn_dead = dead_conn.clone();
+            let udp = udp.clone();
 
             if let Some((dns_query, query_size, addr)) = tank {
                 tokio::spawn(async move {
                     let mut temp = false;
                     if let Err(e) =
-                        send_req((*dns_query, query_size), h2_client.unwrap(), addr, uudp).await
+                        send_req((*dns_query, query_size), h2_client.unwrap(), addr, udp).await
                     {
                         log::error!("H2: {e}");
                         temp = true;
@@ -106,7 +99,7 @@ pub async fn http2(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
                         rules.clone(),
                         crate::rule::RuleDqt::Http(dns_query, query_size),
                         addr,
-                        uudp,
+                        udp.clone(),
                     )
                     .await)
                     || query_size < 12
@@ -124,7 +117,7 @@ pub async fn http2(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
                 tokio::spawn(async move {
                     let mut temp = false;
                     if let Err(e) =
-                        send_req((dns_query, query_size), h2_client.unwrap(), addr, uudp).await
+                        send_req((dns_query, query_size), h2_client.unwrap(), addr, udp).await
                     {
                         log::error!("H2: {e}");
                         temp = true;
@@ -143,7 +136,7 @@ async fn send_req(
     dns_query: ([u8; 512], usize),
     mut h2_client: SendRequest<bytes::Bytes>,
     addr: SocketAddr,
-    udp: &'static tokio::net::UdpSocket,
+    udp: Arc<tokio::net::UdpSocket>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Sending request
     let mut resp = match CONFIG.http_method {

@@ -10,7 +10,6 @@ use tokio::time::sleep;
 use tokio_rustls::{TlsAcceptor, rustls};
 
 use crate::config::DohServer;
-use crate::utils::unsafe_staticref;
 
 pub struct Tc {
     pub acceptor: TlsAcceptor,
@@ -57,8 +56,6 @@ pub async fn doh_server(dsc: &DohServer, serve_addrs: SocketAddr) {
 
     log::info!("DoH server Listening on {}", dsc.listen_address);
 
-    let cache_control: &'static String = unsafe_staticref(&dsc.cache_control);
-
     let log_errors = dsc.log_errors;
     let response_timeout = dsc.response_timeout;
 
@@ -66,9 +63,7 @@ pub async fn doh_server(dsc: &DohServer, serve_addrs: SocketAddr) {
         match Tc::new(acceptor.clone(), listener.accept().await) {
             Ok(tc) => {
                 tokio::spawn(async move {
-                    if let Err(e) =
-                        tc_handler(tc, serve_addrs, log_errors, cache_control, response_timeout)
-                            .await
+                    if let Err(e) = tc_handler(tc, serve_addrs, log_errors, response_timeout).await
                         && log_errors
                     {
                         log::error!("DoH server<TLS>: {e}")
@@ -88,20 +83,14 @@ async fn tc_handler(
     tc: Tc,
     serve_addrs: SocketAddr,
     log: bool,
-    cache_control: &'static String,
     response_timeout: (u64, u64),
 ) -> tokio::io::Result<()> {
     let mut stream = tc.accept().await?;
 
     if let Some(alpn) = stream.get_ref().1.alpn_protocol() {
         match alpn {
-            b"h2" => {
-                h2p::serve_h2(stream, serve_addrs, log, cache_control, response_timeout).await?
-            }
-            b"http/1.1" => {
-                h11p::serve_http11(stream, serve_addrs, log, cache_control, response_timeout)
-                    .await?
-            }
+            b"h2" => h2p::serve_h2(stream, serve_addrs, log, response_timeout).await?,
+            b"http/1.1" => h11p::serve_http11(stream, serve_addrs, log, response_timeout).await?,
             _ => {
                 stream.get_mut().1.send_close_notify();
                 return Err(tokio::io::Error::other(
@@ -110,7 +99,7 @@ async fn tc_handler(
             }
         }
     } else {
-        h11p::serve_http11(stream, serve_addrs, log, cache_control, response_timeout).await?
+        h11p::serve_http11(stream, serve_addrs, log, response_timeout).await?
     }
 
     Ok(())

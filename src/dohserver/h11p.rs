@@ -1,13 +1,15 @@
 use std::{fmt::Display, net::SocketAddr};
 use tokio::{io::AsyncWriteExt, net::UdpSocket};
 
-use crate::utils::{Buffering, c_len, catch_in_buff, recv_timeout};
+use crate::{
+    CONFIG,
+    utils::{Buffering, c_len, catch_in_buff, recv_timeout},
+};
 
 pub async fn serve_http11(
     mut stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     serve_addrs: SocketAddr,
     log: bool,
-    cache_control: &'static String,
     response_timeout: (u64, u64),
 ) -> tokio::io::Result<()> {
     let peer = stream.get_ref().0.peer_addr()?;
@@ -33,7 +35,6 @@ pub async fn serve_http11(
             &mut reqbuff,
             &agent,
             &mut respbuff,
-            cache_control,
             response_timeout,
         )
         .await
@@ -50,7 +51,6 @@ async fn handle_req(
     reqbuff: &mut tokio::io::ReadBuf<'_>,
     agent: &UdpSocket,
     respbuff: &mut [u8],
-    cache_control: &'static String,
     response_timeout: (u64, u64),
 ) -> tokio::io::Result<()> {
     let req = HTTP11::parse(reqbuff, stream).await?;
@@ -78,7 +78,8 @@ async fn handle_req(
         Buffering(&mut temp, 0)
     .write(
         format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/dns-message\r\nCache-Control: {cache_control}\r\nAccess-Control-Allow-Origin: *\r\ncontent-length: {size}\r\n\r\n"
+            "HTTP/1.1 200 OK\r\nContent-Type: application/dns-message\r\nCache-Control: {}\r\nAccess-Control-Allow-Origin: *\r\ncontent-length: {size}\r\n\r\n",
+            &CONFIG.doh_server.cache_control
         ).as_bytes()
     ).write(&respbuff[..size]).get()
     ).await?;

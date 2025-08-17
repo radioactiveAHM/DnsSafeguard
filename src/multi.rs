@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::CONFIG;
 
 type RcLocker = std::sync::Arc<
@@ -10,8 +12,7 @@ pub async fn h1_multi(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
         CONFIG.disable_certificate_validation,
     );
 
-    let udp = crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap();
-    let uudp = crate::utils::unsafe_staticref(&udp);
+    let udp = Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
 
     let (sender, recver) = tokio::sync::mpsc::channel(CONFIG.connection.h1_multi_connections);
     let recver_locker: RcLocker = std::sync::Arc::new(tokio::sync::Mutex::new(recver));
@@ -19,6 +20,7 @@ pub async fn h1_multi(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
     for conn_i in 0..CONFIG.connection.h1_multi_connections {
         let recver_locker = recver_locker.clone();
         let tls_config = ctls.clone();
+        let udp = udp.clone();
         tokio::spawn(async move {
             loop {
                 let tls_conn =
@@ -40,10 +42,11 @@ pub async fn h1_multi(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
                 let mut bf_http_resp: tokio::io::ReadBuf<'_> =
                     tokio::io::ReadBuf::new(&mut http_resp);
                 loop {
+                    let udp = udp.clone();
                     if let Some((query, size, addr)) = recver_locker.lock().await.recv().await
                         && let Err(e) = crate::h11::handler(
                             &mut c,
-                            uudp,
+                            &udp,
                             &query[..size],
                             &mut base64_url_temp,
                             &mut url,
@@ -69,7 +72,7 @@ pub async fn h1_multi(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
                     rules.clone(),
                     crate::rule::RuleDqt::Http(dns_query, query_size),
                     addr,
-                    uudp,
+                    udp.clone(),
                 )
                 .await)
                 || query_size < 12

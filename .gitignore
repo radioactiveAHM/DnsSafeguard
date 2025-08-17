@@ -6,3 +6,4 @@
 dist/
 .intentionally-empty-file.o
 target/
+.log

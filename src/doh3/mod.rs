@@ -18,7 +18,7 @@ use crate::{
     chttp::genrequrl,
     config::{self, Noise},
     rule::rulecheck,
-    utils::{Buffering, unsafe_staticref},
+    utils::Buffering,
 };
 
 pub async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: &Noise) -> quinn::Endpoint {
@@ -78,8 +78,7 @@ pub async fn http3(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
     )
     .await;
 
-    let udp = crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap();
-    let uudp = unsafe_staticref(&udp);
+    let udp = Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
 
     let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
 
@@ -167,15 +166,14 @@ pub async fn http3(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
 
         let mut dns_query = [0u8; 512];
         loop {
-            // Check if Connection is dead
-            // quic_conn_dead will be passed to task if connection alive
             let quic_conn_dead = dead_conn.clone();
+            let udp = udp.clone();
 
             if let Some((dns_query, query_size, addr)) = tank {
                 let h3 = h3.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
-                    if let Err(e) = send_request(h3, (*dns_query, query_size), addr, uudp).await {
+                    if let Err(e) = send_request(h3, (*dns_query, query_size), addr, udp).await {
                         log::error!("H3 Stream: {e}");
                         temp = true;
                     }
@@ -220,7 +218,7 @@ pub async fn http3(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
                         rules.clone(),
                         crate::rule::RuleDqt::Http(dns_query, query_size),
                         addr,
-                        uudp,
+                        udp.clone(),
                     )
                     .await)
                     || query_size < 12
@@ -237,7 +235,7 @@ pub async fn http3(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
                 let h3 = h3.clone();
                 tokio::spawn(async move {
                     let mut temp = false;
-                    if let Err(e) = send_request(h3, (dns_query, query_size), addr, uudp).await {
+                    if let Err(e) = send_request(h3, (dns_query, query_size), addr, udp).await {
                         log::error!("H3 Stream: {e}");
                         temp = true;
                     }
@@ -254,7 +252,7 @@ async fn send_request(
     mut h3: SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
     dns_query: ([u8; 512], usize),
     addr: SocketAddr,
-    udp: &'static tokio::net::UdpSocket,
+    udp: Arc<tokio::net::UdpSocket>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut reqs = match CONFIG.http_method {
         config::HttpMethod::GET => {

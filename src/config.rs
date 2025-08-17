@@ -1,19 +1,9 @@
 #[derive(serde::Deserialize, Clone)]
-#[allow(dead_code)]
-pub struct LinuxSocketOptions {
-    pub bind_to_device: Option<String>,
-    pub mss: Option<i32>,
-    pub congestion: Option<String>,
-}
-
-#[derive(serde::Deserialize, Clone)]
-#[allow(dead_code)]
 pub struct TcpSocketOptions {
     pub send_buffer_size: Option<u32>,
     pub recv_buffer_size: Option<u32>,
     pub nodelay: Option<bool>,
     pub keepalive: Option<bool>,
-    pub linux: LinuxSocketOptions,
 }
 
 #[derive(serde::Deserialize, Clone, Copy)]

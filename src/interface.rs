@@ -45,25 +45,6 @@ pub fn set_tcp_socket_options(
     if let Some(keepalive) = options.keepalive {
         tcp.set_keepalive(keepalive).unwrap();
     }
-
-    #[cfg(target_os = "linux")]
-    {
-        if let Some(device) = &options.linux.bind_to_device {
-            if tcp_options::set_tcp_bind_device(tcp, device).is_err() {
-                log::error!("Failed to set bind_to_device socket option");
-            }
-        }
-        if let Some(congestion) = &options.linux.congestion {
-            if tcp_options::set_tcp_congestion(tcp, congestion).is_err() {
-                log::error!("Failed to set congestion socket option");
-            }
-        }
-        if let Some(mss) = options.linux.mss {
-            if tcp_options::set_tcp_mss(tcp, mss).is_err() {
-                log::error!("Failed to set mss socket option");
-            }
-        }
-    }
 }
 
 pub async fn tcp_connect_handle(
@@ -111,69 +92,6 @@ pub async fn tcp_connect_handle(
                 .await;
                 continue;
             }
-        }
-    }
-}
-
-#[cfg(target_os = "linux")]
-pub mod tcp_options {
-    pub fn set_tcp_mss(socket: &tokio::net::TcpSocket, mss: i32) -> Result<(), ()> {
-        let fd = std::os::unix::io::AsRawFd::as_raw_fd(socket);
-
-        let result = unsafe {
-            libc::setsockopt(
-                fd,
-                libc::IPPROTO_TCP,
-                libc::TCP_MAXSEG,
-                &mss as *const i32 as *const libc::c_void,
-                std::mem::size_of::<i32>() as libc::socklen_t,
-            )
-        };
-        if result == -1 {
-            return Err(());
-        }
-        Ok(())
-    }
-    pub fn set_tcp_congestion(socket: &tokio::net::TcpSocket, congestion: &str) -> Result<(), ()> {
-        if let Ok(c) = std::ffi::CString::new(congestion) {
-            let fd = std::os::unix::io::AsRawFd::as_raw_fd(socket);
-
-            let result = unsafe {
-                libc::setsockopt(
-                    fd,
-                    libc::IPPROTO_TCP,
-                    libc::TCP_CONGESTION,
-                    c.as_ptr() as *const _,
-                    c.to_bytes().len() as libc::socklen_t,
-                )
-            };
-            if result == -1 {
-                return Err(());
-            }
-            Ok(())
-        } else {
-            Err(())
-        }
-    }
-    pub fn set_tcp_bind_device(socket: &tokio::net::TcpSocket, device: &str) -> Result<(), ()> {
-        if let Ok(device) = std::ffi::CString::new(device) {
-            let fd = std::os::unix::io::AsRawFd::as_raw_fd(socket);
-
-            let result = unsafe {
-                libc::setsockopt(
-                    fd,
-                    libc::SOL_SOCKET,
-                    libc::SO_BINDTODEVICE,
-                    device.as_ptr() as *const _,
-                    device.to_bytes().len() as libc::socklen_t,
-                )
-            };
-            if result == -1 {
-                return Err(());
-            }
-            Ok(())
-        } else {
-            Err(())
         }
     }
 }

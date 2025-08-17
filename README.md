@@ -2,7 +2,11 @@
 
 # DnsSafeguard
 
-DnsSafeguard is a fast and secure DNS client written in Rust, designed to intercept DNS queries over a UDP socket and securely transmit them to a DNS server using DNS over HTTPS/TLS/QUIC (DoH/DoT/DoQ) protocols. By leveraging TLS client hello fragmentation and UDP Noise, it successfully bypasses the Great Firewall (GFW) censorship.
+DnsSafeguard is a fast and secure DNS client written in Rust, designed to intercept DNS queries over a UDP socket and Dns over HTTPS (DoH) to securely transmit them to a DNS server using DNS over HTTPS/TLS/QUIC (DoH/DoT/DoQ) protocols. By leveraging TLS client hello fragmentation and UDP Noise, it successfully bypasses the Great Firewall (GFW) censorship.
+
+## Safety
+
+This crate uses `#![forbid(unsafe_code)]` to ensure everything is implemented in 100% safe Rust.
 
 ## Features
 
@@ -12,8 +16,9 @@ DnsSafeguard is a fast and secure DNS client written in Rust, designed to interc
 - **DoT Protocol:** Transmits DNS queries using the DoT protocol.
 - **DoQ Protocol:** Transmits DNS queries using the DoQ protocol, providing highly secure and efficient communication, avoiding head-of-line blocking.
 - **Rules:** Create rules for groups of domains and keywords to control DNS queries effectively.
+- **Overwrite:** Overwrite IPs from DNS responses.
 - **Censorship Bypass:** Implements TLS client hello fragmentation with four methods to evade GFW TLS censorship.
-- **Customizable UDP Noise:** Implements four types of UDP Noise to bypass QUIC blocking.
+- **Customizable UDP Noise:** Implements 7 dynamic types of UDP Noise to bypass QUIC blocking.
 
 ## Roadmap
 
@@ -32,6 +37,7 @@ DnsSafeguard is a fast and secure DNS client written in Rust, designed to interc
 - [x] Owerwrite IPs from DNS responses
 - [x] Interface/Adapter binding
 - [x] POST Method (H2, H3)
+- [x] Logging
 
 ## Building the Project
 
@@ -59,11 +65,11 @@ cargo build --release
     - Keep an eye on the logs. When you see the message “Connection established,” it means the DNS client has successfully connected to the DNS server.
 5. **Set Up Windows DNS:**
     1. Go to your Windows network settings.
-    2. Configure the DNS server address to match the IP address specified in the `config.json` file for the `UDP Socket Addresses` section.
+    2. Configure the DNS server address to match the IP address specified in the `config.json` file for the `serve_addrs` section.
 
 ### Linux
 
-Follow the same steps as Windows except for step 5: open the `/etc/resolv.conf` file and configure the DNS server address to match the IP address specified in the `config.json` file for the `UDP Socket Addresses` section. For example, if UDP Socket Addresses value is `127.0.0.1`, then the content in `/etc/resolv.conf` must be `nameserver 127.0.0.1`.
+Follow the same steps as Windows except for step 5: open the `/etc/resolv.conf` file and configure the DNS server address to match the IP address specified in the `config.json` file for the `serve_addrs` section. For example, if `serve_addrs` value is `127.0.0.1`, then the content in `/etc/resolv.conf` must be `nameserver 127.0.0.1`.
 
 ## DNS Server
 
@@ -81,6 +87,9 @@ The `config.json` file is a crucial part of the DnsSafeguard application. It con
 
 The configuration file is structured in JSON format and includes the following settings:
 
+- `Log`:
+  - `level`: Specifies the logging verbosity. Available options: `off`, `error`, `warn`, `info`, `debug`, `trace`.
+  - `file`: Path to the log output file. Set to null to disable file logging and enable console output instead. Logging to both file and console simultaneously is not supported. You must choose one.
 - `Protocol`: Specifies the protocol used for DNS queries.
   - `h1`: Single HTTP/1.1 Connection.
   - `h1_multi`: Multiple HTTP/1.1 Connection.
@@ -99,7 +108,7 @@ The configuration file is structured in JSON format and includes the following s
   - Warning: Custom path must end with `/dns-query`.
 - `Http Method`: Values are `GET` and `POST`. GET is more compatible, it consumes more memory. POST, on the other hand, eliminates the need to encode DNS queries in base64url, resulting in lower memory usage. However, it requires two write system calls.
 - `Response Timeout`: How long to wait for http response for DoQ, H3 and H1.
-- `Http Keep Alive`: Interval (in seconds) for sending periodic `GET /` HTTP requests to keep the connection alive. Useful for remote servers that ignore keep-alive signals from HTTP/2 or QUIC. Data usage is capped at 1MB per 24 hours. Set to `null` to disable.
+- `Connection Keep Alive`: Sends periodic keep-alive signals—such as `GET /` (H2/H3), empty DNS headers (DoT), or empty buffers (DoQ)—at a specified interval in seconds to maintain connections with remote servers that may ignore standard HTTP/2 or QUIC keep-alives; set to `null` to disable.
 - `Native Tls`: Enables Native TLS using SChannel on Windows, Security.framework on macOS, and OpenSSL elsewhere; fragmenting is not supported. Compatible with `h1`, `h2`, and `dot`.
 - `Fragmenting`: The fragmentation method to use during the TLS handshake. [Fragmenting page](/FRAG.md)
 - `Noise`: UDP noise setting.

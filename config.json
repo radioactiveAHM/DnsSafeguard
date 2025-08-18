@@ -24,7 +24,7 @@
 	},
 	"noise": {
 		"enable": false,
-		"ntype": "tftp",
+		"ntype": "syslog",
 		"content": "google.com",
 		"packet_length": "1-100",
 		"packets": 8,

@@ -32,6 +32,8 @@ pub enum NoiseType {
     tracker,
     stun,
     tftp,
+    ntp,
+    syslog
 }
 
 #[derive(serde::Deserialize)]

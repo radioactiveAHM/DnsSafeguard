@@ -174,6 +174,37 @@ fn tftp() -> Vec<u8> {
     packet
 }
 
+fn ntp() -> [u8; 48] {
+    let mut rng = rand::rng();
+    let mut packet: [u8; 48] = [
+        219, 0, 17, 233, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 236, 77, 18, 206, 29, 109, 124, 219,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 236, 77, 36, 9, 81, 101, 92, 123,
+    ];
+
+    rng.fill(&mut packet[2..12]);
+    rng.fill(&mut packet[16..24]);
+    rng.fill(&mut packet[40..]);
+    packet
+}
+
+fn syslog() -> Vec<u8> {
+    let mut packet = Vec::with_capacity(256);
+    packet.extend_from_slice(&[60, 49, 54, 53, 62, 49, 32]);
+    packet.extend_from_slice(&[0;24]);
+
+    let mut rng = rand::rng();
+
+    let host = crate::CONFIG.server_name.as_str();
+    let pid: u8 = rng.random();
+    let mid: u8 = rng.random();
+    let mlen = rng.random_range(10..256);
+    packet.extend_from_slice(
+        format!(" {host} syslog {pid} ID{mid} - {}", Alphanumeric.sample_string(&mut rng, mlen)).as_bytes()
+    );
+
+    packet
+}
+
 #[inline(never)]
 async fn rand_noiser(
     noise: &Noise,
@@ -206,6 +237,8 @@ pub async fn noiser(noise: &Noise, target: SocketAddr, socket: &socket2::Socket)
         NoiseType::tracker => socket.send_to(&Tracker::new().bytes(), &target.into()),
         NoiseType::stun => socket.send_to(&stun(), &target.into()),
         NoiseType::tftp => socket.send_to(&tftp(), &target.into()),
+        NoiseType::ntp => socket.send_to(&ntp(), &target.into()),
+        NoiseType::syslog => socket.send_to(&syslog(), &target.into()),
     } {
         log::info!("{sent_bytes} bytes sent as noise");
         sleep(std::time::Duration::from_millis(noise.sleep)).await;

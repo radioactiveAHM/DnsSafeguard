@@ -59,19 +59,22 @@ async fn recv_query<R: tokio::io::AsyncRead + Unpin>(
     mut r: R,
     waiters: Arc<Mutex<std::collections::HashMap<u16, IdType>>>,
 ) -> tokio::io::Result<()> {
-    let mut buffer = vec![0; 1024 * 8];
-    let mut size: usize = 0;
+    let mut buffer: std::collections::VecDeque<u8> = std::collections::VecDeque::with_capacity(1024*8);
+    let mut reading_buf = [0u8; 1024*8];
     loop {
-        size += crate::ioutils::read_buffered_slice(&mut buffer[size..], &mut r).await?;
+        let size = crate::ioutils::read_buffered_slice(&mut reading_buf, &mut r).await?;
         if size == 0 {
             continue;
         }
+        buffer.extend(&reading_buf[..size]);
         loop {
+            let buffer_slice = buffer.as_mut_slices().0;
+            let size = buffer_slice.len();
             if size < 12 {
                 break;
             }
 
-            let message_size = convert_two_u8s_to_u16_be([buffer[0], buffer[1]]) as usize;
+            let message_size = convert_two_u8s_to_u16_be([buffer_slice[0], buffer_slice[1]]) as usize;
 
             if message_size < 12 {
                 return Err(tokio::io::Error::other("Mailformed Dns query response"));
@@ -81,7 +84,7 @@ async fn recv_query<R: tokio::io::AsyncRead + Unpin>(
                 break;
             }
 
-            let message = &mut buffer[2..message_size + 2];
+            let message = &mut buffer_slice[2..message_size + 2];
             let id = convert_two_u8s_to_u16_be([message[0], message[1]]);
             if let Some(addr) = waiters.lock().await.remove(&id) {
                 if CONFIG.overwrite.is_some() {
@@ -97,12 +100,7 @@ async fn recv_query<R: tokio::io::AsyncRead + Unpin>(
                     }
                 }
             }
-            size -= message_size + 2;
             buffer.drain(..message_size + 2);
-
-            if size == 0 {
-                buffer = vec![0; 1024 * 8];
-            }
         }
     }
 }

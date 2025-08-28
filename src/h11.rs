@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 use crate::{
     CONFIG,
@@ -7,7 +7,8 @@ use crate::{
 };
 use tokio::{io::AsyncWriteExt, time::sleep};
 
-pub async fn http1(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
+#[allow(unused_assignments)]
+pub async fn http1(rules: Arc<Option<Vec<crate::rule::Rule>>>) {
     // TLS Client
     let ctls = crate::tls::tlsconf(
         vec![b"http/1.1".to_vec()],
@@ -37,24 +38,26 @@ pub async fn http1(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
 
         let mut http_resp = vec![0; 1024 * 8];
         let mut bf_http_resp: tokio::io::ReadBuf<'_> = tokio::io::ReadBuf::new(&mut http_resp);
-        loop {
-            if let Some((dns_query, query_size, addr)) = &tank {
-                if handler(
-                    &mut tls,
-                    &udp,
-                    &dns_query[..*query_size],
-                    &mut base64_url_temp,
-                    &mut url,
-                    &mut bf_http_resp,
-                    addr,
-                )
-                .await
-                .is_ok()
-                {
-                    tank = None;
-                }
+
+        if let Some((dns_query, query_size, addr)) = &tank {
+            if handler(
+                &mut tls,
+                &udp,
+                &dns_query[..*query_size],
+                &mut base64_url_temp,
+                &mut url,
+                &mut bf_http_resp,
+                addr,
+            )
+            .await
+            .is_err()
+            {
                 continue;
             }
+            tank = None;
+        }
+
+        loop {
             if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
                 // rule check
                 if (rules.is_some()
@@ -91,7 +94,7 @@ pub async fn http1(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
 }
 
 #[inline(always)]
-pub async fn handler<IO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(
+async fn handler<IO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(
     c: &mut IO,
     udp: &tokio::net::UdpSocket,
     dns_query: &[u8],
@@ -162,4 +165,85 @@ pub async fn handler<IO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(
     }
 
     Ok(())
+}
+
+type RcLocker =
+    Arc<tokio::sync::Mutex<tokio::sync::mpsc::Receiver<([u8; 512], usize, std::net::SocketAddr)>>>;
+
+pub async fn h1_multi(rules: Arc<Option<Vec<crate::rule::Rule>>>) {
+    let ctls = crate::tls::tlsconf(
+        vec![b"http/1.1".to_vec()],
+        CONFIG.disable_certificate_validation,
+    );
+
+    let udp = Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
+
+    let (sender, recver) = tokio::sync::mpsc::channel(CONFIG.connection.h1_multi_connections);
+    let recver_locker: RcLocker = Arc::new(tokio::sync::Mutex::new(recver));
+
+    for conn_i in 0..CONFIG.connection.h1_multi_connections {
+        let recver_locker = recver_locker.clone();
+        let tls_config = ctls.clone();
+        let udp = udp.clone();
+        tokio::spawn(async move {
+            loop {
+                let tls_conn =
+                    crate::tls::dynamic_tls_conn_gen(&["http/1.1"], tls_config.clone()).await;
+                if tls_conn.is_err() {
+                    log::error!("{}", tls_conn.unwrap_err());
+                    tokio::time::sleep(std::time::Duration::from_secs(
+                        CONFIG.connection.reconnect_sleep,
+                    ))
+                    .await;
+                    continue;
+                }
+                log::info!("HTTP/1.1 Connection {conn_i} Established");
+                let mut c = tls_conn.unwrap();
+
+                let mut base64_url_temp = [0u8; 4096];
+                let mut url = [0; 4096];
+                let mut http_resp = vec![0; 1024 * 8];
+                let mut bf_http_resp: tokio::io::ReadBuf<'_> =
+                    tokio::io::ReadBuf::new(&mut http_resp);
+                loop {
+                    let udp = udp.clone();
+                    if let Some((query, size, addr)) = recver_locker.lock().await.recv().await
+                        && let Err(e) = handler(
+                            &mut c,
+                            &udp,
+                            &query[..size],
+                            &mut base64_url_temp,
+                            &mut url,
+                            &mut bf_http_resp,
+                            &addr,
+                        )
+                        .await
+                    {
+                        log::error!("HTTP/1.1 Connection {conn_i}: {e}");
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
+    let mut dns_query = [0u8; 512];
+    loop {
+        if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
+            // rule check
+            if (rules.is_some()
+                && crate::rule::rulecheck(
+                    rules.clone(),
+                    crate::rule::RuleDqt::Http(dns_query, query_size),
+                    addr,
+                    udp.clone(),
+                )
+                .await)
+                || query_size < 12
+            {
+                continue;
+            }
+            let _ = sender.send((dns_query, query_size, addr)).await;
+        }
+    }
 }

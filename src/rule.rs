@@ -4,8 +4,9 @@ use std::{
 };
 
 use crate::{
+    CONFIG,
     config::TargetType,
-    utils::{Buffering, catch_in_buff, recv_timeout},
+    utils::{Buffering, catch_in_buff},
 };
 
 pub enum RuleDqt {
@@ -120,9 +121,12 @@ async fn handle_bypass(
     agent.connect(bypass_target).await?;
     agent.send(dq.slice()).await?;
 
-    let mut buff = [0; 4096];
-    let size = recv_timeout(&agent, &mut buff, 10).await?;
-    udp.send_to(&buff[..size], client_addr).await?;
+    let mut buf = [0; 4096];
+    if let Some(Ok((size, _))) =
+        crate::keepalive::recv_timeout(&udp, Some(CONFIG.response_timeout), &mut buf).await
+    {
+        udp.send_to(&buf[..size], client_addr).await?;
+    }
 
     Ok(())
 }
@@ -217,9 +221,12 @@ async fn handle_bypass_sync(
     agent.send(dq).await?;
 
     // stage 2: recv udp query from dns server
-    let mut buff = [0; 4096];
-    let size = recv_timeout(&agent, &mut buff, 10).await?;
-    udp.send_to(&buff[..size], client_addr).await?;
+    let mut buf = [0; 4096];
+    if let Some(Ok((size, _))) =
+        crate::keepalive::recv_timeout(udp, Some(CONFIG.response_timeout), &mut buf).await
+    {
+        udp.send_to(&buf[..size], client_addr).await?;
+    }
 
     Ok(())
 }

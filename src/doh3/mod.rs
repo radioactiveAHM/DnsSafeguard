@@ -68,6 +68,7 @@ pub async fn udp_setup(
     endpoint
 }
 
+#[allow(unused_assignments)]
 pub async fn http3(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
     let mut endpoint = udp_setup(
         CONFIG.remote_addrs,
@@ -164,52 +165,45 @@ pub async fn http3(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
             *(dead_conn2.lock().await) = true;
         });
 
+        if let Some((dns_query, query_size, addr)) = tank {
+            let udp = udp.clone();
+            let dead_conn = dead_conn.clone();
+            let h3 = h3.clone();
+            tokio::spawn(async move {
+                if let Err(e) = send_request(h3, (*dns_query, query_size), addr, udp).await {
+                    log::error!("H3 Stream: {e}");
+                    *dead_conn.lock().await = true;
+                }
+            });
+            tank = None;
+        }
+
         let mut dns_query = [0u8; 512];
         loop {
             let quic_conn_dead = dead_conn.clone();
             let udp = udp.clone();
-
-            if let Some((dns_query, query_size, addr)) = tank {
-                let h3 = h3.clone();
-                tokio::spawn(async move {
-                    let mut temp = false;
-                    if let Err(e) = send_request(h3, (*dns_query, query_size), addr, udp).await {
-                        log::error!("H3 Stream: {e}");
-                        temp = true;
-                    }
-                    if temp {
-                        *(quic_conn_dead.lock().await) = true;
-                    }
-                });
-
-                tank = None;
-                continue;
+            if *quic_conn_dead.lock().await {
+                watcher.abort();
+                break;
             }
 
-            let message = if let Some(dur) = CONFIG.connection_keep_alive {
-                match tokio::time::timeout(
-                    std::time::Duration::from_secs(dur),
-                    udp.recv_from(&mut dns_query),
-                )
-                .await
-                {
-                    Ok(message) => Some(message),
-                    Err(_) => {
-                        let mut h3 = h3.clone();
-                        let req =
-                            http::Request::get(format!("https://{}/", CONFIG.server_name.as_str()))
-                                .body(())
-                                .unwrap();
-                        if let Err(e) = h3.send_request(req).await {
-                            log::error!("H3: {e}");
-                            *(quic_conn_dead.lock().await) = true;
-                        }
-                        None
+            let message = crate::keepalive::recv_timeout_with(
+                &udp,
+                CONFIG.connection_keep_alive,
+                &mut dns_query,
+                async {
+                    let mut h3 = h3.clone();
+                    let req =
+                        http::Request::get(format!("https://{}/", CONFIG.server_name.as_str()))
+                            .body(())
+                            .unwrap();
+                    if let Err(e) = h3.send_request(req).await {
+                        log::error!("H3: {e}");
+                        *(quic_conn_dead.lock().await) = true;
                     }
-                }
-            } else {
-                Some(udp.recv_from(&mut dns_query).await)
-            };
+                },
+            )
+            .await;
 
             if let Some(Ok((query_size, addr))) = message {
                 // rule check
@@ -234,13 +228,9 @@ pub async fn http3(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
 
                 let h3 = h3.clone();
                 tokio::spawn(async move {
-                    let mut temp = false;
                     if let Err(e) = send_request(h3, (dns_query, query_size), addr, udp).await {
                         log::error!("H3 Stream: {e}");
-                        temp = true;
-                    }
-                    if temp {
-                        *(quic_conn_dead.lock().await) = true;
+                        *quic_conn_dead.lock().await = true;
                     }
                 });
             }
@@ -253,7 +243,7 @@ async fn send_request(
     dns_query: ([u8; 512], usize),
     addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut reqs = match CONFIG.http_method {
         config::HttpMethod::GET => {
             get(
@@ -350,7 +340,7 @@ async fn get(
     dns_query: ([u8; 512], usize),
 ) -> Result<
     h3::client::RequestStream<h3_quinn::BidiStream<bytes::Bytes>, bytes::Bytes>,
-    Box<dyn std::error::Error>,
+    Box<dyn std::error::Error + Send + Sync>,
 > {
     let mut temp = [0u8; 512];
     let mut url = [0; 1024];

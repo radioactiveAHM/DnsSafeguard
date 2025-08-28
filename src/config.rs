@@ -33,7 +33,7 @@ pub enum NoiseType {
     stun,
     tftp,
     ntp,
-    syslog
+    syslog,
 }
 
 #[derive(serde::Deserialize)]
@@ -134,12 +134,13 @@ impl LevelFilter {
             Self::warn => log::LevelFilter::Warn,
             Self::info => log::LevelFilter::Info,
             Self::debug => log::LevelFilter::Debug,
-            Self::trace => log::LevelFilter::Trace
+            Self::trace => log::LevelFilter::Trace,
         }
     }
 }
 
 #[derive(serde::Deserialize)]
+#[allow(dead_code)]
 pub struct Log {
     pub level: LevelFilter,
     pub file: Option<std::path::PathBuf>,

@@ -32,10 +32,23 @@ pub async fn http2(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
         let dead_conn2 = dead_conn.clone();
         let watcher = tokio::spawn(async move {
             if let Err(e) = h2c.await {
-                *(dead_conn2.lock().await) = true;
+                *dead_conn2.lock().await = true;
                 log::error!("H2: {e}");
             }
         });
+
+        if let Some((dns_query, query_size, addr)) = tank {
+            let h2_conn_dead = dead_conn.clone();
+            let udp = udp.clone();
+            let client = client.clone();
+            tokio::spawn(async move {
+                if let Err(e) = send_req((*dns_query, query_size), client, addr, udp).await {
+                    log::error!("H2: {e}");
+                    *h2_conn_dead.lock().await = true;
+                }
+            });
+            tank = None;
+        }
 
         let mut dns_query = [0u8; 512];
         loop {
@@ -47,50 +60,28 @@ pub async fn http2(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
 
             let h2_conn_dead = dead_conn.clone();
             let udp = udp.clone();
-
-            if let Some((dns_query, query_size, addr)) = tank {
-                tokio::spawn(async move {
-                    let mut temp = false;
-                    if let Err(e) =
-                        send_req((*dns_query, query_size), h2_client.unwrap(), addr, udp).await
-                    {
-                        log::error!("H2: {e}");
-                        temp = true;
-                        // for some weird reason if i try to lock dead_conn_arc here error occur
-                    }
-                    if temp {
-                        *(h2_conn_dead.lock().await) = true;
-                    }
-                });
-
-                tank = None;
-                continue;
+            if *h2_conn_dead.lock().await {
+                watcher.abort();
+                break;
             }
 
-            let message = if let Some(dur) = CONFIG.connection_keep_alive {
-                match tokio::time::timeout(
-                    std::time::Duration::from_secs(dur),
-                    udp.recv_from(&mut dns_query),
-                )
-                .await
-                {
-                    Ok(message) => Some(message),
-                    Err(_) => {
-                        let mut h2 = client.clone();
-                        let req =
-                            http::Request::get(format!("https://{}/", CONFIG.server_name.as_str()))
-                                .body(())
-                                .unwrap();
-                        if let Err(e) = h2.send_request(req, true) {
-                            log::error!("H2: {e}");
-                            *(h2_conn_dead.lock().await) = true;
-                        }
-                        None
+            let message = crate::keepalive::recv_timeout_with(
+                &udp,
+                CONFIG.connection_keep_alive,
+                &mut dns_query,
+                async {
+                    let mut h2 = client.clone();
+                    let req =
+                        http::Request::get(format!("https://{}/", CONFIG.server_name.as_str()))
+                            .body(())
+                            .unwrap();
+                    if let Err(e) = h2.send_request(req, true) {
+                        log::error!("H2: {e}");
+                        *h2_conn_dead.lock().await = true;
                     }
-                }
-            } else {
-                Some(udp.recv_from(&mut dns_query).await)
-            };
+                },
+            )
+            .await;
 
             if let Some(Ok((query_size, addr))) = message {
                 // rule check
@@ -115,16 +106,11 @@ pub async fn http2(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
 
                 // Base64url dns query
                 tokio::spawn(async move {
-                    let mut temp = false;
                     if let Err(e) =
                         send_req((dns_query, query_size), h2_client.unwrap(), addr, udp).await
                     {
                         log::error!("H2: {e}");
-                        temp = true;
-                        // for some weird reason if i try to lock dead_conn_arc here error occur
-                    }
-                    if temp {
-                        *(h2_conn_dead.lock().await) = true;
+                        *h2_conn_dead.lock().await = true;
                     }
                 });
             }
@@ -137,7 +123,7 @@ async fn send_req(
     mut h2_client: SendRequest<bytes::Bytes>,
     addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Sending request
     let mut resp = match CONFIG.http_method {
         config::HttpMethod::GET => {
@@ -203,7 +189,7 @@ async fn get(
     server_name: &'static str,
     ucpath: &'static Option<String>,
     dns_query: ([u8; 512], usize),
-) -> Result<http::Response<h2::RecvStream>, Box<dyn std::error::Error>> {
+) -> Result<http::Response<h2::RecvStream>, Box<dyn std::error::Error + Send + Sync>> {
     let mut temp = [0u8; 512];
     let mut url = [0u8; 1024];
     let r = h2_client

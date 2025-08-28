@@ -100,67 +100,59 @@ pub async fn doq(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
         let dead_conn2 = dead_conn.clone();
         let watcher = tokio::spawn(async move {
             log::error!("DoQ Watcher: {}", q2.closed().await);
-            *(dead_conn2.lock().await) = true;
+            *dead_conn2.lock().await = true;
         });
+
+        if tank.is_some() {
+            let dead = dead_conn.clone();
+            let udp = udp.clone();
+            match quic.open_bi().await {
+                Ok(bistream) => {
+                    let (dns_query, query_size, addr) = tank.unwrap();
+                    tokio::spawn(async move {
+                        if let Err(e) = send_dq(bistream, (*dns_query, query_size), addr, udp).await
+                        {
+                            log::error!("DoQ Stream: {e}");
+                            *dead.lock().await = true;
+                        }
+                    });
+                }
+                Err(e) => {
+                    log::error!("DoQ Connection: {e}");
+                    continue;
+                }
+            }
+            tank = None;
+        }
 
         let mut dns_query = [0u8; 514];
         loop {
             let dead = dead_conn.clone();
             let udp = udp.clone();
-
-            if tank.is_some() {
-                match quic.open_bi().await {
-                    Ok(bistream) => {
-                        let (dns_query, query_size, addr) = tank.unwrap();
-                        tokio::spawn(async move {
-                            let mut temp = false;
-                            if let Err(e) =
-                                send_dq(bistream, (*dns_query, query_size), addr, udp).await
-                            {
-                                log::error!("DoQ Stream: {e}");
-                                temp = true;
-                            }
-                            if temp {
-                                *(dead.lock().await) = true;
-                            }
-                        });
-                    }
-                    Err(e) => {
-                        log::error!("DoQ Connection: {e}");
-                        break;
-                    }
-                }
-
-                tank = None;
-                continue;
+            if *dead.lock().await {
+                watcher.abort();
+                break;
             }
 
-            let message = if let Some(dur) = CONFIG.connection_keep_alive {
-                match tokio::time::timeout(
-                    std::time::Duration::from_secs(dur),
-                    udp.recv_from(&mut dns_query[2..]),
-                )
-                .await
-                {
-                    Ok(message) => Some(message),
-                    Err(_) => {
-                        match quic.open_bi().await {
-                            Ok((mut send, mut recv)) => {
-                                let _ = send.write(&[]).await;
-                                let _ = send.finish();
-                                let _ = recv.read_chunk(1024 * 4, false).await;
-                            }
-                            Err(e) => {
-                                log::error!("DoQ Connection: {e}");
-                                *(dead.lock().await) = true;
-                            }
-                        };
-                        None
-                    }
-                }
-            } else {
-                Some(udp.recv_from(&mut dns_query[2..]).await)
-            };
+            let message = crate::keepalive::recv_timeout_with(
+                &udp,
+                CONFIG.connection_keep_alive,
+                &mut dns_query[2..],
+                async {
+                    match quic.open_bi().await {
+                        Ok((mut send, mut recv)) => {
+                            let _ = send.write(&[]).await;
+                            let _ = send.finish();
+                            let _ = recv.read_chunk(1024 * 4, false).await;
+                        }
+                        Err(e) => {
+                            log::error!("DoQ Connection: {e}");
+                            *dead.lock().await = true;
+                        }
+                    };
+                },
+            )
+            .await;
 
             // Recive dns query
             if let Some(Ok((query_size, addr))) = message {
@@ -178,12 +170,7 @@ pub async fn doq(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
                     continue;
                 }
 
-                if *dead.lock().await || quic.close_reason().is_some() {
-                    if let Some(close_reason) = quic.close_reason() {
-                        log::error!("DoQ Connection: {close_reason}");
-                    } else {
-                        log::error!("DoQ Connection: Closed without reason");
-                    }
+                if *dead.lock().await {
                     tank = Some((Box::new(dns_query), query_size, addr));
                     watcher.abort();
                     break;
@@ -192,15 +179,11 @@ pub async fn doq(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
                 match quic.open_bi().await {
                     Ok(bistream) => {
                         tokio::spawn(async move {
-                            let mut temp = false;
                             if let Err(e) =
                                 send_dq(bistream, (dns_query, query_size), addr, udp).await
                             {
                                 log::error!("DoQ Stream: {e}");
-                                temp = true;
-                            }
-                            if temp {
-                                *(dead.lock().await) = true;
+                                *dead.lock().await = true;
                             }
                         });
                     }

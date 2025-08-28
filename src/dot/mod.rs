@@ -1,6 +1,6 @@
 use rand::Rng;
 use std::sync::Arc;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
 
 use crate::{
@@ -19,7 +19,7 @@ pub async fn dot(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
     let udp = Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
     let ctls = tls::tlsconf(vec![b"dot".to_vec()], CONFIG.disable_certificate_validation);
     loop {
-        log::info!("DOT Connecting");
+        log::info!("DoT Connecting");
         let tls = crate::tls::dynamic_tls_conn_gen(&["dot"], ctls.clone()).await;
         if tls.is_err() {
             log::error!("DoT: {}", tls.unwrap_err());
@@ -29,7 +29,7 @@ pub async fn dot(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
             .await;
             continue;
         }
-        log::info!("DOT Connection Established");
+        log::info!("DoT Connection Established");
 
         let (r, w) = tokio::io::split(tls.unwrap());
 
@@ -40,14 +40,14 @@ pub async fn dot(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
         let waiters2 = waiters.clone();
         let udp2 = udp.clone();
         tokio::select! {
-            recver = tokio::spawn(async move { recv_query(udp2, r, waiters2).await }) => {
+            recver = tokio::spawn(recv_query(udp2, r, waiters2)) => {
                 if let Err(e) = recver {
-                    log::error!("DoT: {e}")
+                    log::error!("DoT Receiver: {e}")
                 }
             }
             sender = send_query(udp.clone(), rules.clone(), w, waiters) => {
                 if let Err(e) = sender {
-                    log::error!("DoT: {e}")
+                    log::error!("DoT Sender: {e}")
                 }
             }
         }
@@ -62,7 +62,7 @@ async fn recv_query<R: tokio::io::AsyncRead + Unpin>(
     let mut buffer = vec![0; 1024 * 8];
     let mut size: usize = 0;
     loop {
-        size += r.read(&mut buffer[size..]).await?;
+        size += crate::ioutils::read_buffered_slice(&mut buffer[size..], &mut r).await?;
         if size == 0 {
             continue;
         }
@@ -115,24 +115,17 @@ async fn send_query<W: tokio::io::AsyncWrite + Unpin + Send>(
 ) -> tokio::io::Result<()> {
     let mut query = [0; 514];
     loop {
-        let message = if let Some(dur) = CONFIG.connection_keep_alive {
-            match tokio::time::timeout(
-                std::time::Duration::from_secs(dur),
-                udp.recv_from(&mut query[2..]),
-            )
-            .await
-            {
-                Ok(message) => Some(message),
-                Err(_) => {
-                    let _ = w
-                        .write(&[0, 12, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]) // Empty dns query
-                        .await?;
-                    None
-                }
-            }
-        } else {
-            Some(udp.recv_from(&mut query[2..]).await)
-        };
+        let message = crate::keepalive::recv_timeout_with(
+            &udp,
+            CONFIG.connection_keep_alive,
+            &mut query[2..],
+            async {
+                let _ = w
+                    .write(&[0, 12, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]) // Empty dns query
+                    .await;
+            },
+        )
+        .await;
 
         if let Some(Ok((size, addr))) = message {
             if (rules.is_some()

@@ -3,14 +3,14 @@ use tokio::{io::AsyncWriteExt, net::UdpSocket};
 
 use crate::{
     CONFIG,
-    utils::{Buffering, c_len, catch_in_buff, recv_timeout},
+    keepalive::recv_timeout,
+    utils::{Buffering, c_len, catch_in_buff},
 };
 
 pub async fn serve_http11(
     mut stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     serve_addrs: SocketAddr,
     log: bool,
-    response_timeout: (u64, u64),
 ) -> tokio::io::Result<()> {
     let peer = stream.get_ref().0.peer_addr()?;
     let serving_ip = if serve_addrs.ip() == std::net::Ipv4Addr::UNSPECIFIED {
@@ -30,14 +30,7 @@ pub async fn serve_http11(
     let mut respbuff = [0; 4096];
     loop {
         crate::ioutils::read_buffered(&mut reqbuff, &mut stream).await?;
-        if let Err(e) = handle_req(
-            &mut stream,
-            &mut reqbuff,
-            &agent,
-            &mut respbuff,
-            response_timeout,
-        )
-        .await
+        if let Err(e) = handle_req(&mut stream, &mut reqbuff, &agent, &mut respbuff).await
             && log
         {
             log::error!("DoH1.1 server<{peer}:stream>: {e}");
@@ -49,9 +42,8 @@ pub async fn serve_http11(
 async fn handle_req(
     stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     reqbuff: &mut tokio::io::ReadBuf<'_>,
-    agent: &UdpSocket,
+    udp: &UdpSocket,
     respbuff: &mut [u8],
-    response_timeout: (u64, u64),
 ) -> tokio::io::Result<()> {
     let req = HTTP11::parse(reqbuff, stream).await?;
     let dqbuff = match &req.method {
@@ -59,12 +51,16 @@ async fn handle_req(
         Method::Post(body_pos) => &reqbuff.filled()[*body_pos..],
     };
 
-    agent.send(dqbuff).await?;
+    udp.send(dqbuff).await?;
 
     let size: usize;
-    if let Ok(v) = recv_timeout(agent, respbuff, response_timeout.0).await {
+    if let Some(Ok((v, _))) =
+        recv_timeout(udp, Some(CONFIG.doh_server.response_timeout.0), respbuff).await
+    {
         size = v;
-    } else if let Ok(v) = recv_timeout(agent, respbuff, response_timeout.1).await {
+    } else if let Some(Ok((v, _))) =
+        recv_timeout(udp, Some(CONFIG.doh_server.response_timeout.1), respbuff).await
+    {
         size = v;
     } else {
         let _ = stream

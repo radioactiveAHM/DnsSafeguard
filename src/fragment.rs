@@ -6,23 +6,17 @@ async fn segmentation<IO: AsyncWriteExt + std::marker::Unpin>(
     fragmenting: &crate::config::Fragmenting,
     fragment: &[u8],
 ) -> tokio::io::Result<()> {
-    let packet = fragment.len() / fragmenting.segments;
-    let mut written = 0;
     let sleep_interval = crate::utils::parse_range(&fragmenting.sleep_interval)
         .expect("Failed to parse fragmenting sleep_interval range");
-    loop {
-        if written + packet >= fragment.len() {
-            let _ = tcp.write(&fragment[written..]).await?;
-            tcp.flush().await?;
-            break;
-        }
-        let _ = tcp.write(&fragment[written..written + packet]).await?;
+    for segment in
+        fragment.chunks((fragment.len() as f32 / fragmenting.segments as f32).ceil() as usize)
+    {
+        let _ = tcp.write(segment).await?;
         tcp.flush().await?;
-        written += packet;
 
-        sleep(std::time::Duration::from_millis(
-            rand::random_range(sleep_interval.clone()) as u64,
-        ))
+        sleep(std::time::Duration::from_millis(rand::random_range(
+            sleep_interval.clone(),
+        )))
         .await;
     }
     Ok(())
@@ -48,7 +42,7 @@ pub async fn fragment_client_hello_rand<IO: AsyncWriteExt + std::marker::Unpin>(
     let mut fragmented_tls_hello = Vec::with_capacity(256);
 
     loop {
-        let chunck_size = rand::random_range(fragment_size.clone());
+        let chunck_size: usize = rand::random_range(fragment_size.clone());
         if chunck_size + written >= l {
             fragmented_tls_hello.clear();
             fragmented_tls_hello.extend_from_slice(&[
@@ -91,13 +85,13 @@ pub async fn fragment_client_hello_pack<IO: AsyncWriteExt + std::marker::Unpin>(
         panic!("maximum fragment size can not be bigger than 255");
     }
 
-    let mut tls_hello = Vec::with_capacity(1024 * 8);
+    let mut tls_hello = Vec::with_capacity(512);
     let l = c.write_tls(&mut tls_hello)?;
 
     let mut written = 5;
     let mut fragmented_tls_hello = Vec::with_capacity(1024 * 8);
     loop {
-        let size = rand::random_range(fragment_size.clone());
+        let size: usize = rand::random_range(fragment_size.clone());
         if written + size >= l {
             let size = tls_hello[written..l].len();
             fragmented_tls_hello.extend_from_slice(&[22, 3, 1, 0, size as u8]);

@@ -17,9 +17,9 @@ categories = [
 [dependencies]
 webpki-roots = "1.0.2"
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.142"
+serde_json = "1.0.143"
 rand = "0.9.2"
-quinn = { version = "0.11.8", default-features = false, features = ["rustls-ring", "runtime-tokio", "platform-verifier"] }
+quinn = { version = "0.11.9", default-features = false, features = ["rustls-ring", "runtime-tokio", "platform-verifier"] }
 tokio = { version = "1.47.1", features = ["rt-multi-thread", "net", "macros"] }
 h3-quinn = "0.0.10"
 h3 = "0.0.8"

@@ -57,13 +57,12 @@ pub async fn doh_server(dsc: &DohServer, serve_addrs: SocketAddr) {
     log::info!("DoH server Listening on {}", dsc.listen_address);
 
     let log_errors = dsc.log_errors;
-    let response_timeout = dsc.response_timeout;
 
     loop {
         match Tc::new(acceptor.clone(), listener.accept().await) {
             Ok(tc) => {
                 tokio::spawn(async move {
-                    if let Err(e) = tc_handler(tc, serve_addrs, log_errors, response_timeout).await
+                    if let Err(e) = tc_handler(tc, serve_addrs, log_errors).await
                         && log_errors
                     {
                         log::error!("DoH server<TLS>: {e}")
@@ -79,18 +78,13 @@ pub async fn doh_server(dsc: &DohServer, serve_addrs: SocketAddr) {
     }
 }
 
-async fn tc_handler(
-    tc: Tc,
-    serve_addrs: SocketAddr,
-    log: bool,
-    response_timeout: (u64, u64),
-) -> tokio::io::Result<()> {
+async fn tc_handler(tc: Tc, serve_addrs: SocketAddr, log: bool) -> tokio::io::Result<()> {
     let mut stream = tc.accept().await?;
 
     if let Some(alpn) = stream.get_ref().1.alpn_protocol() {
         match alpn {
-            b"h2" => h2p::serve_h2(stream, serve_addrs, log, response_timeout).await?,
-            b"http/1.1" => h11p::serve_http11(stream, serve_addrs, log, response_timeout).await?,
+            b"h2" => h2p::serve_h2(stream, serve_addrs, log).await?,
+            b"http/1.1" => h11p::serve_http11(stream, serve_addrs, log).await?,
             _ => {
                 stream.get_mut().1.send_close_notify();
                 return Err(tokio::io::Error::other(
@@ -99,7 +93,7 @@ async fn tc_handler(
             }
         }
     } else {
-        h11p::serve_http11(stream, serve_addrs, log, response_timeout).await?
+        h11p::serve_http11(stream, serve_addrs, log).await?
     }
 
     Ok(())

@@ -190,7 +190,7 @@ fn ntp() -> [u8; 48] {
 fn syslog() -> Vec<u8> {
     let mut packet = Vec::with_capacity(256);
     packet.extend_from_slice(&[60, 49, 54, 53, 62, 49, 32]);
-    packet.extend_from_slice(&[0;24]);
+    packet.extend_from_slice(&[0; 24]);
 
     let mut rng = rand::rng();
 
@@ -199,7 +199,11 @@ fn syslog() -> Vec<u8> {
     let mid: u8 = rng.random();
     let mlen = rng.random_range(10..256);
     packet.extend_from_slice(
-        format!(" {host} syslog {pid} ID{mid} - {}", Alphanumeric.sample_string(&mut rng, mlen)).as_bytes()
+        format!(
+            " {host} syslog {pid} ID{mid} - {}",
+            Alphanumeric.sample_string(&mut rng, mlen)
+        )
+        .as_bytes(),
     );
 
     packet

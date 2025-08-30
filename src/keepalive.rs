@@ -31,7 +31,7 @@ pub async fn recv_timeout(
     udp: &tokio::net::UdpSocket,
     dur: Option<u64>,
     buf: &mut [u8],
-) -> Option<Result<(usize, std::net::SocketAddr), tokio::io::Error>> {
+) -> Result<(usize, std::net::SocketAddr), tokio::io::Error> {
     let mut buf = tokio::io::ReadBuf::new(buf);
     let poll_recv = std::future::poll_fn(|cx| match udp.poll_recv_from(cx, &mut buf) {
         std::task::Poll::Pending => std::task::Poll::Pending,
@@ -40,8 +40,8 @@ pub async fn recv_timeout(
     });
     tokio::task::yield_now().await;
     if let Some(dur) = dur {
-        (tokio::time::timeout(std::time::Duration::from_secs(dur), poll_recv).await).ok()
+        tokio::time::timeout(std::time::Duration::from_secs(dur), poll_recv).await?
     } else {
-        Some(poll_recv.await)
+        poll_recv.await
     }
 }

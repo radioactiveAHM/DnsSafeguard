@@ -9,28 +9,9 @@ use crate::{
     utils::{Buffering, catch_in_buff},
 };
 
-pub enum RuleDqt {
-    Http([u8; 512], usize),
-    Tls([u8; 514], usize),
-}
-impl RuleDqt {
-    fn slice(&self) -> &[u8] {
-        match self {
-            Self::Http(dq, size) => &dq[..*size],
-            Self::Tls(dq, size) => &dq[2..*size + 2],
-        }
-    }
-    fn slice_mut(&mut self) -> &mut [u8] {
-        match self {
-            Self::Http(dq, size) => &mut dq[..*size],
-            Self::Tls(dq, size) => &mut dq[2..*size + 2],
-        }
-    }
-}
-
 pub async fn rulecheck(
     rules: std::sync::Arc<Option<Vec<Rule>>>,
-    mut dq: RuleDqt,
+    dq: &mut [u8],
     client_addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
 ) -> bool {
@@ -38,13 +19,13 @@ pub async fn rulecheck(
         match &rule.target {
             TargetType::block(t) => {
                 for option in &rule.options {
-                    if catch_in_buff(option, dq.slice()).is_some() {
+                    if catch_in_buff(option, dq).is_some() {
                         match t {
                             Some(tv) => {
-                                let dq_size = dq.slice().len();
-                                let dq_type = &dq.slice()[dq_size - 4..dq_size - 2];
+                                let dq_size = dq.len();
+                                let dq_type = &dq[dq_size - 4..dq_size - 2];
                                 if tv.iter().any(|target| target.octets() == dq_type) {
-                                    let resp = dq.slice_mut();
+                                    let resp = dq;
                                     resp[2] = 133;
                                     resp[3] = 128;
                                     let _ = udp.send_to(resp, client_addr).await;
@@ -52,7 +33,7 @@ pub async fn rulecheck(
                                 }
                             }
                             None => {
-                                let resp = dq.slice_mut();
+                                let resp = dq;
                                 resp[2] = 133;
                                 resp[3] = 128;
                                 let _ = udp.send_to(resp, client_addr).await;
@@ -64,8 +45,9 @@ pub async fn rulecheck(
             }
             TargetType::dns(dns_server) => {
                 for option in &rule.options {
-                    if catch_in_buff(option, dq.slice()).is_some() {
+                    if catch_in_buff(option, dq).is_some() {
                         let dns_server = *dns_server;
+                        let dq = dq.to_vec();
                         tokio::spawn(async move {
                             if let Err(e) = handle_bypass(dq, client_addr, dns_server, udp).await {
                                 log::error!("Bypass<{dns_server}>: {e}");
@@ -77,25 +59,25 @@ pub async fn rulecheck(
             }
             TargetType::ip(ip, ip2) => {
                 for option in &rule.options {
-                    if catch_in_buff(option, dq.slice()).is_some() {
+                    if catch_in_buff(option, dq).is_some() {
                         let mut temp = [0; 1024];
                         let mut resp = Buffering(&mut temp, 0);
                         match ip {
                             IpAddr::V4(ipv4) => {
-                                if gen_resp_v4(dq.slice(), &mut resp, ipv4) {
+                                if gen_resp_v4(dq, &mut resp, ipv4) {
                                     let _ = udp.send_to(resp.get(), client_addr).await;
                                     return true;
                                 }
                             }
                             IpAddr::V6(ipv6) => {
-                                if gen_resp_v6(dq.slice(), &mut resp, ipv6) {
+                                if gen_resp_v6(dq, &mut resp, ipv6) {
                                     let _ = udp.send_to(resp.get(), client_addr).await;
                                     return true;
                                 }
                             }
                         }
                         if let Some(ipv6) = ip2 {
-                            if gen_resp_v6(dq.slice(), &mut resp, ipv6) {
+                            if gen_resp_v6(dq, &mut resp, ipv6) {
                                 let _ = udp.send_to(resp.get(), client_addr).await;
                                 return true;
                             } else {
@@ -112,23 +94,19 @@ pub async fn rulecheck(
 }
 
 async fn handle_bypass(
-    dq: RuleDqt,
+    dq: Vec<u8>,
     client_addr: SocketAddr,
     bypass_target: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
-) -> tokio::io::Result<()> {
+) -> tokio::io::Result<usize> {
     let agent = tokio::net::UdpSocket::bind("0.0.0.0:0").await?;
     agent.connect(bypass_target).await?;
-    agent.send(dq.slice()).await?;
+    agent.send(&dq).await?;
 
     let mut buf = [0; 4096];
-    if let Some(Ok((size, _))) =
-        crate::keepalive::recv_timeout(&udp, Some(CONFIG.response_timeout), &mut buf).await
-    {
-        udp.send_to(&buf[..size], client_addr).await?;
-    }
-
-    Ok(())
+    let (size, _) =
+        crate::keepalive::recv_timeout(&agent, Some(CONFIG.response_timeout), &mut buf).await?;
+    udp.send_to(&buf[..size], client_addr).await
 }
 
 pub async fn rulecheck_sync(
@@ -214,7 +192,7 @@ async fn handle_bypass_sync(
     client_addr: SocketAddr,
     bypass_target: SocketAddr,
     udp: &tokio::net::UdpSocket,
-) -> tokio::io::Result<()> {
+) -> tokio::io::Result<usize> {
     // stage 1: send udp query to dns server
     let agent = tokio::net::UdpSocket::bind("0.0.0.0:0").await?;
     agent.connect(bypass_target).await?;
@@ -222,13 +200,9 @@ async fn handle_bypass_sync(
 
     // stage 2: recv udp query from dns server
     let mut buf = [0; 4096];
-    if let Some(Ok((size, _))) =
-        crate::keepalive::recv_timeout(udp, Some(CONFIG.response_timeout), &mut buf).await
-    {
-        udp.send_to(&buf[..size], client_addr).await?;
-    }
-
-    Ok(())
+    let (size, _) =
+        crate::keepalive::recv_timeout(&agent, Some(CONFIG.response_timeout), &mut buf).await?;
+    udp.send_to(&buf[..size], client_addr).await
 }
 
 #[derive(Clone)]

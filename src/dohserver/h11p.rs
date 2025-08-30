@@ -54,11 +54,11 @@ async fn handle_req(
     udp.send(dqbuff).await?;
 
     let size: usize;
-    if let Some(Ok((v, _))) =
+    if let Ok((v, _)) =
         recv_timeout(udp, Some(CONFIG.doh_server.response_timeout.0), respbuff).await
     {
         size = v;
-    } else if let Some(Ok((v, _))) =
+    } else if let Ok((v, _)) =
         recv_timeout(udp, Some(CONFIG.doh_server.response_timeout.1), respbuff).await
     {
         size = v;

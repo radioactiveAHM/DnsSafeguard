@@ -160,7 +160,7 @@ pub async fn doq(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
                 if (rules.is_some()
                     && rulecheck(
                         rules.clone(),
-                        crate::rule::RuleDqt::Tls(dns_query, query_size),
+                        &mut dns_query[2..query_size + 2],
                         addr,
                         udp.clone(),
                     )

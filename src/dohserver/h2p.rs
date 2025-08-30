@@ -85,11 +85,11 @@ async fn handle_dns_req_post(
 
     let mut buff = [0; 4096];
     let size: usize;
-    if let Some(Ok((v, _))) =
+    if let Ok((v, _)) =
         recv_timeout(&udp, Some(CONFIG.doh_server.response_timeout.0), &mut buff).await
     {
         size = v;
-    } else if let Some(Ok((v, _))) =
+    } else if let Ok((v, _)) =
         recv_timeout(&udp, Some(CONFIG.doh_server.response_timeout.1), &mut buff).await
     {
         size = v;
@@ -134,11 +134,11 @@ async fn handle_dns_req_get(
 
     let mut buff = [0; 4096];
     let size: usize;
-    if let Some(Ok((v, _))) =
+    if let Ok((v, _)) =
         recv_timeout(&udp, Some(CONFIG.doh_server.response_timeout.0), &mut buff).await
     {
         size = v;
-    } else if let Some(Ok((v, _))) =
+    } else if let Ok((v, _)) =
         recv_timeout(&udp, Some(CONFIG.doh_server.response_timeout.1), &mut buff).await
     {
         size = v;

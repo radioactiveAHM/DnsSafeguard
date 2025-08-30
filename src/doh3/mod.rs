@@ -210,7 +210,7 @@ pub async fn http3(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
                 if (rules.is_some()
                     && rulecheck(
                         rules.clone(),
-                        crate::rule::RuleDqt::Http(dns_query, query_size),
+                        &mut dns_query[..query_size],
                         addr,
                         udp.clone(),
                     )

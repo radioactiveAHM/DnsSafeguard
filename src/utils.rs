@@ -64,3 +64,24 @@ pub fn parse_range<T: std::str::FromStr>(s: &str) -> Option<std::ops::Range<T>> 
     }
     None
 }
+
+/// Short hand of `std::collections::VecDeque<u8>` to use for buffering
+pub struct DeqBuffer {
+    inner_buf: std::collections::VecDeque<u8>,
+}
+impl DeqBuffer {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            inner_buf: std::collections::VecDeque::with_capacity(capacity),
+        }
+    }
+    pub fn write(&mut self, buf: &[u8]) {
+        self.inner_buf.extend(buf);
+    }
+    pub fn slice(&mut self) -> &mut [u8] {
+        self.inner_buf.as_mut_slices().0
+    }
+    pub fn remove(&mut self, len: usize) {
+        self.inner_buf.drain(..len);
+    }
+}

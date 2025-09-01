@@ -59,17 +59,16 @@ async fn recv_query<R: tokio::io::AsyncRead + Unpin>(
     mut r: R,
     waiters: Arc<Mutex<std::collections::HashMap<u16, IdType>>>,
 ) -> tokio::io::Result<()> {
-    let mut buffer: std::collections::VecDeque<u8> =
-        std::collections::VecDeque::with_capacity(1024 * 8);
+    let mut buffer = crate::utils::DeqBuffer::new(1024 * 8);
     let mut reading_buf = [0u8; 1024 * 8];
     loop {
         let size = crate::ioutils::read_buffered_slice(&mut reading_buf, &mut r).await?;
         if size == 0 {
             continue;
         }
-        buffer.extend(&reading_buf[..size]);
+        buffer.write(&reading_buf[..size]);
         loop {
-            let buffer_slice = buffer.as_mut_slices().0;
+            let buffer_slice = buffer.slice();
             let size = buffer_slice.len();
             if size < 12 {
                 break;
@@ -102,7 +101,7 @@ async fn recv_query<R: tokio::io::AsyncRead + Unpin>(
                     }
                 }
             }
-            buffer.drain(..message_size + 2);
+            buffer.remove(message_size + 2);
         }
     }
 }

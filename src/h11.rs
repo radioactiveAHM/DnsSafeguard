@@ -8,7 +8,7 @@ use crate::{
 use tokio::{io::AsyncWriteExt, time::sleep};
 
 #[allow(unused_assignments)]
-pub async fn http1(rules: Arc<Option<Vec<crate::rule::Rule>>>) {
+pub async fn http1() {
     // TLS Client
     let ctls = crate::tls::tlsconf(
         vec![b"http/1.1".to_vec()],
@@ -60,9 +60,9 @@ pub async fn http1(rules: Arc<Option<Vec<crate::rule::Rule>>>) {
         loop {
             if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
                 // rule check
-                if (rules.is_some()
+                if (CONFIG.rules.is_some()
                     && crate::rule::rulecheck_sync(
-                        &rules,
+                        &CONFIG.rules,
                         &mut dns_query[..query_size],
                         addr,
                         &udp,
@@ -170,7 +170,7 @@ async fn handler<IO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(
 type RcLocker =
     Arc<tokio::sync::Mutex<tokio::sync::mpsc::Receiver<([u8; 512], usize, std::net::SocketAddr)>>>;
 
-pub async fn h1_multi(rules: Arc<Option<Vec<crate::rule::Rule>>>) {
+pub async fn h1_multi() {
     let ctls = crate::tls::tlsconf(
         vec![b"http/1.1".to_vec()],
         CONFIG.disable_certificate_validation,
@@ -231,9 +231,9 @@ pub async fn h1_multi(rules: Arc<Option<Vec<crate::rule::Rule>>>) {
     loop {
         if let Ok((query_size, addr)) = udp.recv_from(&mut dns_query).await {
             // rule check
-            if (rules.is_some()
+            if (CONFIG.rules.is_some()
                 && crate::rule::rulecheck(
-                    rules.clone(),
+                    &CONFIG.rules,
                     &mut dns_query[..query_size],
                     addr,
                     udp.clone(),

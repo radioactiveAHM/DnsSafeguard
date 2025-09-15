@@ -15,7 +15,7 @@ enum IdType {
     WithID(std::net::SocketAddr),
 }
 
-pub async fn dot(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
+pub async fn dot() {
     let udp = Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
     let ctls = tls::tlsconf(vec![b"dot".to_vec()], CONFIG.disable_certificate_validation);
     loop {
@@ -45,7 +45,7 @@ pub async fn dot(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
                     log::error!("DoT Receiver: {e}")
                 }
             }
-            sender = send_query(udp.clone(), rules.clone(), w, waiters) => {
+            sender = send_query(udp.clone(), w, waiters) => {
                 if let Err(e) = sender {
                     log::error!("DoT Sender: {e}")
                 }
@@ -108,7 +108,6 @@ async fn recv_query<R: tokio::io::AsyncRead + Unpin>(
 
 async fn send_query<W: tokio::io::AsyncWrite + Unpin + Send>(
     udp: Arc<tokio::net::UdpSocket>,
-    rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>,
     mut w: W,
     waiters: Arc<Mutex<std::collections::HashMap<u16, IdType>>>,
 ) -> tokio::io::Result<()> {
@@ -127,8 +126,8 @@ async fn send_query<W: tokio::io::AsyncWrite + Unpin + Send>(
         .await;
 
         if let Some(Ok((size, addr))) = message {
-            if (rules.is_some()
-                && rulecheck(rules.clone(), &mut query[2..size + 2], addr, udp.clone()).await)
+            if (CONFIG.rules.is_some()
+                && rulecheck(&CONFIG.rules, &mut query[2..size + 2], addr, udp.clone()).await)
                 || size < 12
             {
                 continue;

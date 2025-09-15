@@ -9,8 +9,65 @@ use crate::{
     utils::{Buffering, catch_in_buff},
 };
 
+pub struct Rule {
+    pub options: Vec<Vec<u8>>,
+    pub target: TargetType,
+}
+
+#[derive(serde::Deserialize)]
+pub struct RuleRaw {
+    pub options: Vec<String>,
+    pub target: TargetType,
+}
+
+pub fn deserialize_rule<'de, D>(deserializer: D) -> Result<Option<Vec<Rule>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    if let Some(cr) = &<Option<Vec<RuleRaw>> as serde::Deserialize>::deserialize(deserializer)? {
+        if !cr.is_empty() {
+            let r = cr
+                .iter()
+                .map(|config_rule| {
+                    let options = config_rule
+                        .options
+                        .iter()
+                        .map(|option| {
+                            if option.contains(".") {
+                                let mut temp = Vec::new();
+                                for p in option.split(".") {
+                                    if !p.is_empty() && p != " " {
+                                        let mut ptemp = p.as_bytes().to_vec();
+                                        ptemp.insert(0, p.len() as u8);
+                                        temp.append(&mut ptemp);
+                                    }
+                                }
+
+                                temp
+                            } else {
+                                option.as_bytes().to_vec()
+                            }
+                        })
+                        .collect();
+
+                    Rule {
+                        options,
+                        target: config_rule.target.clone(),
+                    }
+                })
+                .collect();
+
+            Ok(Some(r))
+        } else {
+            Ok(None)
+        }
+    } else {
+        Ok(None)
+    }
+}
+
 pub async fn rulecheck(
-    rules: std::sync::Arc<Option<Vec<Rule>>>,
+    rules: &'static Option<Vec<Rule>>,
     dq: &mut [u8],
     client_addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
@@ -203,54 +260,6 @@ async fn handle_bypass_sync(
     let (size, _) =
         crate::keepalive::recv_timeout(&agent, Some(CONFIG.response_timeout), &mut buf).await?;
     udp.send_to(&buf[..size], client_addr).await
-}
-
-#[derive(Clone)]
-pub struct Rule {
-    pub options: Vec<Vec<u8>>,
-    pub target: TargetType,
-}
-pub fn convert_rules(config_rules: &Option<Vec<crate::config::Rule>>) -> Option<Vec<Rule>> {
-    if let Some(cr) = config_rules {
-        if !cr.is_empty() {
-            let r = cr
-                .iter()
-                .map(|config_rule| {
-                    let options = config_rule
-                        .options
-                        .iter()
-                        .map(|option| {
-                            if option.contains(".") {
-                                let mut temp = Vec::new();
-                                for p in option.split(".") {
-                                    if !p.is_empty() && p != " " {
-                                        let mut ptemp = p.as_bytes().to_vec();
-                                        ptemp.insert(0, p.len() as u8);
-                                        temp.append(&mut ptemp);
-                                    }
-                                }
-
-                                temp
-                            } else {
-                                option.as_bytes().to_vec()
-                            }
-                        })
-                        .collect();
-
-                    Rule {
-                        options,
-                        target: config_rule.target.clone(),
-                    }
-                })
-                .collect();
-
-            Some(r)
-        } else {
-            None
-        }
-    } else {
-        None
-    }
 }
 
 #[derive(serde::Deserialize, Clone)]

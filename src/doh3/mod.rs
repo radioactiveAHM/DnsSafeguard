@@ -69,7 +69,7 @@ pub async fn udp_setup(
 }
 
 #[allow(unused_assignments)]
-pub async fn http3(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
+pub async fn http3() {
     let mut endpoint = udp_setup(
         CONFIG.remote_addrs,
         &CONFIG.noise,
@@ -207,9 +207,9 @@ pub async fn http3(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
 
             if let Some(Ok((query_size, addr))) = message {
                 // rule check
-                if (rules.is_some()
+                if (CONFIG.rules.is_some()
                     && rulecheck(
-                        rules.clone(),
+                        &CONFIG.rules,
                         &mut dns_query[..query_size],
                         addr,
                         udp.clone(),

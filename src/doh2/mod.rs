@@ -4,7 +4,7 @@ use h2::client::SendRequest;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::{sync::Mutex, time::sleep};
 
-pub async fn http2(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
+pub async fn http2() {
     // TLS Conf
     let h2tls = tls::tlsconf(vec![b"h2".to_vec()], CONFIG.disable_certificate_validation);
 
@@ -85,9 +85,9 @@ pub async fn http2(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
 
             if let Some(Ok((query_size, addr))) = message {
                 // rule check
-                if (rules.is_some()
+                if (CONFIG.rules.is_some()
                     && rulecheck(
-                        rules.clone(),
+                        &CONFIG.rules,
                         &mut dns_query[..query_size],
                         addr,
                         udp.clone(),

@@ -13,7 +13,7 @@ use crate::{
     utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be},
 };
 
-pub async fn doq(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
+pub async fn doq() {
     let udp = Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
 
     let mut endpoint = udp_setup(
@@ -157,9 +157,9 @@ pub async fn doq(rules: std::sync::Arc<Option<Vec<crate::rule::Rule>>>) {
             // Recive dns query
             if let Some(Ok((query_size, addr))) = message {
                 // rule check
-                if (rules.is_some()
+                if (CONFIG.rules.is_some()
                     && rulecheck(
-                        rules.clone(),
+                        &CONFIG.rules,
                         &mut dns_query[2..query_size + 2],
                         addr,
                         udp.clone(),

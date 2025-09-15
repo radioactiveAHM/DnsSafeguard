@@ -56,14 +56,12 @@ async fn main() {
         ));
     }
 
-    let converted_rules = std::sync::Arc::new(rule::convert_rules(&CONFIG.rules));
-
     match CONFIG.protocol {
-        config::Protocol::h1_multi => h11::h1_multi(converted_rules).await,
-        config::Protocol::h1 => h11::http1(converted_rules).await,
-        config::Protocol::h2 => doh2::http2(converted_rules).await,
-        config::Protocol::h3 => doh3::http3(converted_rules).await,
-        config::Protocol::dot => dot::dot(converted_rules).await,
-        config::Protocol::doq => doq::doq(converted_rules).await,
+        config::Protocol::h1_multi => h11::h1_multi().await,
+        config::Protocol::h1 => h11::http1().await,
+        config::Protocol::h2 => doh2::http2().await,
+        config::Protocol::h3 => doh3::http3().await,
+        config::Protocol::dot => dot::dot().await,
+        config::Protocol::doq => doq::doq().await,
     };
 }

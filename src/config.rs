@@ -90,12 +90,6 @@ pub enum TargetType {
     ip(std::net::IpAddr, Option<std::net::Ipv6Addr>),
 }
 
-#[derive(serde::Deserialize, Clone)]
-pub struct Rule {
-    pub options: Vec<String>,
-    pub target: TargetType,
-}
-
 #[derive(serde::Deserialize)]
 pub struct DohServer {
     pub enable: bool,
@@ -167,7 +161,8 @@ pub struct Config {
     pub connection: Connection,
     pub tcp_socket_options: TcpSocketOptions,
     pub doh_server: DohServer,
-    pub rules: Option<Vec<Rule>>,
+    #[serde(deserialize_with = "crate::rule::deserialize_rule")]
+    pub rules: Option<Vec<crate::rule::Rule>>,
     pub overwrite: Option<Vec<crate::ipoverwrite::IpOverwrite>>,
 }
 

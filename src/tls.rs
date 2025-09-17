@@ -96,7 +96,7 @@ pub async fn dynamic_tls_conn_gen(
 
         Ok(Box::new(
             tokio_rustls::TlsConnector::from(ctls)
-                .connect_with_stream(
+                .connect_with(
                     example_com,
                     tcp_connect_handle(
                         config.remote_addrs,

@@ -18,10 +18,10 @@ jobs:
             os: ubuntu-latest
             use_cross: false
             binary_name: DnsSafeguard
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            use_cross: true
-            binary_name: DnsSafeguard
+          # - target: aarch64-unknown-linux-gnu
+          #   os: ubuntu-latest
+          #   use_cross: true
+          #   binary_name: DnsSafeguard
 
           # macOS builds (native compilation)
           # - target: x86_64-apple-darwin

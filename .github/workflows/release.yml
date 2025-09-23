@@ -142,6 +142,7 @@ jobs:
           7z a ${{ github.event.repository.name }}-${{ matrix.target }}.zip "${{ matrix.binary_name }}"
 
       - name: Verify artifacts before upload
+        shell: bash
         run: |
           echo "Checking for artifacts to upload..."
           ls -la artifacts/ || echo "artifacts directory not found"

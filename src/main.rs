@@ -22,10 +22,6 @@ static CONFIG: std::sync::LazyLock<config::Config> = std::sync::LazyLock::new(co
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
-    tokio_rustls::rustls::crypto::ring::default_provider()
-        .install_default()
-        .unwrap();
-
     {
         let mut logger = env_logger::builder();
         #[cfg(not(debug_assertions))]

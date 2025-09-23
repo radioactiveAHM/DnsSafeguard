@@ -82,6 +82,7 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Verify binary exists
+        shell: bash
         run: |
           if [ -f "target/${{ matrix.target }}/release/${{ matrix.binary_name }}" ]; then
             echo "Binary found: target/${{ matrix.target }}/release/${{ matrix.binary_name }}"

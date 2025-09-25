@@ -41,10 +41,22 @@ This crate uses `#![forbid(unsafe_code)]` to ensure everything is implemented in
 
 ## Building the Project
 
-To build the project, execute the following command in the project directory:
+This project supports two cryptographic backends: **aws-lc-rs** (default) and **ring**. Choose the appropriate build command based on your desired backend.
+
+### Default Build (aws-lc-rs)
+
+Requires **CMake** and **NASM** installed.
 
 ```sh
 cargo build --release
+```
+
+### Alternative Build (ring)
+
+Use this if you prefer the `ring` cryptography backend:
+
+```sh
+cargo build --release --no-default-features --features "ring"
 ```
 
 ## How to Use

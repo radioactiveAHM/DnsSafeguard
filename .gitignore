@@ -1,9 +1,4 @@
+Cargo.lock
 /target
-/build
 /*.pem
 /*.crt
-/dns.sample# Added by goreleaser init:
-dist/
-.intentionally-empty-file.o
-target/
-.log

@@ -64,7 +64,7 @@ jobs:
 
       - name: Build binary (native)
         if: matrix.use_cross == false
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --no-default-features --features "ring" --target ${{ matrix.target }} 
 
       - name: Verify binary exists
         shell: bash

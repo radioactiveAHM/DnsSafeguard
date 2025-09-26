@@ -15,7 +15,7 @@ jobs:
         include:
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
-            use_cross: false
+            use_cross: true
             binary_name: DnsSafeguard
 
           - target: aarch64-apple-darwin
@@ -35,7 +35,7 @@ jobs:
       - name: Install system dependencies
         if: matrix.use_cross == true
         run: |
-          sudo apt-get update && sudo apt-get install -y mingw-w64 nasm cmake
+          sudo apt-get update && sudo apt-get install -y mingw-w64
           case "${{ matrix.target }}" in
             "aarch64-unknown-linux-gnu")
               sudo apt-get install -y gcc-aarch64-linux-gnu
@@ -60,7 +60,7 @@ jobs:
 
       - name: Build binary (using cross)
         if: matrix.use_cross == true
-        run: cross build --release --target ${{ matrix.target }}
+        run: cross build --release --no-default-features --features "ring" --target ${{ matrix.target }}
 
       - name: Build binary (native)
         if: matrix.use_cross == false

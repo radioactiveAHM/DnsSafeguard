@@ -1,12 +1,25 @@
 # Local DoH Server
 
-Local DNS over HTTPS (DoH) server supporting HTTP/2 (HTTP/1.1 coming soon). This setup is useful for applications like DnsSafeguard, especially for browsers like Microsoft Edge to enable Encrypted Client Hello (ECH) for enhanced privacy. ECH requires a DoH server to function.
+A local DNS over HTTPS (DoH) server supporting HTTP/2 (with HTTP/1.1 support coming soon). This setup enables applications like DnsSafeguard to provide enhanced privacy features, such as Encrypted Client Hello (ECH) in browsers like Microsoft Edge, which requires a DoH server to function.
 
-## Usage
+## Prerequisites
 
-To use the local DoH server, you need to provide a key and a system-trusted certificate. Follow these steps to generate them:
+- OpenSSL installed on your system
+- Administrative access to install certificates
 
-1. Create a folder and a file named san.cnf with the following content:
+## Setup Instructions
+
+### 1. Generate SSL Certificate and Key
+
+Create a configuration folder and generate the necessary cryptographic files:
+
+```bash
+# Create a dedicated directory for your certificate files
+mkdir doh-certificates
+cd doh-certificates
+```
+
+Create `san.cnf` with the following content:
 
 ```cnf
 [req]
@@ -26,23 +39,59 @@ DNS.1 = localhost
 IP.1 = 127.0.0.1
 ```
 
-2. Generate the Key File: Run the following command to generate the key file `openssl ecparam -genkey -name prime256v1 -out key.pem`.
-3. Generate the Certificate File: Run the following command to generate the certificate file `openssl req -new -x509 -days 36500 -key key.pem -out cert.pem -config san.cnf`.
-4. Install the Certificate: install the generated certificate file so the system can trust it.
-5. Configure DnsSafeguard: Move the key and certificate files to the DnsSafeguard folder and configure the DnsSafeguard configuration file accordingly.
-6. Use the DoH Server: Use the following URL in browsers or applications to connect to the local DoH server `https://127.0.0.1/dns-query{?dns}` for GET method and `https://127.0.0.1/dns-query` for POST method.
+Generate the cryptographic files:
 
-## Windows 11: Trust Certificate
+```bash
+# Generate elliptic curve private key
+openssl ecparam -genkey -name prime256v1 -out key.pem
 
-To install a certificate so the Windows 11 can trust it, follow these steps:
+# Generate self-signed certificate (valid for 1 year)
+openssl req -new -x509 -days 365 -key key.pem -out cert.crt -config san.cnf
+```
 
-1. Rename the Certificate File:
-   * Rename `cert.pem` to `cert.crt` The icon of `cert.crt` should change.
-2. Install the Certificate:
-   * Right-click on `cert.crt` and select `Install Certificate`.
-   * In the Store Location section, select `Local Machine` and click Next.
-   * Choose `Place all certificates in the following store`, then click Browse.
-   * Select `Trusted Root Certification Authorities` and click OK.
-   * Click Next and complete the wizard.
-3. Verify in Browser: Try accessing the desired site in Firefox. If it doesn’t work, repeat the installation process but select `Third-Party Root Certification Authorities` instead of `Trusted Root Certification Authorities`.
-4. Update DnsSafeguard Configuration: Don’t forget to rename `cert.pem` to `cert.crt` in the DnsSafeguard configuration file.
+### 2. Install Certificate as Trusted Root (Windows 11)
+
+For Windows 11 to trust your local DoH server, install the certificate as follows:
+
+1. **Locate the Certificate File**: Right-click on `cert.crt` and select **Install Certificate**
+2. **Store Location**: Select **Local Machine** → Click **Next**
+3. **Certificate Store**: Choose **Place all certificates in the following store**
+4. **Browse**: Select **Trusted Root Certification Authorities** → Click **OK**
+5. **Complete**: Click **Next** → **Finish** to complete the installation
+
+**Security Note**: Only install certificates from trusted sources. Since you generated this certificate yourself, it's safe for local use.
+
+### 3. Configure DnsSafeguard
+
+1. Copy `key.pem` and `cert.crt` to your DnsSafeguard configuration directory
+2. Update the DnsSafeguard configuration file to reference these files
+3. Restart DnsSafeguard to apply the changes
+
+### 4. Connect to Your DoH Server
+
+Use the following endpoints to connect to your local DoH server:
+
+- **GET requests**: `https://127.0.0.1/dns-query{?dns}`
+- **POST requests**: `https://127.0.0.1/dns-query`
+
+## Verification
+
+To verify your setup is working correctly:
+
+1. Check that DnsSafeguard is running without errors
+2. Test the DoH endpoint using a tool like `curl`:
+
+   ```bash
+   curl -H "accept: application/dns-json" "https://127.0.0.1/dns-query?name=example.com&type=A"
+   ```
+
+## Troubleshooting
+
+- **Certificate errors**: Ensure the certificate is installed in the **Trusted Root Certification Authorities** store
+- **Connection refused**: Verify DnsSafeguard is running and configured to use the correct certificate files
+- **Browser trust issues**: Some browsers may require additional steps to trust local certificates
+
+## Security Considerations
+
+- Keep your `key.pem` file secure and never share it
+- The generated certificate is only valid for localhost/127.0.0.1

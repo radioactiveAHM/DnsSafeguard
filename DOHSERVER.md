@@ -1,6 +1,6 @@
 # Local DoH Server
 
-A local DNS over HTTPS (DoH) server supporting HTTP/2 (with HTTP/1.1 support coming soon). This setup enables applications like DnsSafeguard to provide enhanced privacy features, such as Encrypted Client Hello (ECH) in browsers like Microsoft Edge, which requires a DoH server to function.
+A local DNS over HTTPS (DoH) server supporting HTTP/2 and HTTP/1.1 (POST and GET). This setup enables applications like DnsSafeguard to provide enhanced privacy features, such as Encrypted Client Hello (ECH) in browsers like Microsoft Edge, which requires a DoH server to function.
 
 ## Prerequisites
 

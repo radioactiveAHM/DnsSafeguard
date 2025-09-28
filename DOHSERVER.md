@@ -82,7 +82,7 @@ To verify your setup is working correctly:
 2. Test the DoH endpoint using a tool like `curl`:
 
    ```bash
-   curl -H "accept: application/dns-json" "https://127.0.0.1/dns-query?name=example.com&type=A"
+   curl --output - 'https://127.0.0.1/dns-query?dns=yKUBAAABAAAAAAAAC3ZzY29kZS1zeW5jDnRyYWZmaWNtYW5hZ2VyA25ldAAAAQAB'
    ```
 
 ## Troubleshooting

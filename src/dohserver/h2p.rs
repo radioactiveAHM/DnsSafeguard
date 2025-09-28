@@ -17,6 +17,7 @@ pub async fn serve_h2(
     };
     loop {
         if let Some(Ok((mut req, mut resp))) = h2c.accept().await {
+            log::trace!("{:?}", req);
             if req.method() == http::Method::POST {
                 tokio::spawn(async move {
                     if let Some(Ok(body)) = req.body_mut().data().await {

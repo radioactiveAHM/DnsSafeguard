@@ -46,6 +46,7 @@ async fn handle_req(
     respbuff: &mut [u8],
 ) -> tokio::io::Result<()> {
     let req = HTTP11::parse(reqbuff, stream).await?;
+    log::trace!("{}", String::from_utf8_lossy(reqbuff.filled()));
     let dqbuff = match &req.method {
         Method::Get(dq) => dq.as_slice(),
         Method::Post(body_pos) => &reqbuff.filled()[*body_pos..],

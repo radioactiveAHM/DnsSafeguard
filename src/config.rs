@@ -141,6 +141,23 @@ pub struct Log {
 }
 
 #[derive(serde::Deserialize)]
+pub enum RuntimeMode {
+    Single,
+    Multi,
+}
+
+#[derive(serde::Deserialize)]
+pub struct Runtime {
+    pub runtime_mode: RuntimeMode,
+    pub worker_threads: Option<usize>,
+    pub thread_stack_size: Option<usize>,
+    pub event_interval: Option<u32>,
+    pub global_queue_interval: Option<u32>,
+    pub max_io_events_per_tick: Option<usize>,
+    pub thread_keep_alive: Option<u64>,
+}
+
+#[derive(serde::Deserialize)]
 pub struct Config {
     pub log: Log,
     pub protocol: Protocol,
@@ -161,6 +178,7 @@ pub struct Config {
     pub connection: Connection,
     pub tcp_socket_options: TcpSocketOptions,
     pub doh_server: DohServer,
+    pub runtime: Runtime,
     #[serde(deserialize_with = "crate::rule::deserialize_rule")]
     pub rules: Option<Vec<crate::rule::Rule>>,
     pub overwrite: Option<Vec<crate::ipoverwrite::IpOverwrite>>,

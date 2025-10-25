@@ -153,6 +153,14 @@ The configuration file is structured in JSON format and includes the following s
   - `Cache Control`: cache control as response header.
   - `Response Timeout`: List of two durations (in seconds) specifying how long to wait for a response attempt.
   - `Log Errors`: Enable logging DoH sever errors.
+- `Runtime`: [Tokio runtime document](https://docs.rs/tokio/latest/tokio/runtime/struct.Builder.html)
+  - `Runtime Mode`: Variants are `Multi` (Multi-threaded runtime) and `Single` (Single-threaded runtime).
+  - `Worker Threads`: Number of worker threads used in Multi mode.
+  - `Thread Stack Size`: Stack size allocated per thread in Multi mode.
+  - `Event Interval`: Number of scheduler ticks after which the scheduler will poll for external events. `null` for default.
+  - `Global Queue Interval`: Number of scheduler ticks after which the scheduler will poll the global task queue. `null` for default.
+  - `Max Io Events Per Tick`: Enables the I/O driver and configures the max number of events to be processed per tick. `null` for default.
+  - `Thread Keep Alive`: Duration a thread remains alive in the blocking pool when idle. By default, the timeout for a thread is set to 10 seconds. `null` for default.
 - `Rules`: Block or bypass DNS queries containing specified domains or keywords. [Rules Page](/RULES.md).
 - `Overwrite`: Overwrite IPs from DNS responses. [Overwrite Page](/OVERWRITE.md).
 

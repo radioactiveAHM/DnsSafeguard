@@ -19,7 +19,7 @@ pub fn get_interface(ipv4: bool, interface: &str) -> SocketAddr {
         log::info!("{} Selected for binding", ip.1);
         SocketAddr::new(ip.1, 0)
     } else {
-        log::error!(
+        log::warn!(
             "interface not found or interface does not provide IPv6.\nAvailable interface are:"
         );
         for interface in interfaces {
@@ -85,7 +85,7 @@ pub async fn tcp_connect_handle(
                 return stream;
             }
             Err(e) => {
-                log::error!("TCP Connection: {e}");
+                log::warn!("TCP Connection: {e}");
                 sleep(std::time::Duration::from_secs(
                     connection_cfg.reconnect_sleep,
                 ))

@@ -73,7 +73,7 @@ pub async fn doq() {
                 pending
             } else {
                 connecting_retry += 1;
-                log::error!("DoQ: Connecting timeout");
+                log::warn!("DoQ: Connecting timeout");
                 sleep(std::time::Duration::from_secs(
                     CONFIG.connection.reconnect_sleep,
                 ))
@@ -84,7 +84,7 @@ pub async fn doq() {
 
         if conn.is_err() {
             connecting_retry += 1;
-            log::error!("DoQ: {}", conn.unwrap_err());
+            log::warn!("DoQ: {}", conn.unwrap_err());
             sleep(std::time::Duration::from_secs(
                 CONFIG.connection.reconnect_sleep,
             ))
@@ -99,7 +99,7 @@ pub async fn doq() {
         let q2 = quic.clone();
         let dead_conn2 = dead_conn.clone();
         let watcher = tokio::spawn(async move {
-            log::error!("DoQ Watcher: {}", q2.closed().await);
+            log::warn!("DoQ Watcher: {}", q2.closed().await);
             *dead_conn2.lock().await = true;
         });
 
@@ -112,13 +112,13 @@ pub async fn doq() {
                     tokio::spawn(async move {
                         if let Err(e) = send_dq(bistream, (*dns_query, query_size), addr, udp).await
                         {
-                            log::error!("DoQ Stream: {e}");
+                            log::warn!("DoQ Stream: {e}");
                             *dead.lock().await = true;
                         }
                     });
                 }
                 Err(e) => {
-                    log::error!("DoQ Connection: {e}");
+                    log::warn!("DoQ Connection: {e}");
                     continue;
                 }
             }
@@ -146,7 +146,7 @@ pub async fn doq() {
                             let _ = recv.read_chunk(1024 * 4, false).await;
                         }
                         Err(e) => {
-                            log::error!("DoQ Connection: {e}");
+                            log::warn!("DoQ Connection: {e}");
                             *dead.lock().await = true;
                         }
                     };
@@ -182,13 +182,13 @@ pub async fn doq() {
                             if let Err(e) =
                                 send_dq(bistream, (dns_query, query_size), addr, udp).await
                             {
-                                log::error!("DoQ Stream: {e}");
+                                log::warn!("DoQ Stream: {e}");
                                 *dead.lock().await = true;
                             }
                         });
                     }
                     Err(e) => {
-                        log::error!("DoQ Connection: {e}");
+                        log::warn!("DoQ Connection: {e}");
                         break;
                     }
                 }

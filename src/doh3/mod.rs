@@ -129,7 +129,7 @@ pub async fn http3() {
                 pending
             } else {
                 connecting_retry += 1;
-                log::error!("H3: Connecting timeout");
+                log::warn!("H3: Connecting timeout");
                 sleep(std::time::Duration::from_secs(
                     CONFIG.connection.reconnect_sleep,
                 ))
@@ -140,7 +140,7 @@ pub async fn http3() {
 
         if conn.is_err() {
             connecting_retry += 1;
-            log::error!("H3: {}", conn.unwrap_err());
+            log::warn!("H3: {}", conn.unwrap_err());
             sleep(std::time::Duration::from_secs(
                 CONFIG.connection.reconnect_sleep,
             ))
@@ -152,7 +152,7 @@ pub async fn http3() {
         let (mut h3c, h3) = match h3::client::new(h3_quinn::Connection::new(conn.unwrap())).await {
             Ok(conn) => conn,
             Err(e) => {
-                log::error!("H3: {e}");
+                log::warn!("H3: {e}");
                 continue;
             }
         };
@@ -161,7 +161,7 @@ pub async fn http3() {
 
         let dead_conn2 = dead_conn.clone();
         let watcher = tokio::spawn(async move {
-            log::error!("H3: {}", h3c.wait_idle().await);
+            log::warn!("H3: {}", h3c.wait_idle().await);
             *(dead_conn2.lock().await) = true;
         });
 
@@ -171,7 +171,7 @@ pub async fn http3() {
             let h3 = h3.clone();
             tokio::spawn(async move {
                 if let Err(e) = send_request(h3, (*dns_query, query_size), addr, udp).await {
-                    log::error!("H3 Stream: {e}");
+                    log::warn!("H3 Stream: {e}");
                     *dead_conn.lock().await = true;
                 }
             });
@@ -198,7 +198,7 @@ pub async fn http3() {
                             .body(())
                             .unwrap();
                     if let Err(e) = h3.send_request(req).await {
-                        log::error!("H3: {e}");
+                        log::warn!("H3: {e}");
                         *(quic_conn_dead.lock().await) = true;
                     }
                 },
@@ -229,7 +229,7 @@ pub async fn http3() {
                 let h3 = h3.clone();
                 tokio::spawn(async move {
                     if let Err(e) = send_request(h3, (dns_query, query_size), addr, udp).await {
-                        log::error!("H3 Stream: {e}");
+                        log::warn!("H3 Stream: {e}");
                         *quic_conn_dead.lock().await = true;
                     }
                 });
@@ -243,7 +243,7 @@ async fn send_request(
     dns_query: ([u8; 512], usize),
     addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+) -> tokio::io::Result<()> {
     let mut reqs = match CONFIG.http_method {
         config::HttpMethod::GET => {
             get(
@@ -267,30 +267,35 @@ async fn send_request(
                             .scheme("https")
                             .authority(CONFIG.server_name.as_str())
                             .path_and_query(p)
-                            .build()?,
+                            .build()
+                            .map_err(tokio::io::Error::other)?,
                     )
                     .header("Accept", "application/dns-message")
                     .header("Content-Type", "application/dns-message")
                     .header("content-length", dns_query.1)
                     .version(http::Version::HTTP_3)
-                    .body(())?,
+                    .body(())
+                    .map_err(tokio::io::Error::other)?,
                 )
-                .await?;
+                .await
+                .map_err(tokio::io::Error::other)?;
             // pending
             pending
                 .send_data(bytes::Bytes::copy_from_slice(&dns_query.0[..dns_query.1]))
-                .await?;
+                .await
+                .map_err(tokio::io::Error::other)?;
             pending
         }
     };
 
-    reqs.finish().await?;
+    reqs.finish().await.map_err(tokio::io::Error::other)?;
 
     let resp = timeout(
         std::time::Duration::from_secs(CONFIG.response_timeout),
         reqs.recv_response(),
     )
-    .await??;
+    .await?
+    .map_err(tokio::io::Error::other)?;
 
     let clen: usize = if let Some(clen) = resp.headers().get("content-length") {
         clen.to_str().unwrap_or("0").parse().unwrap_or(0)
@@ -301,7 +306,7 @@ async fn send_request(
     if resp.status() == http::status::StatusCode::OK {
         let mut buff = [0; 1024 * 8];
         let mut body_len = 0;
-        if let Some(body) = reqs.recv_data().await? {
+        if let Some(body) = reqs.recv_data().await.map_err(tokio::io::Error::other)? {
             body_len += body.reader().read(&mut buff)?;
         }
 
@@ -310,7 +315,7 @@ async fn send_request(
                 if body_len >= clen {
                     break;
                 }
-                if let Some(body) = reqs.recv_data().await? {
+                if let Some(body) = reqs.recv_data().await.map_err(tokio::io::Error::other)? {
                     body_len += body.reader().read(&mut buff[body_len..])?;
                 } else {
                     break;
@@ -323,7 +328,7 @@ async fn send_request(
         }
         let _ = udp.send_to(&buff[..body_len], addr).await;
     } else {
-        log::error!(
+        log::warn!(
             "H3 Stream: Remote responded with status code of {}",
             resp.status().as_str()
         );
@@ -338,24 +343,28 @@ async fn get(
     server_name: &'static str,
     ucpath: &'static Option<String>,
     dns_query: ([u8; 512], usize),
-) -> Result<
-    h3::client::RequestStream<h3_quinn::BidiStream<bytes::Bytes>, bytes::Bytes>,
-    Box<dyn std::error::Error + Send + Sync>,
-> {
+) -> tokio::io::Result<h3::client::RequestStream<h3_quinn::BidiStream<bytes::Bytes>, bytes::Bytes>>
+{
     let mut temp = [0u8; 512];
     let mut url = [0; 1024];
     let r = h3
         .send_request(
-            http::Request::get(genrequrl(
-                &mut Buffering(&mut url, 0),
-                server_name.as_bytes(),
-                base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)?,
-                ucpath,
-            )?)
+            http::Request::get(
+                genrequrl(
+                    &mut Buffering(&mut url, 0),
+                    server_name.as_bytes(),
+                    base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)
+                        .map_err(|_| tokio::io::Error::other("base64 url encode error"))?,
+                    ucpath,
+                )
+                .map_err(tokio::io::Error::other)?,
+            )
             .version(http::Version::HTTP_3)
             .header("Accept", "application/dns-message")
-            .body(())?,
+            .body(())
+            .map_err(tokio::io::Error::other)?,
         )
-        .await?;
+        .await
+        .map_err(tokio::io::Error::other)?;
     Ok(r)
 }

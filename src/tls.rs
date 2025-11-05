@@ -1,4 +1,4 @@
-use std::{error::Error, fmt::Debug, sync::Arc};
+use std::{fmt::Debug, sync::Arc};
 
 use crate::interface::tcp_connect_handle;
 
@@ -40,7 +40,7 @@ pub fn tlsfragmenting(
                         crate::fragment::fragment_client_hello_pack(tls, tcp, fragmenting).await
                     }
                 } {
-                    log::error!("TLS Fragmenting: {e}");
+                    log::warn!("TLS Fragmenting: {e}");
                 }
             });
         });
@@ -57,7 +57,7 @@ impl AsyncIO for tokio_rustls::client::TlsStream<tokio::net::TcpStream> {}
 pub async fn dynamic_tls_conn_gen(
     alpn: &[&str],
     ctls: Arc<tokio_rustls::rustls::ClientConfig>,
-) -> Result<Box<dyn AsyncIO>, Box<dyn Error + Send + Sync>> {
+) -> tokio::io::Result<Box<dyn AsyncIO>> {
     let config = &crate::CONFIG;
     if config.native_tls {
         let sni = if config.ip_as_sni {
@@ -71,7 +71,8 @@ pub async fn dynamic_tls_conn_gen(
                 native_tls::TlsConnector::builder()
                     .request_alpns(alpn)
                     .danger_accept_invalid_certs(config.disable_certificate_validation)
-                    .build()?,
+                    .build()
+                    .map_err(tokio::io::Error::other)?,
             )
             .connect(
                 &sni,
@@ -83,7 +84,8 @@ pub async fn dynamic_tls_conn_gen(
                 )
                 .await,
             )
-            .await?,
+            .await
+            .map_err(tokio::io::Error::other)?,
         ))
     } else {
         let example_com = if config.ip_as_sni {

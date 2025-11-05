@@ -65,13 +65,13 @@ pub async fn doh_server(dsc: &DohServer, serve_addrs: SocketAddr) {
                     if let Err(e) = tc_handler(tc, serve_addrs, log_errors).await
                         && log_errors
                     {
-                        log::error!("DoH server<TLS>: {e}")
+                        log::warn!("DoH server<TLS>: {e}")
                     }
                 });
             }
             Err(e) => {
                 if dsc.log_errors {
-                    log::error!("DoH server<TLS>: {e}")
+                    log::warn!("DoH server<TLS>: {e}")
                 }
             }
         }

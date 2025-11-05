@@ -11,10 +11,9 @@ pub async fn serve_h2(
     log: bool,
 ) -> tokio::io::Result<()> {
     let peer = stream.get_ref().0.peer_addr()?;
-    let mut h2c = match h2::server::handshake(stream).await {
-        Ok(c) => c,
-        Err(e) => return Err(tokio::io::Error::other(e)),
-    };
+    let mut h2c = h2::server::handshake(stream)
+        .await
+        .map_err(tokio::io::Error::other)?;
     loop {
         if let Some(Ok((mut req, mut resp))) = h2c.accept().await {
             log::trace!("{:?}", &req);
@@ -24,7 +23,7 @@ pub async fn serve_h2(
                         if let Err(e) = handle_dns_req_post(&mut resp, body, serve_addrs).await
                             && log
                         {
-                            log::error!(
+                            log::warn!(
                                 "DoH2 server<{}:stream(POST):{}>: {}",
                                 peer,
                                 resp.stream_id().as_u32(),
@@ -42,7 +41,7 @@ pub async fn serve_h2(
                             if let Err(e) = handle_dns_req_get(&mut resp, dq, serve_addrs).await
                                 && log
                             {
-                                log::error!(
+                                log::warn!(
                                     "DoH2 server<{}:stream(GET):{}>: {}",
                                     peer,
                                     resp.stream_id().as_u32(),
@@ -95,17 +94,16 @@ async fn handle_dns_req_post(
     {
         size = v;
     } else {
-        match resp.send_response(
+        resp.send_response(
             Response::builder()
                 .version(http::Version::HTTP_2)
                 .status(http::status::StatusCode::SERVICE_UNAVAILABLE)
                 .body(())
                 .unwrap(),
             true,
-        ) {
-            Ok(_) => return Ok(()),
-            Err(e) => return Err(tokio::io::Error::other(e)),
-        };
+        )
+        .map_err(tokio::io::Error::other)?;
+        return Ok(());
     }
 
     if let Err(e) = handle_resp(resp, &buff, size).await {
@@ -144,17 +142,16 @@ async fn handle_dns_req_get(
     {
         size = v;
     } else {
-        match resp.send_response(
+        resp.send_response(
             Response::builder()
                 .version(http::Version::HTTP_2)
                 .status(http::status::StatusCode::SERVICE_UNAVAILABLE)
                 .body(())
                 .unwrap(),
             true,
-        ) {
-            Ok(_) => return Ok(()),
-            Err(e) => return Err(tokio::io::Error::other(e)),
-        };
+        )
+        .map_err(tokio::io::Error::other)?;
+        return Ok(());
     }
 
     handle_resp(resp, &buff, size).await

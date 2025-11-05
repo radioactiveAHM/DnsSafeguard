@@ -33,7 +33,7 @@ pub async fn serve_http11(
         if let Err(e) = handle_req(&mut stream, &mut reqbuff, &agent, &mut respbuff).await
             && log
         {
-            log::error!("DoH1.1 server<{peer}:stream>: {e}");
+            log::warn!("DoH1.1 server<{peer}:stream>: {e}");
         }
         reqbuff.clear();
     }
@@ -120,12 +120,12 @@ impl HTTP11 {
     ) -> tokio::io::Result<Self> {
         if &reqbuff.filled()[..3] == b"GET" {
             if let Some(bs4dns) = HTTP11::find_query(reqbuff.filled()) {
-                match base64_url::decode(bs4dns) {
-                    Ok(q) => Ok(Self {
-                        method: Method::Get(q),
-                    }),
-                    Err(e) => Err(tokio::io::Error::other(e)),
-                }
+                Ok(Self {
+                    method: Method::Get(
+                        base64_url::decode(bs4dns)
+                            .map_err(|_| tokio::io::Error::other("base64 url encode error"))?,
+                    ),
+                })
             } else {
                 Err(tokio::io::Error::other(HTTP11Errors::NoDnsQuery))
             }

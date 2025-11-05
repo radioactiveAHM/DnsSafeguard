@@ -21,7 +21,7 @@ pub async fn http1() {
         log::info!("HTTP/1.1 Connecting");
         let tls = crate::tls::dynamic_tls_conn_gen(&["http/1.1"], ctls.clone()).await;
         if tls.is_err() {
-            log::error!("{}", tls.unwrap_err());
+            log::warn!("{}", tls.unwrap_err());
             sleep(std::time::Duration::from_secs(
                 CONFIG.connection.reconnect_sleep,
             ))
@@ -84,7 +84,7 @@ pub async fn http1() {
                 )
                 .await
                 {
-                    log::error!("HTTP/1.1: {e}");
+                    log::warn!("HTTP/1.1: {e}");
                     tank = Some((Box::new(dns_query), query_size, addr));
                     break;
                 }
@@ -103,12 +103,8 @@ async fn handler<IO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(
     bf_http_resp: &mut tokio::io::ReadBuf<'_>,
     addr: &SocketAddr,
 ) -> tokio::io::Result<()> {
-    let query_bs4url = match base64_url::encode_to_slice(&dns_query, base64_url_temp) {
-        Ok(bs4) => bs4,
-        Err(e) => {
-            return Err(tokio::io::Error::other(e));
-        }
-    };
+    let query_bs4url = base64_url::encode_to_slice(&dns_query, base64_url_temp)
+        .map_err(|_| tokio::io::Error::other("base64 url encode error"))?;
     let mut b = Buffering(url, 0);
     let http_req = genrequrlh1(
         &mut b,
@@ -190,7 +186,7 @@ pub async fn h1_multi() {
                 let tls_conn =
                     crate::tls::dynamic_tls_conn_gen(&["http/1.1"], tls_config.clone()).await;
                 if tls_conn.is_err() {
-                    log::error!("{}", tls_conn.unwrap_err());
+                    log::warn!("{}", tls_conn.unwrap_err());
                     tokio::time::sleep(std::time::Duration::from_secs(
                         CONFIG.connection.reconnect_sleep,
                     ))
@@ -219,7 +215,7 @@ pub async fn h1_multi() {
                         )
                         .await
                     {
-                        log::error!("HTTP/1.1 Connection {conn_i}: {e}");
+                        log::warn!("HTTP/1.1 Connection {conn_i}: {e}");
                         break;
                     }
                 }

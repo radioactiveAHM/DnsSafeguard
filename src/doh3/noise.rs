@@ -247,6 +247,6 @@ pub async fn noiser(noise: &Noise, target: SocketAddr, socket: &socket2::Socket)
         log::info!("{sent_bytes} bytes sent as noise");
         sleep(std::time::Duration::from_millis(noise.sleep)).await;
     } else {
-        log::error!("Noise failed");
+        log::warn!("Noise failed");
     }
 }

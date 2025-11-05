@@ -22,7 +22,7 @@ pub async fn dot() {
         log::info!("DoT Connecting");
         let tls = crate::tls::dynamic_tls_conn_gen(&["dot"], ctls.clone()).await;
         if tls.is_err() {
-            log::error!("DoT: {}", tls.unwrap_err());
+            log::warn!("DoT: {}", tls.unwrap_err());
             tokio::time::sleep(std::time::Duration::from_secs(
                 CONFIG.connection.reconnect_sleep,
             ))
@@ -42,12 +42,12 @@ pub async fn dot() {
         tokio::select! {
             recver = tokio::spawn(recv_query(udp2, r, waiters2)) => {
                 if let Err(e) = recver {
-                    log::error!("DoT Receiver: {e}")
+                    log::warn!("DoT Receiver: {e}")
                 }
             }
             sender = send_query(udp.clone(), w, waiters) => {
                 if let Err(e) = sender {
-                    log::error!("DoT Sender: {e}")
+                    log::warn!("DoT Sender: {e}")
                 }
             }
         }

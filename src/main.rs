@@ -103,11 +103,13 @@ async fn app() {
     }
 
     match CONFIG.protocol {
-        config::Protocol::h1_multi => h11::h1_multi().await,
-        config::Protocol::h1 => h11::http1().await,
-        config::Protocol::h2 => doh2::http2().await,
-        config::Protocol::h3 => doh3::http3().await,
-        config::Protocol::dot => dot::dot().await,
-        config::Protocol::doq => doq::doq().await,
+        config::Protocol::h1_multi => tokio::spawn(h11::h1_multi()),
+        config::Protocol::h1 => tokio::spawn(h11::http1()),
+        config::Protocol::h2 => tokio::spawn(doh2::http2()),
+        config::Protocol::h3 => tokio::spawn(doh3::http3()),
+        config::Protocol::dot => tokio::spawn(dot::dot()),
+        config::Protocol::doq => tokio::spawn(doq::doq()),
     };
+
+    std::future::pending::<()>().await
 }

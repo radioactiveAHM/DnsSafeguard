@@ -61,12 +61,11 @@ async fn recv_query<R: tokio::io::AsyncRead + Unpin>(
 ) -> tokio::io::Result<()> {
     let mut buffer = crate::utils::DeqBuffer::new(1024 * 8);
     let mut reading_buf = [0u8; 1024 * 8];
+    let mut reading_buf_rb = tokio::io::ReadBuf::new(&mut reading_buf);
     loop {
-        let size = crate::ioutils::read_buffered_slice(&mut reading_buf, &mut r).await?;
-        if size == 0 {
-            continue;
-        }
-        buffer.write(&reading_buf[..size]);
+        reading_buf_rb.clear();
+        crate::ioutils::Fill(std::pin::Pin::new(&mut r), &mut reading_buf_rb).await?;
+        buffer.write(reading_buf_rb.filled());
         loop {
             let buffer_slice = buffer.slice();
             let size = buffer_slice.len();

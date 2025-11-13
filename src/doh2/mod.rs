@@ -160,9 +160,11 @@ async fn send_req(
                     false,
                 )
                 .map_err(tokio::io::Error::other)?;
-            crate::dohserver::h2p::h2_send_bytes(&mut p.1, &dns_query.0[..dns_query.1])
-                .await
-                .map_err(tokio::io::Error::other)?;
+            p.1.send_data(
+                bytes::Bytes::copy_from_slice(&dns_query.0[..dns_query.1]),
+                true,
+            )
+            .map_err(tokio::io::Error::other)?;
             p.0.await.map_err(tokio::io::Error::other)?
         }
     };

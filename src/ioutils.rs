@@ -1,78 +1,49 @@
-#[inline(always)]
-pub async fn read_buffered<R: tokio::io::AsyncRead + Unpin>(
-    buf: &mut tokio::io::ReadBuf<'_>,
-    r: &mut R,
-) -> tokio::io::Result<()> {
-    let mut pinned = std::pin::Pin::new(r);
-    loop {
-        tokio::task::yield_now().await;
-        if std::future::poll_fn(|cx| match pinned.as_mut().poll_read(cx, buf) {
-            std::task::Poll::Pending => {
-                if buf.filled().is_empty() {
-                    std::task::Poll::Pending
-                } else {
-                    // nothing to read anymore
-                    std::task::Poll::Ready(Ok(true))
+pub struct Fill<'a, 'b, 'c, R>(
+    pub std::pin::Pin<&'b mut R>,
+    pub &'a mut tokio::io::ReadBuf<'c>,
+);
+impl<'a, 'b, 'c, R> Future for Fill<'a, 'b, 'c, R>
+where
+    R: tokio::io::AsyncRead + Unpin,
+{
+    type Output = tokio::io::Result<()>;
+    #[inline(always)]
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        let coop = std::task::ready!(tokio::task::coop::poll_proceed(cx));
+        let this = &mut *self;
+        let mut filled = 0;
+        loop {
+            match this.0.as_mut().poll_read(cx, this.1) {
+                std::task::Poll::Pending => {
+                    if filled == 0 {
+                        return std::task::Poll::Pending;
+                    } else {
+                        coop.made_progress();
+                        return std::task::Poll::Ready(Ok(()));
+                    }
                 }
-            }
-            std::task::Poll::Ready(Ok(_)) => {
-                if buf.filled().is_empty() {
-                    std::task::Poll::Ready(Err(tokio::io::Error::other("EOF")))
-                } else if buf.remaining() == 0 {
-                    // buf full
-                    std::task::Poll::Ready(Ok(true))
-                } else {
-                    // continue reading
-                    std::task::Poll::Ready(Ok(false))
+                std::task::Poll::Ready(Ok(_)) => {
+                    coop.made_progress();
+                    let fill = this.1.filled().len();
+                    if fill == 0 || filled == fill {
+                        return std::task::Poll::Ready(Err(tokio::io::Error::other(
+                            "Pipe read EOF",
+                        )));
+                    } else if this.1.remaining() == 0 {
+                        return std::task::Poll::Ready(Ok(()));
+                    }
+                    filled = fill;
                 }
-            }
-            std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(e)),
-        })
-        .await?
-        {
-            break;
+                std::task::Poll::Ready(Err(e)) => {
+                    coop.made_progress();
+                    return std::task::Poll::Ready(Err(e));
+                }
+            };
         }
     }
-    Ok(())
-}
-
-#[inline(always)]
-pub async fn read_buffered_slice<R: tokio::io::AsyncRead + Unpin>(
-    buf: &mut [u8],
-    r: &mut R,
-) -> tokio::io::Result<usize> {
-    let mut pinned = std::pin::Pin::new(r);
-    let mut buf = tokio::io::ReadBuf::new(buf);
-    loop {
-        tokio::task::yield_now().await;
-        if std::future::poll_fn(|cx| match pinned.as_mut().poll_read(cx, &mut buf) {
-            std::task::Poll::Pending => {
-                if buf.filled().is_empty() {
-                    std::task::Poll::Pending
-                } else {
-                    // nothing to read anymore
-                    std::task::Poll::Ready(Ok(true))
-                }
-            }
-            std::task::Poll::Ready(Ok(_)) => {
-                if buf.filled().is_empty() {
-                    std::task::Poll::Ready(Err(tokio::io::Error::other("EOF")))
-                } else if buf.remaining() == 0 {
-                    // buf full
-                    std::task::Poll::Ready(Ok(true))
-                } else {
-                    // continue reading
-                    std::task::Poll::Ready(Ok(false))
-                }
-            }
-            std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(e)),
-        })
-        .await?
-        {
-            break;
-        }
-    }
-    Ok(buf.filled().len())
 }
 
 #[inline(always)]
@@ -81,5 +52,5 @@ pub async fn read_buffered_timeout<R: tokio::io::AsyncRead + Unpin>(
     r: &mut R,
     timeout: std::time::Duration,
 ) -> tokio::io::Result<()> {
-    tokio::time::timeout(timeout, read_buffered(buf, r)).await?
+    tokio::time::timeout(timeout, Fill(std::pin::Pin::new(r), buf)).await?
 }

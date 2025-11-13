@@ -29,7 +29,7 @@ pub async fn serve_http11(
     let mut reqbuff: tokio::io::ReadBuf<'_> = tokio::io::ReadBuf::new(&mut reqbuff);
     let mut respbuff = [0; 4096];
     loop {
-        crate::ioutils::read_buffered(&mut reqbuff, &mut stream).await?;
+        crate::ioutils::Fill(std::pin::Pin::new(&mut stream), &mut reqbuff).await?;
         if let Err(e) = handle_req(&mut stream, &mut reqbuff, &agent, &mut respbuff).await
             && log
         {

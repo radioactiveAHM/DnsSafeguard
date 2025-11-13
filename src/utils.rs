@@ -70,17 +70,21 @@ pub struct DeqBuffer {
     inner_buf: std::collections::VecDeque<u8>,
 }
 impl DeqBuffer {
+    #[inline(always)]
     pub fn new(capacity: usize) -> Self {
         Self {
             inner_buf: std::collections::VecDeque::with_capacity(capacity),
         }
     }
+    #[inline(always)]
     pub fn write(&mut self, buf: &[u8]) {
         self.inner_buf.extend(buf);
     }
+    #[inline(always)]
     pub fn slice(&mut self) -> &mut [u8] {
         self.inner_buf.as_mut_slices().0
     }
+    #[inline(always)]
     pub fn remove(&mut self, len: usize) {
         self.inner_buf.drain(..len);
     }

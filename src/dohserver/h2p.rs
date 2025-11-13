@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use h2::{Reason, SendStream, server::SendResponse};
+use h2::{Reason, server::SendResponse};
 use http::Response;
 use std::net::SocketAddr;
 
@@ -179,45 +179,6 @@ impl Future for SendResponseHeader<'_> {
 }
 
 #[inline(always)]
-pub async fn h2_send_bytes(stream: &mut SendStream<Bytes>, bytes: &[u8]) -> tokio::io::Result<()> {
-    let size = bytes.len();
-    stream.reserve_capacity(size);
-    let mut written = 0;
-    loop {
-        if let Some(Ok(capacity)) = std::future::poll_fn(|cx| stream.poll_capacity(cx)).await {
-            if capacity >= size {
-                if let Err(e) = stream.send_data(Bytes::copy_from_slice(bytes), true) {
-                    return Err(tokio::io::Error::other(e));
-                }
-                return Ok(());
-            } else {
-                if written + capacity >= size {
-                    if let Err(e) = stream.send_data(
-                        Bytes::copy_from_slice(&bytes[written..written + capacity]),
-                        true,
-                    ) {
-                        return Err(tokio::io::Error::other(e));
-                    }
-                    return Ok(());
-                } else if let Err(e) =
-                    stream.send_data(Bytes::copy_from_slice(&bytes[written..size]), false)
-                {
-                    return Err(tokio::io::Error::other(e));
-                }
-
-                written += capacity;
-                stream.reserve_capacity(size - written);
-            }
-        } else {
-            return Err(tokio::io::Error::new(
-                tokio::io::ErrorKind::ConnectionAborted,
-                "Stream Closed",
-            ));
-        }
-    }
-}
-
-#[inline(always)]
 async fn handle_resp(
     rframe: &mut SendResponse<Bytes>,
     buff: &[u8],
@@ -234,7 +195,9 @@ async fn handle_resp(
         .unwrap();
 
     if let Ok(Ok(mut bframe)) = SendResponseHeader(rframe, heads).await {
-        h2_send_bytes(&mut bframe, &buff[..size]).await
+        bframe
+            .send_data(Bytes::copy_from_slice(&buff[..size]), true)
+            .map_err(tokio::io::Error::other)
     } else {
         Ok(())
     }

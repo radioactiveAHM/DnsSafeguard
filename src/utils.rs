@@ -20,10 +20,6 @@ impl Buffering<'_> {
         &self.0[..self.1]
     }
     #[inline(always)]
-    pub fn str(&self) -> Result<&str, std::str::Utf8Error> {
-        str::from_utf8(&self.0[..self.1])
-    }
-    #[inline(always)]
     pub fn mutate(&mut self, indx: usize, value: u8) -> &mut Self {
         self.0[indx] = value;
         self

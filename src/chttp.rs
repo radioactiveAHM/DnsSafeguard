@@ -1,29 +1,4 @@
 use crate::utils::Buffering;
-use core::str;
-use std::str::Utf8Error;
-
-#[inline(always)]
-pub fn genrequrl<'a>(
-    url: &'a mut Buffering,
-    server_name: &[u8],
-    query_bs4url: &[u8],
-    path: &'static Option<String>,
-) -> Result<&'a str, Utf8Error> {
-    if let Some(cpath) = path {
-        url.write(b"https://")
-            .write(server_name)
-            .write(cpath.as_bytes())
-            .write(b"?dns=")
-            .write(query_bs4url)
-            .str()
-    } else {
-        url.write(b"https://")
-            .write(server_name)
-            .write(b"/dns-query?dns=")
-            .write(query_bs4url)
-            .str()
-    }
-}
 
 #[inline(always)]
 pub fn genrequrlh1<'a>(

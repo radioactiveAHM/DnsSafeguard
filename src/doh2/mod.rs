@@ -1,4 +1,4 @@
-use crate::{CONFIG, chttp::genrequrl, config, rule::rulecheck, tls, utils::Buffering};
+use crate::{CONFIG, config, rule::rulecheck, tls};
 use core::str;
 use h2::client::SendRequest;
 use std::{net::SocketAddr, sync::Arc};
@@ -125,62 +125,61 @@ async fn send_req(
     udp: Arc<tokio::net::UdpSocket>,
 ) -> tokio::io::Result<()> {
     // Sending request
+    let path = if let Some(path) = &CONFIG.custom_http_path {
+        path.as_str()
+    } else {
+        "/dns-query"
+    };
     let mut resp = match CONFIG.http_method {
         config::HttpMethod::GET => {
             get(
                 &mut h2_client,
                 &CONFIG.server_name,
-                &CONFIG.custom_http_path,
-                dns_query,
+                path,
+                &dns_query.0[..dns_query.1],
             )
             .await?
         }
         config::HttpMethod::POST => {
-            let p = if let Some(path) = &CONFIG.custom_http_path {
-                path.as_str()
-            } else {
-                "/dns-query"
-            };
-            let mut p = h2_client
-                .send_request(
-                    http::Request::post(
-                        http::Uri::builder()
-                            .scheme("https")
-                            .authority(CONFIG.server_name.as_str())
-                            .path_and_query(p)
-                            .build()
-                            .map_err(tokio::io::Error::other)?,
-                    )
-                    .header("Accept", "application/dns-message")
-                    .header("Content-Type", "application/dns-message")
-                    .header("content-length", dns_query.1)
-                    .version(http::Version::HTTP_2)
-                    .body(())
-                    .map_err(tokio::io::Error::other)?,
-                    false,
-                )
-                .map_err(tokio::io::Error::other)?;
-            p.1.send_data(
-                bytes::Bytes::copy_from_slice(&dns_query.0[..dns_query.1]),
-                true,
+            post(
+                &mut h2_client,
+                &CONFIG.server_name,
+                path,
+                &dns_query.0[..dns_query.1],
             )
-            .map_err(tokio::io::Error::other)?;
-            p.0.await.map_err(tokio::io::Error::other)?
+            .await?
         }
     };
 
     if resp.status() == http::status::StatusCode::OK {
-        if let Some(Ok(body)) = resp.body_mut().data().await {
-            if CONFIG.overwrite.is_some() {
-                let b: &[u8] = &body;
-                let mut buff = [0; 1024 * 4];
-                buff[..b.len()].copy_from_slice(b);
-                crate::ipoverwrite::overwrite_ip(&mut buff[..b.len()], &CONFIG.overwrite);
-                udp.send_to(&buff[..b.len()], addr).await?;
-            } else {
-                udp.send_to(&body, addr).await?;
+        let clen: usize = if let Some(clen) = resp.headers().get("content-length")
+            && let Ok(clen) = clen.to_str()
+        {
+            clen.parse().unwrap_or(0)
+        } else {
+            0
+        };
+
+        let mut buf = [0; 1024 * 8];
+        let mut buf_rb = tokio::io::ReadBuf::new(&mut buf);
+        loop {
+            if let Some(body) = resp.body_mut().data().await {
+                buf_rb.put_slice(&body.map_err(tokio::io::Error::other)?);
+            }
+            if clen == 0 {
+                // if no content-length provided we read only once
+                break;
+            }
+            if buf_rb.filled().len() >= clen {
+                break;
             }
         }
+
+        if CONFIG.overwrite.is_some() {
+            crate::ipoverwrite::overwrite_ip(buf_rb.filled_mut(), &CONFIG.overwrite);
+        }
+
+        let _ = udp.send_to(buf_rb.filled(), addr).await;
     } else {
         log::warn!(
             "H2 Stream: Remote responded with status code of {}",
@@ -191,26 +190,22 @@ async fn send_req(
     Ok(())
 }
 
-#[inline(never)]
+#[inline(always)]
 async fn get(
     h2_client: &mut SendRequest<bytes::Bytes>,
-    server_name: &'static str,
-    ucpath: &'static Option<String>,
-    dns_query: ([u8; 512], usize),
+    server_name: &str,
+    path: &str,
+    dns_query: &[u8],
 ) -> tokio::io::Result<http::Response<h2::RecvStream>> {
-    let mut temp = [0u8; 512];
-    let mut url = [0u8; 1024];
-    let r = h2_client
+    h2_client
         .send_request(
             http::Request::get(
-                genrequrl(
-                    &mut Buffering(&mut url, 0),
-                    server_name.as_bytes(),
-                    base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)
-                        .map_err(|_| tokio::io::Error::other("base64 url encode error"))?,
-                    ucpath,
-                )
-                .map_err(tokio::io::Error::other)?,
+                http::Uri::builder()
+                    .scheme("https")
+                    .authority(server_name)
+                    .path_and_query(format!("{}?dns={}", path, base64_url::encode(dns_query)))
+                    .build()
+                    .map_err(tokio::io::Error::other)?,
             )
             .version(http::Version::HTTP_2)
             .header("Accept", "application/dns-message")
@@ -221,6 +216,36 @@ async fn get(
         .map_err(tokio::io::Error::other)?
         .0
         .await
+        .map_err(tokio::io::Error::other)
+}
+
+#[inline(always)]
+async fn post(
+    h2_client: &mut SendRequest<bytes::Bytes>,
+    server_name: &str,
+    path: &str,
+    dns_query: &[u8],
+) -> tokio::io::Result<http::Response<h2::RecvStream>> {
+    let mut p = h2_client
+        .send_request(
+            http::Request::post(
+                http::Uri::builder()
+                    .scheme("https")
+                    .authority(server_name)
+                    .path_and_query(path)
+                    .build()
+                    .map_err(tokio::io::Error::other)?,
+            )
+            .header("Accept", "application/dns-message")
+            .header("Content-Type", "application/dns-message")
+            .header("content-length", dns_query.len())
+            .version(http::Version::HTTP_2)
+            .body(())
+            .map_err(tokio::io::Error::other)?,
+            false,
+        )
         .map_err(tokio::io::Error::other)?;
-    Ok(r)
+    p.1.send_data(bytes::Bytes::copy_from_slice(dns_query), true)
+        .map_err(tokio::io::Error::other)?;
+    p.0.await.map_err(tokio::io::Error::other)
 }

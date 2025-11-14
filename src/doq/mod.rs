@@ -207,43 +207,58 @@ async fn send_dq(
     send.write(&dns_query.0[..dns_query.1 + 2]).await?;
     send.finish()?;
 
-    let mut buff = [0u8; 4096];
-    let mut size = 0;
-    if let Some(recved) = timeout(
-        std::time::Duration::from_secs(CONFIG.response_timeout),
-        recv.read(&mut buff[size..]),
-    )
-    .await??
-    {
-        size += recved;
-    } else {
-        return Err(tokio::io::Error::other("closed without data"));
-    }
+    let mut buf = [0u8; 1024 * 8];
+    let mut buf_rb = tokio::io::ReadBuf::new(&mut buf);
+    recv_timeout(&mut recv, &mut buf_rb, std::time::Duration::from_secs(CONFIG.response_timeout)).await?;
 
-    let message_size = convert_two_u8s_to_u16_be([buff[0], buff[1]]) as usize;
+    let message_size = convert_two_u8s_to_u16_be([buf_rb.filled()[0], buf_rb.filled()[1]]) as usize;
     if message_size == 0 {
         return Err(tokio::io::Error::other("malformed dns query response"));
     }
 
     loop {
-        if size - 2 >= message_size {
+        if buf_rb.filled().len() - 2 >= message_size {
             break;
         }
-
-        match timeout(
-            std::time::Duration::from_secs(CONFIG.response_timeout),
-            recv.read(&mut buff[size..]),
-        )
-        .await??
-        {
-            Some(recved) => size += recved,
-            None => return Err(tokio::io::Error::other("closed with incomplete data")),
-        }
+        recv_timeout(&mut recv, &mut buf_rb, std::time::Duration::from_secs(CONFIG.response_timeout)).await?;
     }
 
     if CONFIG.overwrite.is_some() {
-        crate::ipoverwrite::overwrite_ip(&mut buff[..size], &CONFIG.overwrite);
+        crate::ipoverwrite::overwrite_ip(buf_rb.filled_mut(), &CONFIG.overwrite);
     }
-    let _ = udp.send_to(&buff[2..size], addr).await;
+    let _ = udp.send_to(&buf_rb.filled()[2..], addr).await;
     Ok(())
+}
+
+struct Recv<'a,'b>(
+    &'a mut RecvStream,
+    &'a mut tokio::io::ReadBuf<'b>
+);
+impl<'a,'b> Future for Recv<'a,'b> {
+    type Output = tokio::io::Result<()>;
+    fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+        let coop = std::task::ready!(tokio::task::coop::poll_proceed(cx));
+        let this = &mut *self;
+        let poll = std::task::ready!(this.0.poll_read_buf(cx, this.1));
+        coop.made_progress();
+        std::task::Poll::Ready(poll.map_err(tokio::io::Error::other))
+    }
+}
+
+async fn recv_timeout(
+    recv: &mut RecvStream,
+    buf: &mut tokio::io::ReadBuf<'_>,
+    dur: std::time::Duration
+) -> tokio::io::Result<()> {
+    match tokio::time::timeout(dur, Recv(recv, buf)).await {
+        Err(_) => Err(tokio::io::Error::other("read timeout")),
+        Ok(r) => {
+            r?;
+            if buf.filled().len() == 0 {
+                Err(tokio::io::Error::other("stream closed"))
+            } else {
+                Ok(())
+            }
+        }
+    }
 }

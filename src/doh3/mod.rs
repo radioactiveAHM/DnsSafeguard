@@ -15,10 +15,8 @@ use h3::client::SendRequest;
 
 use crate::{
     CONFIG,
-    chttp::genrequrl,
     config::{self, Noise},
     rule::rulecheck,
-    utils::Buffering,
 };
 
 pub async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: &Noise) -> quinn::Endpoint {
@@ -244,47 +242,29 @@ async fn send_request(
     addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
 ) -> tokio::io::Result<()> {
+    let path = if let Some(path) = &CONFIG.custom_http_path {
+        path.as_str()
+    } else {
+        "/dns-query"
+    };
     let mut reqs = match CONFIG.http_method {
         config::HttpMethod::GET => {
             get(
                 &mut h3,
                 &CONFIG.server_name,
-                &CONFIG.custom_http_path,
-                dns_query,
+                path,
+                &dns_query.0[..dns_query.1],
             )
             .await?
         }
         config::HttpMethod::POST => {
-            let p = if let Some(path) = &CONFIG.custom_http_path {
-                path.as_str()
-            } else {
-                "/dns-query"
-            };
-            let mut pending = h3
-                .send_request(
-                    http::Request::post(
-                        http::Uri::builder()
-                            .scheme("https")
-                            .authority(CONFIG.server_name.as_str())
-                            .path_and_query(p)
-                            .build()
-                            .map_err(tokio::io::Error::other)?,
-                    )
-                    .header("Accept", "application/dns-message")
-                    .header("Content-Type", "application/dns-message")
-                    .header("content-length", dns_query.1)
-                    .version(http::Version::HTTP_3)
-                    .body(())
-                    .map_err(tokio::io::Error::other)?,
-                )
-                .await
-                .map_err(tokio::io::Error::other)?;
-            // pending
-            pending
-                .send_data(bytes::Bytes::copy_from_slice(&dns_query.0[..dns_query.1]))
-                .await
-                .map_err(tokio::io::Error::other)?;
-            pending
+            post(
+                &mut h3,
+                &CONFIG.server_name,
+                path,
+                &dns_query.0[..dns_query.1],
+            )
+            .await?
         }
     };
 
@@ -297,36 +277,34 @@ async fn send_request(
     .await?
     .map_err(tokio::io::Error::other)?;
 
-    let clen: usize = if let Some(clen) = resp.headers().get("content-length") {
-        clen.to_str().unwrap_or("0").parse().unwrap_or(0)
-    } else {
-        0
-    };
-
     if resp.status() == http::status::StatusCode::OK {
-        let mut buff = [0; 1024 * 8];
-        let mut body_len = 0;
-        if let Some(body) = reqs.recv_data().await.map_err(tokio::io::Error::other)? {
-            body_len += body.reader().read(&mut buff)?;
-        }
+        let clen: usize = if let Some(clen) = resp.headers().get("content-length")
+            && let Ok(clen) = clen.to_str()
+        {
+            clen.parse().unwrap_or(0)
+        } else {
+            0
+        };
 
-        if clen > 0 {
-            loop {
-                if body_len >= clen {
-                    break;
-                }
-                if let Some(body) = reqs.recv_data().await.map_err(tokio::io::Error::other)? {
-                    body_len += body.reader().read(&mut buff[body_len..])?;
-                } else {
-                    break;
-                }
+        let mut buff = [0; 1024 * 8];
+        let mut data_read = 0;
+        loop {
+            if let Some(body) = reqs.recv_data().await.map_err(tokio::io::Error::other)? {
+                data_read += body.reader().read(&mut buff[data_read..])?;
+            }
+            if clen == 0 {
+                // if no content-length provided we read only once
+                break;
+            }
+            if data_read >= clen {
+                break;
             }
         }
 
         if CONFIG.overwrite.is_some() {
-            crate::ipoverwrite::overwrite_ip(&mut buff[..body_len], &CONFIG.overwrite);
+            crate::ipoverwrite::overwrite_ip(&mut buff[..data_read], &CONFIG.overwrite);
         }
-        let _ = udp.send_to(&buff[..body_len], addr).await;
+        let _ = udp.send_to(&buff[..data_read], addr).await;
     } else {
         log::warn!(
             "H3 Stream: Remote responded with status code of {}",
@@ -337,34 +315,63 @@ async fn send_request(
     Ok(())
 }
 
-#[inline(never)]
+#[inline(always)]
 async fn get(
     h3: &mut SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
-    server_name: &'static str,
-    ucpath: &'static Option<String>,
-    dns_query: ([u8; 512], usize),
+    server_name: &str,
+    path: &str,
+    dns_query: &[u8],
 ) -> tokio::io::Result<h3::client::RequestStream<h3_quinn::BidiStream<bytes::Bytes>, bytes::Bytes>>
 {
-    let mut temp = [0u8; 512];
-    let mut url = [0; 1024];
-    let r = h3
-        .send_request(
-            http::Request::get(
-                genrequrl(
-                    &mut Buffering(&mut url, 0),
-                    server_name.as_bytes(),
-                    base64_url::encode_to_slice(&dns_query.0[..dns_query.1], &mut temp)
-                        .map_err(|_| tokio::io::Error::other("base64 url encode error"))?,
-                    ucpath,
-                )
+    h3.send_request(
+        http::Request::get(
+            http::Uri::builder()
+                .scheme("https")
+                .authority(server_name)
+                .path_and_query(format!("{}?dns={}", path, base64_url::encode(dns_query)))
+                .build()
                 .map_err(tokio::io::Error::other)?,
+        )
+        .version(http::Version::HTTP_3)
+        .header("Accept", "application/dns-message")
+        .body(())
+        .map_err(tokio::io::Error::other)?,
+    )
+    .await
+    .map_err(tokio::io::Error::other)
+}
+
+#[inline(always)]
+async fn post(
+    h3: &mut SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
+    server_name: &str,
+    path: &str,
+    dns_query: &[u8],
+) -> tokio::io::Result<h3::client::RequestStream<h3_quinn::BidiStream<bytes::Bytes>, bytes::Bytes>>
+{
+    let mut pending = h3
+        .send_request(
+            http::Request::post(
+                http::Uri::builder()
+                    .scheme("https")
+                    .authority(server_name)
+                    .path_and_query(path)
+                    .build()
+                    .map_err(tokio::io::Error::other)?,
             )
-            .version(http::Version::HTTP_3)
             .header("Accept", "application/dns-message")
+            .header("Content-Type", "application/dns-message")
+            .header("content-length", dns_query.len())
+            .version(http::Version::HTTP_3)
             .body(())
             .map_err(tokio::io::Error::other)?,
         )
         .await
         .map_err(tokio::io::Error::other)?;
-    Ok(r)
+
+    pending
+        .send_data(bytes::Bytes::copy_from_slice(dns_query))
+        .await
+        .map_err(tokio::io::Error::other)?;
+    Ok(pending)
 }

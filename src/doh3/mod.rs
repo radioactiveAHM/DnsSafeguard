@@ -66,7 +66,6 @@ pub async fn udp_setup(
     endpoint
 }
 
-#[allow(unused_assignments)]
 pub async fn http3() {
     let mut endpoint = udp_setup(
         CONFIG.remote_addrs,
@@ -94,7 +93,7 @@ pub async fn http3() {
             )
             .await;
         }
-        log::info!("HTTP/3 Connecting");
+        log::info!("H3 connecting");
         // Connect to dns server
         let connecting = endpoint
             .connect(CONFIG.remote_addrs, &CONFIG.server_name)
@@ -107,7 +106,7 @@ pub async fn http3() {
                     let connecting = connecting.into_0rtt();
                     if let Ok((conn, rtt)) = connecting {
                         rtt.await;
-                        log::info!("HTTP/3 0RTT Connection Established");
+                        log::info!("H3 0RTT connection established");
                         Ok(conn)
                     } else {
                         let conn = endpoint
@@ -115,7 +114,7 @@ pub async fn http3() {
                             .unwrap()
                             .await;
                         if conn.is_ok() {
-                            log::info!("HTTP/3 Connection Established");
+                            log::info!("H3 connection established");
                         }
                         conn
                     }
@@ -127,7 +126,7 @@ pub async fn http3() {
                 pending
             } else {
                 connecting_retry += 1;
-                log::warn!("H3: Connecting timeout");
+                log::warn!("connecting timeout");
                 sleep(std::time::Duration::from_secs(
                     CONFIG.connection.reconnect_sleep,
                 ))
@@ -138,7 +137,7 @@ pub async fn http3() {
 
         if conn.is_err() {
             connecting_retry += 1;
-            log::warn!("H3: {}", conn.unwrap_err());
+            log::warn!("{}", conn.unwrap_err());
             sleep(std::time::Duration::from_secs(
                 CONFIG.connection.reconnect_sleep,
             ))
@@ -150,7 +149,7 @@ pub async fn http3() {
         let (mut h3c, h3) = match h3::client::new(h3_quinn::Connection::new(conn.unwrap())).await {
             Ok(conn) => conn,
             Err(e) => {
-                log::warn!("H3: {e}");
+                log::warn!("{e}");
                 continue;
             }
         };
@@ -159,7 +158,7 @@ pub async fn http3() {
 
         let dead_conn2 = dead_conn.clone();
         let watcher = tokio::spawn(async move {
-            log::warn!("H3: {}", h3c.wait_idle().await);
+            log::warn!("{}", h3c.wait_idle().await);
             *(dead_conn2.lock().await) = true;
         });
 
@@ -169,7 +168,7 @@ pub async fn http3() {
             let h3 = h3.clone();
             tokio::spawn(async move {
                 if let Err(e) = send_request(h3, (*dns_query, query_size), addr, udp).await {
-                    log::warn!("H3 Stream: {e}");
+                    log::warn!("{e}");
                     *dead_conn.lock().await = true;
                 }
             });
@@ -196,7 +195,7 @@ pub async fn http3() {
                             .body(())
                             .unwrap();
                     if let Err(e) = h3.send_request(req).await {
-                        log::warn!("H3: {e}");
+                        log::warn!("{e}");
                         *(quic_conn_dead.lock().await) = true;
                     }
                 },
@@ -227,7 +226,7 @@ pub async fn http3() {
                 let h3 = h3.clone();
                 tokio::spawn(async move {
                     if let Err(e) = send_request(h3, (dns_query, query_size), addr, udp).await {
-                        log::warn!("H3 Stream: {e}");
+                        log::warn!("{e}");
                         *quic_conn_dead.lock().await = true;
                     }
                 });
@@ -236,6 +235,7 @@ pub async fn http3() {
     }
 }
 
+#[inline(always)]
 async fn send_request(
     mut h3: SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
     dns_query: ([u8; 512], usize),
@@ -307,7 +307,7 @@ async fn send_request(
         let _ = udp.send_to(&buff[..data_read], addr).await;
     } else {
         log::warn!(
-            "H3 Stream: Remote responded with status code of {}",
+            "remote responded with status code of {}",
             resp.status().as_str()
         );
     }

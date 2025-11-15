@@ -19,7 +19,7 @@ pub async fn dot() {
     let udp = Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
     let ctls = tls::tlsconf(vec![b"dot".to_vec()], CONFIG.disable_certificate_validation);
     loop {
-        log::info!("DoT Connecting");
+        log::info!("TLS connecting");
         let tls = crate::tls::dynamic_tls_conn_gen(&["dot"], ctls.clone()).await;
         if tls.is_err() {
             log::warn!("DoT: {}", tls.unwrap_err());
@@ -29,7 +29,7 @@ pub async fn dot() {
             .await;
             continue;
         }
-        log::info!("DoT Connection Established");
+        log::info!("TLS connection established");
 
         let (r, w) = tokio::io::split(tls.unwrap());
 
@@ -42,18 +42,19 @@ pub async fn dot() {
         tokio::select! {
             recver = tokio::spawn(recv_query(udp2, r, waiters2)) => {
                 if let Err(e) = recver {
-                    log::warn!("DoT Receiver: {e}")
+                    log::warn!("{e}")
                 }
             }
             sender = send_query(udp.clone(), w, waiters) => {
                 if let Err(e) = sender {
-                    log::warn!("DoT Sender: {e}")
+                    log::warn!("{e}")
                 }
             }
         }
     }
 }
 
+#[inline(always)]
 async fn recv_query<R: tokio::io::AsyncRead + Unpin>(
     udp: Arc<tokio::net::UdpSocket>,
     mut r: R,
@@ -77,7 +78,7 @@ async fn recv_query<R: tokio::io::AsyncRead + Unpin>(
                 convert_two_u8s_to_u16_be([buffer_slice[0], buffer_slice[1]]) as usize;
 
             if message_size < 12 {
-                return Err(tokio::io::Error::other("Mailformed Dns query response"));
+                return Err(tokio::io::Error::other("mailformed dns query response"));
             }
 
             if size < message_size {
@@ -105,6 +106,7 @@ async fn recv_query<R: tokio::io::AsyncRead + Unpin>(
     }
 }
 
+#[inline(always)]
 async fn send_query<W: tokio::io::AsyncWrite + Unpin + Send>(
     udp: Arc<tokio::net::UdpSocket>,
     mut w: W,
@@ -118,7 +120,7 @@ async fn send_query<W: tokio::io::AsyncWrite + Unpin + Send>(
             &mut query[2..],
             async {
                 let _ = w
-                    .write(&[0, 12, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]) // Empty dns query
+                    .write_all(&[0, 12, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]) // Empty dns query
                     .await;
             },
         )
@@ -140,7 +142,7 @@ async fn send_query<W: tokio::io::AsyncWrite + Unpin + Send>(
             } else {
                 waiters.lock().await.insert(id, IdType::WithID(addr));
             }
-            let _ = w.write(&query[..size + 2]).await?;
+            w.write_all(&query[..size + 2]).await?;
         }
     }
 }

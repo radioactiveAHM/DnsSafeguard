@@ -22,7 +22,7 @@ pub async fn udp_socket(
 
     // Set Nonblocking
     if let Err(e) = socket.set_nonblocking(true) {
-        log::warn!("UDP Set Nonblocking: {e}")
+        log::warn!("UDP set nonblocking: {e}")
     }
 
     socket.bind(&serve_addrs.into())?;

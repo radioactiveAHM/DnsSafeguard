@@ -30,7 +30,7 @@ where
                     let fill = this.1.filled().len();
                     if fill == 0 || filled == fill {
                         return std::task::Poll::Ready(Err(tokio::io::Error::other(
-                            "Pipe read EOF",
+                            "pipe read EOF",
                         )));
                     } else if this.1.remaining() == 0 {
                         return std::task::Poll::Ready(Ok(()));

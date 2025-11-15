@@ -7,11 +7,11 @@ async fn segmentation<IO: AsyncWriteExt + std::marker::Unpin>(
     fragment: &[u8],
 ) -> tokio::io::Result<()> {
     let sleep_interval = crate::utils::parse_range(&fragmenting.sleep_interval)
-        .expect("Failed to parse fragmenting sleep_interval range");
+        .expect("failed to parse fragmenting sleep_interval range");
     for segment in
         fragment.chunks((fragment.len() as f32 / fragmenting.segments as f32).ceil() as usize)
     {
-        let _ = tcp.write(segment).await?;
+        tcp.write_all(segment).await?;
         tcp.flush().await?;
 
         sleep(std::time::Duration::from_millis(rand::random_range(
@@ -28,7 +28,7 @@ pub async fn fragment_client_hello_rand<IO: AsyncWriteExt + std::marker::Unpin>(
     fragmenting: &crate::config::Fragmenting,
 ) -> tokio::io::Result<()> {
     let fragment_size = crate::utils::parse_range(&fragmenting.fragment_size)
-        .expect("Failed to parse fragmenting fragment_size range");
+        .expect("failed to parse fragmenting fragment_size range");
     if fragment_size.start == 0 {
         panic!("minimum fragment size can not be 0");
     } else if fragment_size.end > 255 {
@@ -78,7 +78,7 @@ pub async fn fragment_client_hello_pack<IO: AsyncWriteExt + std::marker::Unpin>(
     fragmenting: &crate::config::Fragmenting,
 ) -> tokio::io::Result<()> {
     let fragment_size = crate::utils::parse_range(&fragmenting.fragment_size)
-        .expect("Failed to parse fragmenting fragment_size range");
+        .expect("failed to parse fragmenting fragment_size range");
     if fragment_size.start == 0 {
         panic!("minimum fragment size can not be 0");
     } else if fragment_size.end > 255 {

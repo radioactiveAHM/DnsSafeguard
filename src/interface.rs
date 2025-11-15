@@ -16,11 +16,11 @@ pub fn get_interface(ipv4: bool, interface: &str) -> SocketAddr {
     });
 
     if let Some(ip) = ip {
-        log::info!("{} Selected for binding", ip.1);
+        log::info!("{} selected for binding", ip.1);
         SocketAddr::new(ip.1, 0)
     } else {
         log::warn!(
-            "interface not found or interface does not provide IPv6.\nAvailable interface are:"
+            "interface not found or interface does not provide IPv6.\navailable interface are:"
         );
         for interface in interfaces {
             println!("{}: {}", interface.0, interface.1);
@@ -55,9 +55,9 @@ pub async fn tcp_connect_handle(
 ) -> TcpStream {
     loop {
         let mut socket = if target.is_ipv4() {
-            tokio::net::TcpSocket::new_v4().expect("Could not create socket v4")
+            tokio::net::TcpSocket::new_v4().expect("could not create socket v4")
         } else {
-            tokio::net::TcpSocket::new_v6().expect("Could not create socket v6")
+            tokio::net::TcpSocket::new_v6().expect("could not create socket v6")
         };
 
         set_tcp_socket_options(&mut socket, options);
@@ -65,7 +65,7 @@ pub async fn tcp_connect_handle(
         if let Some(interface) = network_interface {
             socket
                 .bind(get_interface(target.is_ipv4(), interface.as_str()))
-                .expect("Could not bind socket")
+                .expect("could not bind socket")
         } else {
             let default = if target.is_ipv4() {
                 std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)
@@ -75,7 +75,7 @@ pub async fn tcp_connect_handle(
 
             socket
                 .bind(SocketAddr::new(default, 0))
-                .expect("Could not bind socket")
+                .expect("could not bind socket")
         };
 
         log::info!("TCP socket connecting to {target}");
@@ -85,7 +85,7 @@ pub async fn tcp_connect_handle(
                 return stream;
             }
             Err(e) => {
-                log::warn!("TCP Connection: {e}");
+                log::warn!("TCP connection: {e}");
                 sleep(std::time::Duration::from_secs(
                     connection_cfg.reconnect_sleep,
                 ))

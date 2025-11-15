@@ -25,7 +25,7 @@ pub async fn http2() {
         }
 
         let (client, h2c) = h2::client::handshake(tls.unwrap()).await.unwrap();
-        log::info!("H2 Connection Established");
+        log::info!("H2 connection established");
 
         let dead_conn = Arc::new(Mutex::new(false));
         // h2 engine
@@ -33,7 +33,7 @@ pub async fn http2() {
         let watcher = tokio::spawn(async move {
             if let Err(e) = h2c.await {
                 *dead_conn2.lock().await = true;
-                log::warn!("H2: {e}");
+                log::warn!("{e}");
             }
         });
 
@@ -43,7 +43,7 @@ pub async fn http2() {
             let client = client.clone();
             tokio::spawn(async move {
                 if let Err(e) = send_req((*dns_query, query_size), client, addr, udp).await {
-                    log::warn!("H2: {e}");
+                    log::warn!("{e}");
                     *h2_conn_dead.lock().await = true;
                 }
             });
@@ -54,7 +54,7 @@ pub async fn http2() {
         loop {
             let h2_client = client.clone().ready().await;
             if let Err(e) = h2_client {
-                log::warn!("H2: {e}");
+                log::warn!("{e}");
                 break;
             }
 
@@ -76,7 +76,7 @@ pub async fn http2() {
                             .body(())
                             .unwrap();
                     if let Err(e) = h2.send_request(req, true) {
-                        log::warn!("H2: {e}");
+                        log::warn!("{e}");
                         *h2_conn_dead.lock().await = true;
                     }
                 },
@@ -109,7 +109,7 @@ pub async fn http2() {
                     if let Err(e) =
                         send_req((dns_query, query_size), h2_client.unwrap(), addr, udp).await
                     {
-                        log::warn!("H2: {e}");
+                        log::warn!("{e}");
                         *h2_conn_dead.lock().await = true;
                     }
                 });
@@ -120,11 +120,11 @@ pub async fn http2() {
 
 async fn send_req(
     dns_query: ([u8; 512], usize),
-    mut h2_client: SendRequest<bytes::Bytes>,
+    h2_client: SendRequest<bytes::Bytes>,
     addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
 ) -> tokio::io::Result<()> {
-    // Sending request
+    let mut h2_client = h2_client.ready().await.map_err(tokio::io::Error::other)?;
     let path = if let Some(path) = &CONFIG.custom_http_path {
         path.as_str()
     } else {
@@ -182,7 +182,7 @@ async fn send_req(
         let _ = udp.send_to(buf_rb.filled(), addr).await;
     } else {
         log::warn!(
-            "H2 Stream: Remote responded with status code of {}",
+            "remote responded with status code of {}",
             resp.status().as_str()
         );
     }

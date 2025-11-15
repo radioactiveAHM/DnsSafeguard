@@ -2,7 +2,7 @@ struct UdpRecv<'a>(&'a tokio::net::UdpSocket, &'a mut tokio::io::ReadBuf<'a>);
 
 impl<'a> Future for UdpRecv<'a> {
     type Output = tokio::io::Result<(usize, std::net::SocketAddr)>;
-
+    #[inline(always)]
     fn poll(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -20,6 +20,7 @@ impl<'a> Future for UdpRecv<'a> {
     }
 }
 
+#[inline(always)]
 pub async fn recv_timeout_with<Fu>(
     udp: &tokio::net::UdpSocket,
     dur: Option<u64>,
@@ -44,6 +45,7 @@ where
     }
 }
 
+#[inline(always)]
 pub async fn recv_timeout(
     udp: &tokio::net::UdpSocket,
     dur: Option<u64>,

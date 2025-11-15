@@ -107,7 +107,7 @@ pub async fn rulecheck(
                         let dq = dq.to_vec();
                         tokio::spawn(async move {
                             if let Err(e) = handle_bypass(dq, client_addr, dns_server, udp).await {
-                                log::warn!("Bypass<{dns_server}>: {e}");
+                                log::warn!("bypass<{dns_server}>: {e}");
                             };
                         });
                         return true;

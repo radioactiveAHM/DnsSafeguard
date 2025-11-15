@@ -4,7 +4,7 @@ use tokio::{io::AsyncWriteExt, net::UdpSocket};
 use crate::{
     CONFIG,
     keepalive::recv_timeout,
-    utils::{Buffering, c_len, catch_in_buff},
+    utils::{c_len, catch_in_buff},
 };
 
 pub async fn serve_http11(
@@ -33,12 +33,13 @@ pub async fn serve_http11(
         if let Err(e) = handle_req(&mut stream, &mut reqbuff, &agent, &mut respbuff).await
             && log
         {
-            log::warn!("DoH1.1 server<{peer}:stream>: {e}");
+            log::warn!("DoH1.1 server<{peer}>: {e}");
         }
         reqbuff.clear();
     }
 }
 
+#[inline(always)]
 async fn handle_req(
     stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     reqbuff: &mut tokio::io::ReadBuf<'_>,
@@ -64,23 +65,19 @@ async fn handle_req(
     {
         size = v;
     } else {
-        let _ = stream
-            .write(b"HTTP/1.1 503 Service Unavailable\r\n\r\n")
+        stream
+            .write_all(b"HTTP/1.1 503 Service Unavailable\r\n\r\n")
             .await?;
         return Err(tokio::io::Error::from(tokio::io::ErrorKind::TimedOut));
     }
 
-    let mut temp = [0u8; 4096];
-    let _ = stream.write(
-        Buffering(&mut temp, 0)
-    .write(
+    stream.write_all(
         format!(
             "HTTP/1.1 200 OK\r\nContent-Type: application/dns-message\r\nCache-Control: {}\r\nAccess-Control-Allow-Origin: *\r\ncontent-length: {size}\r\n\r\n",
             &CONFIG.doh_server.cache_control
         ).as_bytes()
-    ).write(&respbuff[..size]).get()
     ).await?;
-
+    stream.write_all(&respbuff[..size]).await?;
     Ok(())
 }
 

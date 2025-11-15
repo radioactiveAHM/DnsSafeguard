@@ -40,7 +40,7 @@ pub async fn doq() {
             )
             .await;
         }
-        log::info!("QUIC Connecting");
+        log::info!("QUIC connecting");
         // Connect to dns server
         let connecting = endpoint
             .connect(CONFIG.remote_addrs, &CONFIG.server_name)
@@ -53,7 +53,7 @@ pub async fn doq() {
                     let connecting = connecting.into_0rtt();
                     if let Ok((conn, rtt)) = connecting {
                         rtt.await;
-                        log::info!("QUIC 0RTT Connection Established");
+                        log::info!("QUIC 0RTT connection established");
                         Ok(conn)
                     } else {
                         let conn = endpoint
@@ -61,7 +61,7 @@ pub async fn doq() {
                             .unwrap()
                             .await;
                         if conn.is_ok() {
-                            log::info!("QUIC Connection Established");
+                            log::info!("QUIC connection established");
                         }
                         conn
                     }
@@ -73,7 +73,7 @@ pub async fn doq() {
                 pending
             } else {
                 connecting_retry += 1;
-                log::warn!("DoQ: Connecting timeout");
+                log::warn!("connecting timeout");
                 sleep(std::time::Duration::from_secs(
                     CONFIG.connection.reconnect_sleep,
                 ))
@@ -84,7 +84,7 @@ pub async fn doq() {
 
         if conn.is_err() {
             connecting_retry += 1;
-            log::warn!("DoQ: {}", conn.unwrap_err());
+            log::warn!("{}", conn.unwrap_err());
             sleep(std::time::Duration::from_secs(
                 CONFIG.connection.reconnect_sleep,
             ))
@@ -99,7 +99,7 @@ pub async fn doq() {
         let q2 = quic.clone();
         let dead_conn2 = dead_conn.clone();
         let watcher = tokio::spawn(async move {
-            log::warn!("DoQ Watcher: {}", q2.closed().await);
+            log::warn!("watcher: {}", q2.closed().await);
             *dead_conn2.lock().await = true;
         });
 
@@ -108,17 +108,18 @@ pub async fn doq() {
             let udp = udp.clone();
             match quic.open_bi().await {
                 Ok(bistream) => {
+                    let stream_id = bistream.0.id();
                     let (dns_query, query_size, addr) = tank.unwrap();
                     tokio::spawn(async move {
                         if let Err(e) = send_dq(bistream, (*dns_query, query_size), addr, udp).await
                         {
-                            log::warn!("DoQ Stream: {e}");
+                            log::warn!("{stream_id}: {e}");
                             *dead.lock().await = true;
                         }
                     });
                 }
                 Err(e) => {
-                    log::warn!("DoQ Connection: {e}");
+                    log::warn!("{e}");
                     continue;
                 }
             }
@@ -146,7 +147,7 @@ pub async fn doq() {
                             let _ = recv.read_chunk(1024 * 4, false).await;
                         }
                         Err(e) => {
-                            log::warn!("DoQ Connection: {e}");
+                            log::warn!("{e}");
                             *dead.lock().await = true;
                         }
                     };
@@ -178,17 +179,18 @@ pub async fn doq() {
 
                 match quic.open_bi().await {
                     Ok(bistream) => {
+                        let stream_id = bistream.0.id();
                         tokio::spawn(async move {
                             if let Err(e) =
                                 send_dq(bistream, (dns_query, query_size), addr, udp).await
                             {
-                                log::warn!("DoQ Stream: {e}");
+                                log::warn!("{stream_id}: {e}");
                                 *dead.lock().await = true;
                             }
                         });
                     }
                     Err(e) => {
-                        log::warn!("DoQ Connection: {e}");
+                        log::warn!("{e}");
                         break;
                     }
                 }
@@ -197,6 +199,7 @@ pub async fn doq() {
     }
 }
 
+#[inline(always)]
 async fn send_dq(
     (mut send, mut recv): (SendStream, RecvStream),
     mut dns_query: ([u8; 514], usize),
@@ -204,23 +207,49 @@ async fn send_dq(
     udp: Arc<tokio::net::UdpSocket>,
 ) -> tokio::io::Result<()> {
     [dns_query.0[0], dns_query.0[1]] = convert_u16_to_two_u8s_be(dns_query.1 as u16);
-    send.write(&dns_query.0[..dns_query.1 + 2]).await?;
+    send.write_all(&dns_query.0[..dns_query.1 + 2]).await?;
     send.finish()?;
 
     let mut buf = [0u8; 1024 * 8];
     let mut buf_rb = tokio::io::ReadBuf::new(&mut buf);
-    recv_timeout(&mut recv, &mut buf_rb, std::time::Duration::from_secs(CONFIG.response_timeout)).await?;
+    recv_timeout(
+        &mut recv,
+        &mut buf_rb,
+        std::time::Duration::from_secs(CONFIG.response_timeout),
+    )
+    .await?;
+
+    if buf_rb.filled().is_empty() {
+        log::warn!("{} closed", send.id());
+        return Ok(());
+    }
 
     let message_size = convert_two_u8s_to_u16_be([buf_rb.filled()[0], buf_rb.filled()[1]]) as usize;
     if message_size == 0 {
         return Err(tokio::io::Error::other("malformed dns query response"));
     }
 
+    let mut size = buf_rb.filled().len();
     loop {
-        if buf_rb.filled().len() - 2 >= message_size {
+        if size - 2 >= message_size {
             break;
         }
-        recv_timeout(&mut recv, &mut buf_rb, std::time::Duration::from_secs(CONFIG.response_timeout)).await?;
+        recv_timeout(
+            &mut recv,
+            &mut buf_rb,
+            std::time::Duration::from_secs(CONFIG.response_timeout),
+        )
+        .await?;
+        if size == buf_rb.filled().len() {
+            log::warn!(
+                "{} closed: target bytes {} recved bytes {}",
+                send.id(),
+                message_size,
+                size
+            );
+            return Ok(());
+        }
+        size = buf_rb.filled().len();
     }
 
     if CONFIG.overwrite.is_some() {
@@ -230,13 +259,14 @@ async fn send_dq(
     Ok(())
 }
 
-struct Recv<'a,'b>(
-    &'a mut RecvStream,
-    &'a mut tokio::io::ReadBuf<'b>
-);
-impl<'a,'b> Future for Recv<'a,'b> {
+struct Recv<'a, 'b>(&'a mut RecvStream, &'a mut tokio::io::ReadBuf<'b>);
+impl<'a, 'b> Future for Recv<'a, 'b> {
     type Output = tokio::io::Result<()>;
-    fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+    #[inline(always)]
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
         let coop = std::task::ready!(tokio::task::coop::poll_proceed(cx));
         let this = &mut *self;
         let poll = std::task::ready!(this.0.poll_read_buf(cx, this.1));
@@ -245,20 +275,13 @@ impl<'a,'b> Future for Recv<'a,'b> {
     }
 }
 
+#[inline(always)]
 async fn recv_timeout(
     recv: &mut RecvStream,
     buf: &mut tokio::io::ReadBuf<'_>,
-    dur: std::time::Duration
+    dur: std::time::Duration,
 ) -> tokio::io::Result<()> {
-    match tokio::time::timeout(dur, Recv(recv, buf)).await {
-        Err(_) => Err(tokio::io::Error::other("read timeout")),
-        Ok(r) => {
-            r?;
-            if buf.filled().len() == 0 {
-                Err(tokio::io::Error::other("stream closed"))
-            } else {
-                Ok(())
-            }
-        }
-    }
+    tokio::time::timeout(dur, Recv(recv, buf))
+        .await
+        .map_err(|_| tokio::io::Error::other("recv timeout"))?
 }

@@ -40,7 +40,7 @@ pub fn tlsfragmenting(
                         crate::fragment::fragment_client_hello_pack(tls, tcp, fragmenting).await
                     }
                 } {
-                    log::warn!("TLS Fragmenting: {e}");
+                    log::warn!("TLS fragmenting: {e}");
                 }
             });
         });
@@ -93,7 +93,7 @@ pub async fn dynamic_tls_conn_gen(
         } else {
             (config.server_name.clone())
                 .try_into()
-                .expect("Invalid server name")
+                .expect("invalid server name")
         };
 
         Ok(Box::new(

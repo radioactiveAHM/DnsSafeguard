@@ -18,7 +18,7 @@ pub async fn http1() {
 
     let udp = crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap();
     loop {
-        log::info!("HTTP/1.1 Connecting");
+        log::info!("HTTP/1.1 connecting");
         let tls = crate::tls::dynamic_tls_conn_gen(&["http/1.1"], ctls.clone()).await;
         if tls.is_err() {
             log::warn!("{}", tls.unwrap_err());
@@ -28,7 +28,7 @@ pub async fn http1() {
             .await;
             continue;
         }
-        log::info!("HTTP/1.1 Connection Established");
+        log::info!("HTTP/1.1 connection established");
 
         let mut tls = tls.unwrap();
 
@@ -84,7 +84,7 @@ pub async fn http1() {
                 )
                 .await
                 {
-                    log::warn!("HTTP/1.1: {e}");
+                    log::warn!("{e}");
                     tank = Some((Box::new(dns_query), query_size, addr));
                     break;
                 }
@@ -113,7 +113,7 @@ async fn handler<IO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(
         &CONFIG.custom_http_path,
     );
 
-    let _ = c.write(http_req).await?;
+    c.write_all(http_req).await?;
 
     // Handle Reciving Data
     bf_http_resp.clear();
@@ -157,7 +157,7 @@ async fn handler<IO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(
             .send_to(&http_resp[body_start..http_resp_size], addr)
             .await;
     } else {
-        return Err(tokio::io::Error::other("Mailformed http response"));
+        return Err(tokio::io::Error::other("mailformed http response"));
     }
 
     Ok(())
@@ -193,7 +193,7 @@ pub async fn h1_multi() {
                     .await;
                     continue;
                 }
-                log::info!("HTTP/1.1 Connection {conn_i} Established");
+                log::info!("HTTP/1.1 connection {conn_i} established");
                 let mut c = tls_conn.unwrap();
 
                 let mut base64_url_temp = [0u8; 4096];
@@ -215,7 +215,7 @@ pub async fn h1_multi() {
                         )
                         .await
                     {
-                        log::warn!("HTTP/1.1 Connection {conn_i}: {e}");
+                        log::warn!("connection {conn_i}: {e}");
                         break;
                     }
                 }

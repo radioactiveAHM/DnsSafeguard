@@ -65,7 +65,7 @@ pub async fn serve_h2(
     }
 }
 
-#[inline(never)]
+#[inline(always)]
 async fn handle_dns_req_post(
     resp: &mut SendResponse<Bytes>,
     body: Bytes,
@@ -113,7 +113,7 @@ async fn handle_dns_req_post(
     Ok(())
 }
 
-#[inline(never)]
+#[inline(always)]
 async fn handle_dns_req_get(
     resp: &mut SendResponse<Bytes>,
     dq: Vec<u8>,

@@ -217,7 +217,7 @@ async fn rand_noiser(
 ) -> tokio::io::Result<usize> {
     let mut packet = [0u8; 1500];
     let psize_range = crate::utils::parse_range(&noise.packet_length)
-        .expect("Failed to parse packet length range");
+        .expect("failed to parse packet length range");
     let mut sent_bytes = 0;
     for _ in 0..noise.packets {
         rand::rng().fill(&mut packet);
@@ -247,6 +247,6 @@ pub async fn noiser(noise: &Noise, target: SocketAddr, socket: &socket2::Socket)
         log::info!("{sent_bytes} bytes sent as noise");
         sleep(std::time::Duration::from_millis(noise.sleep)).await;
     } else {
-        log::warn!("Noise failed");
+        log::warn!("noise failed");
     }
 }

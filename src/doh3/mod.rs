@@ -19,55 +19,44 @@ use crate::{
     rule::rulecheck,
 };
 
-pub async fn client_noise(addr: SocketAddr, target: SocketAddr, noise: &Noise) -> quinn::Endpoint {
-    let socket = socket2::Socket::new(
-        socket2::Domain::for_address(addr),
-        socket2::Type::DGRAM,
-        Some(socket2::Protocol::UDP),
-    )
-    .unwrap();
-    socket.bind(&addr.into()).unwrap();
-
-    // send noises
-    if noise.enable {
-        noise::noiser(noise, target, &socket).await;
-    }
-
-    let runtime = quinn::default_runtime().unwrap();
-    let ep = quinn::EndpointConfig::default();
-    quinn::Endpoint::new_with_abstract_socket(
-        ep,
-        None,
-        runtime.wrap_udp_socket(socket.into()).unwrap(),
-        runtime,
-    )
-    .unwrap()
-}
-
-pub async fn udp_setup(
+pub async fn quic_setup(
     target: SocketAddr,
     noise: &Noise,
     quic_conf_file: &crate::config::Quic,
     alpn: &str,
     network_interface: &'static Option<String>,
 ) -> quinn::Endpoint {
-    let mut endpoint = client_noise(
-        crate::udp::udp_addr_to_bind(network_interface, target.is_ipv4()),
-        target,
-        noise,
+    let addr = crate::udp::udp_addr_to_bind(network_interface, target.is_ipv4());
+    let socket = socket2::Socket::new(
+        socket2::Domain::for_address(addr),
+        socket2::Type::DGRAM,
+        Some(socket2::Protocol::UDP),
     )
-    .await;
-    endpoint.set_default_client_config(
-        quinn::ClientConfig::new(qtls::qtls(alpn))
-            .transport_config(transporter::tc(quic_conf_file))
-            .to_owned(),
-    );
+    .unwrap();
+    socket.set_nonblocking(true).unwrap();
+    socket.bind(&addr.into()).unwrap();
+
+    if noise.enable {
+        noise::noiser(noise, target, &socket).await;
+    }
+
+    let mut endpoint = quinn::Endpoint::new(
+        quinn::EndpointConfig::default(),
+        None,
+        socket.into(),
+        Arc::new(quinn::TokioRuntime),
+    )
+    .unwrap();
+
+    let mut qc = quinn::ClientConfig::new(qtls::qtls(alpn));
+    qc.transport_config(transporter::tc(quic_conf_file));
+    endpoint.set_default_client_config(qc);
 
     endpoint
 }
 
 pub async fn http3() {
-    let mut endpoint = udp_setup(
+    let mut endpoint = quic_setup(
         CONFIG.remote_addrs,
         &CONFIG.noise,
         &CONFIG.quic,
@@ -84,7 +73,7 @@ pub async fn http3() {
     loop {
         if connecting_retry == 3 {
             connecting_retry = 0;
-            endpoint = udp_setup(
+            endpoint = quic_setup(
                 CONFIG.remote_addrs,
                 &CONFIG.noise,
                 &CONFIG.quic,
@@ -169,7 +158,9 @@ pub async fn http3() {
             tokio::spawn(async move {
                 if let Err(e) = send_request(h3, (*dns_query, query_size), addr, udp).await {
                     log::warn!("{e}");
-                    *dead_conn.lock().await = true;
+                    if e.kind() == std::io::ErrorKind::TimedOut {
+                        *dead_conn.lock().await = true;
+                    }
                 }
             });
             tank = None;
@@ -227,7 +218,9 @@ pub async fn http3() {
                 tokio::spawn(async move {
                     if let Err(e) = send_request(h3, (dns_query, query_size), addr, udp).await {
                         log::warn!("{e}");
-                        *quic_conn_dead.lock().await = true;
+                        if e.kind() == std::io::ErrorKind::TimedOut {
+                            *quic_conn_dead.lock().await = true;
+                        }
                     }
                 });
             }
@@ -289,7 +282,13 @@ async fn send_request(
         let mut buff = [0; 1024 * 8];
         let mut data_read = 0;
         loop {
-            if let Some(body) = reqs.recv_data().await.map_err(tokio::io::Error::other)? {
+            if let Some(body) = timeout(
+                std::time::Duration::from_secs(CONFIG.response_timeout),
+                reqs.recv_data(),
+            )
+            .await?
+            .map_err(tokio::io::Error::other)?
+            {
                 data_read += body.reader().read(&mut buff[data_read..])?;
             }
             if clen == 0 {

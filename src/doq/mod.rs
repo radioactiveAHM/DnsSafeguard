@@ -8,7 +8,7 @@ use tokio::{
 
 use crate::{
     CONFIG,
-    doh3::udp_setup,
+    doh3::quic_setup,
     rule::rulecheck,
     utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be},
 };
@@ -16,7 +16,7 @@ use crate::{
 pub async fn doq() {
     let udp = Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
 
-    let mut endpoint = udp_setup(
+    let mut endpoint = quic_setup(
         CONFIG.remote_addrs,
         &CONFIG.noise,
         &CONFIG.quic,
@@ -31,7 +31,7 @@ pub async fn doq() {
     loop {
         if connecting_retry == 3 {
             connecting_retry = 0;
-            endpoint = udp_setup(
+            endpoint = quic_setup(
                 CONFIG.remote_addrs,
                 &CONFIG.noise,
                 &CONFIG.quic,
@@ -114,7 +114,9 @@ pub async fn doq() {
                         if let Err(e) = send_dq(bistream, (*dns_query, query_size), addr, udp).await
                         {
                             log::warn!("{stream_id}: {e}");
-                            *dead.lock().await = true;
+                            if e.kind() == std::io::ErrorKind::TimedOut {
+                                *dead.lock().await = true;
+                            }
                         }
                     });
                 }
@@ -185,12 +187,16 @@ pub async fn doq() {
                                 send_dq(bistream, (dns_query, query_size), addr, udp).await
                             {
                                 log::warn!("{stream_id}: {e}");
-                                *dead.lock().await = true;
+                                if e.kind() == std::io::ErrorKind::TimedOut {
+                                    *dead.lock().await = true;
+                                }
                             }
                         });
                     }
                     Err(e) => {
                         log::warn!("{e}");
+                        tank = Some((Box::new(dns_query), query_size, addr));
+                        watcher.abort();
                         break;
                     }
                 }
@@ -281,7 +287,5 @@ async fn recv_timeout(
     buf: &mut tokio::io::ReadBuf<'_>,
     dur: std::time::Duration,
 ) -> tokio::io::Result<()> {
-    tokio::time::timeout(dur, Recv(recv, buf))
-        .await
-        .map_err(|_| tokio::io::Error::other("recv timeout"))?
+    tokio::time::timeout(dur, Recv(recv, buf)).await?
 }

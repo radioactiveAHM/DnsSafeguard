@@ -28,7 +28,6 @@ pub async fn http2() {
         log::info!("H2 connection established");
 
         let dead_conn = Arc::new(Mutex::new(false));
-        // h2 engine
         let dead_conn2 = dead_conn.clone();
         let watcher = tokio::spawn(async move {
             if let Err(e) = h2c.await {
@@ -38,13 +37,11 @@ pub async fn http2() {
         });
 
         if let Some((dns_query, query_size, addr)) = tank {
-            let h2_conn_dead = dead_conn.clone();
             let udp = udp.clone();
             let client = client.clone();
             tokio::spawn(async move {
                 if let Err(e) = send_req((*dns_query, query_size), client, addr, udp).await {
                     log::warn!("{e}");
-                    *h2_conn_dead.lock().await = true;
                 }
             });
             tank = None;
@@ -52,12 +49,6 @@ pub async fn http2() {
 
         let mut dns_query = [0u8; 512];
         loop {
-            let h2_client = client.clone().ready().await;
-            if let Err(e) = h2_client {
-                log::warn!("{e}");
-                break;
-            }
-
             let h2_conn_dead = dead_conn.clone();
             let udp = udp.clone();
             if *h2_conn_dead.lock().await {
@@ -84,7 +75,6 @@ pub async fn http2() {
             .await;
 
             if let Some(Ok((query_size, addr))) = message {
-                // rule check
                 if (CONFIG.rules.is_some()
                     && rulecheck(
                         &CONFIG.rules,
@@ -104,15 +94,23 @@ pub async fn http2() {
                     break;
                 }
 
-                // Base64url dns query
-                tokio::spawn(async move {
-                    if let Err(e) =
-                        send_req((dns_query, query_size), h2_client.unwrap(), addr, udp).await
-                    {
-                        log::warn!("{e}");
-                        *h2_conn_dead.lock().await = true;
+                match client.clone().ready().await {
+                    Ok(client) => {
+                        tokio::spawn(async move {
+                            if let Err(e) =
+                                send_req((dns_query, query_size), client, addr, udp).await
+                            {
+                                log::warn!("{e}");
+                            }
+                        });
                     }
-                });
+                    Err(e) => {
+                        log::warn!("{e}");
+                        tank = Some((Box::new(dns_query), query_size, addr));
+                        watcher.abort();
+                        break;
+                    }
+                }
             }
         }
     }
@@ -120,11 +118,10 @@ pub async fn http2() {
 
 async fn send_req(
     dns_query: ([u8; 512], usize),
-    h2_client: SendRequest<bytes::Bytes>,
+    mut h2_client: SendRequest<bytes::Bytes>,
     addr: SocketAddr,
     udp: Arc<tokio::net::UdpSocket>,
 ) -> tokio::io::Result<()> {
-    let mut h2_client = h2_client.ready().await.map_err(tokio::io::Error::other)?;
     let path = if let Some(path) = &CONFIG.custom_http_path {
         path.as_str()
     } else {

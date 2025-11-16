@@ -13,13 +13,11 @@ pub fn tc(quic_conf: &crate::config::Quic) -> std::sync::Arc<quinn::TransportCon
         transport_config.datagram_send_buffer_size(datagram_send_buffer_size);
     }
     transport_config.packet_threshold(quic_conf.packet_threshold);
-    if let Some(max_idle_timeout) = quic_conf.max_idle_timeout {
-        transport_config.max_idle_timeout(Some(IdleTimeout::from(VarInt::from_u32(
-            max_idle_timeout * 1000,
-        ))));
-    } else {
-        transport_config.max_idle_timeout(None);
-    }
+    transport_config.max_idle_timeout(
+        quic_conf
+            .max_idle_timeout
+            .map(|max_idle_timeout| IdleTimeout::from(VarInt::from_u32(max_idle_timeout * 1000))),
+    );
 
     std::sync::Arc::new(transport_config)
 }

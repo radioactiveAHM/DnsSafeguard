@@ -6,371 +6,328 @@ use core::str;
 use std::{io::Read, net::SocketAddr, sync::Arc};
 
 use tokio::{
-    sync::Mutex,
-    time::{sleep, timeout},
+	sync::Mutex,
+	time::{sleep, timeout},
 };
 
 use bytes::Buf;
 use h3::client::SendRequest;
 
 use crate::{
-    CONFIG,
-    config::{self, Noise},
-    rule::rulecheck,
+	CONFIG,
+	config::{self, Noise},
+	rule::rulecheck,
 };
 
 pub async fn quic_setup(
-    target: SocketAddr,
-    noise: &Noise,
-    quic_conf_file: &crate::config::Quic,
-    alpn: &str,
-    network_interface: &'static Option<String>,
+	target: SocketAddr,
+	noise: &Noise,
+	quic_conf_file: &crate::config::Quic,
+	alpn: &str,
+	network_interface: &'static Option<String>,
 ) -> quinn::Endpoint {
-    let addr = crate::udp::udp_addr_to_bind(network_interface, target.is_ipv4());
-    let socket = socket2::Socket::new(
-        socket2::Domain::for_address(addr),
-        socket2::Type::DGRAM,
-        Some(socket2::Protocol::UDP),
-    )
-    .unwrap();
-    socket.set_nonblocking(true).unwrap();
-    socket.bind(&addr.into()).unwrap();
+	let addr = crate::udp::udp_addr_to_bind(network_interface, target.is_ipv4());
+	let socket = socket2::Socket::new(
+		socket2::Domain::for_address(addr),
+		socket2::Type::DGRAM,
+		Some(socket2::Protocol::UDP),
+	)
+	.unwrap();
+	socket.set_nonblocking(true).unwrap();
+	socket.bind(&addr.into()).unwrap();
 
-    if noise.enable {
-        noise::noiser(noise, target, &socket).await;
-    }
+	if noise.enable {
+		noise::noiser(noise, target, &socket).await;
+	}
 
-    let mut endpoint = quinn::Endpoint::new(
-        quinn::EndpointConfig::default(),
-        None,
-        socket.into(),
-        Arc::new(quinn::TokioRuntime),
-    )
-    .unwrap();
+	let mut endpoint = quinn::Endpoint::new(
+		quinn::EndpointConfig::default(),
+		None,
+		socket.into(),
+		Arc::new(quinn::TokioRuntime),
+	)
+	.unwrap();
 
-    let mut qc = quinn::ClientConfig::new(qtls::qtls(alpn));
-    qc.transport_config(transporter::tc(quic_conf_file));
-    endpoint.set_default_client_config(qc);
+	let mut qc = quinn::ClientConfig::new(qtls::qtls(alpn));
+	qc.transport_config(transporter::tc(quic_conf_file));
+	endpoint.set_default_client_config(qc);
 
-    endpoint
+	endpoint
 }
 
 pub async fn http3() {
-    let mut endpoint = quic_setup(
-        CONFIG.remote_addrs,
-        &CONFIG.noise,
-        &CONFIG.quic,
-        "h3",
-        &CONFIG.interface,
-    )
-    .await;
+	let mut endpoint = quic_setup(
+		CONFIG.remote_addrs,
+		&CONFIG.noise,
+		&CONFIG.quic,
+		"h3",
+		&CONFIG.interface,
+	)
+	.await;
 
-    let udp = Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
+	let udp = Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
 
-    let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
+	let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
 
-    let mut connecting_retry = 0u8;
-    loop {
-        if connecting_retry == 3 {
-            connecting_retry = 0;
-            endpoint = quic_setup(
-                CONFIG.remote_addrs,
-                &CONFIG.noise,
-                &CONFIG.quic,
-                "h3",
-                &CONFIG.interface,
-            )
-            .await;
-        }
-        log::info!("H3 connecting");
-        // Connect to dns server
-        let connecting = endpoint
-            .connect(CONFIG.remote_addrs, &CONFIG.server_name)
-            .unwrap();
+	let mut connecting_retry = 0u8;
+	loop {
+		if connecting_retry == 3 {
+			connecting_retry = 0;
+			endpoint = quic_setup(
+				CONFIG.remote_addrs,
+				&CONFIG.noise,
+				&CONFIG.quic,
+				"h3",
+				&CONFIG.interface,
+			)
+			.await;
+		}
+		log::info!("H3 connecting");
+		// Connect to dns server
+		let connecting = endpoint.connect(CONFIG.remote_addrs, &CONFIG.server_name).unwrap();
 
-        let conn = {
-            let timing = timeout(
-                std::time::Duration::from_secs(CONFIG.quic.connecting_timeout),
-                async {
-                    let connecting = connecting.into_0rtt();
-                    if let Ok((conn, rtt)) = connecting {
-                        rtt.await;
-                        log::info!("H3 0RTT connection established");
-                        Ok(conn)
-                    } else {
-                        let conn = endpoint
-                            .connect(CONFIG.remote_addrs, &CONFIG.server_name)
-                            .unwrap()
-                            .await;
-                        if conn.is_ok() {
-                            log::info!("H3 connection established");
-                        }
-                        conn
-                    }
-                },
-            )
-            .await;
+		let conn = {
+			let timing = timeout(std::time::Duration::from_secs(CONFIG.quic.connecting_timeout), async {
+				let connecting = connecting.into_0rtt();
+				if let Ok((conn, rtt)) = connecting {
+					rtt.await;
+					log::info!("H3 0RTT connection established");
+					Ok(conn)
+				} else {
+					let conn = endpoint
+						.connect(CONFIG.remote_addrs, &CONFIG.server_name)
+						.unwrap()
+						.await;
+					if conn.is_ok() {
+						log::info!("H3 connection established");
+					}
+					conn
+				}
+			})
+			.await;
 
-            if let Ok(pending) = timing {
-                pending
-            } else {
-                connecting_retry += 1;
-                log::warn!("connecting timeout");
-                sleep(std::time::Duration::from_secs(
-                    CONFIG.connection.reconnect_sleep,
-                ))
-                .await;
-                continue;
-            }
-        };
+			if let Ok(pending) = timing {
+				pending
+			} else {
+				connecting_retry += 1;
+				log::warn!("connecting timeout");
+				sleep(std::time::Duration::from_secs(CONFIG.connection.reconnect_sleep)).await;
+				continue;
+			}
+		};
 
-        if conn.is_err() {
-            connecting_retry += 1;
-            log::warn!("{}", conn.unwrap_err());
-            sleep(std::time::Duration::from_secs(
-                CONFIG.connection.reconnect_sleep,
-            ))
-            .await;
-            continue;
-        }
-        connecting_retry = 0;
+		if conn.is_err() {
+			connecting_retry += 1;
+			log::warn!("{}", conn.unwrap_err());
+			sleep(std::time::Duration::from_secs(CONFIG.connection.reconnect_sleep)).await;
+			continue;
+		}
+		connecting_retry = 0;
 
-        let (mut h3c, h3) = match h3::client::new(h3_quinn::Connection::new(conn.unwrap())).await {
-            Ok(conn) => conn,
-            Err(e) => {
-                log::warn!("{e}");
-                continue;
-            }
-        };
+		let (mut h3c, h3) = match h3::client::new(h3_quinn::Connection::new(conn.unwrap())).await {
+			Ok(conn) => conn,
+			Err(e) => {
+				log::warn!("{e}");
+				continue;
+			}
+		};
 
-        let dead_conn = Arc::new(Mutex::new(false));
+		let dead_conn = Arc::new(Mutex::new(false));
 
-        let dead_conn2 = dead_conn.clone();
-        let watcher = tokio::spawn(async move {
-            log::warn!("{}", h3c.wait_idle().await);
-            *(dead_conn2.lock().await) = true;
-        });
+		let dead_conn2 = dead_conn.clone();
+		let watcher = tokio::spawn(async move {
+			log::warn!("{}", h3c.wait_idle().await);
+			*(dead_conn2.lock().await) = true;
+		});
 
-        if let Some((dns_query, query_size, addr)) = tank {
-            let udp = udp.clone();
-            let dead_conn = dead_conn.clone();
-            let h3 = h3.clone();
-            tokio::spawn(async move {
-                if let Err(e) = send_request(h3, (*dns_query, query_size), addr, udp).await {
-                    log::warn!("{e}");
-                    if e.kind() == std::io::ErrorKind::TimedOut {
-                        *dead_conn.lock().await = true;
-                    }
-                }
-            });
-            tank = None;
-        }
+		if let Some((dns_query, query_size, addr)) = tank {
+			let udp = udp.clone();
+			let dead_conn = dead_conn.clone();
+			let h3 = h3.clone();
+			tokio::spawn(async move {
+				if let Err(e) = send_request(h3, (*dns_query, query_size), addr, udp).await {
+					log::warn!("{e}");
+					if e.kind() == std::io::ErrorKind::TimedOut {
+						*dead_conn.lock().await = true;
+					}
+				}
+			});
+			tank = None;
+		}
 
-        let mut dns_query = [0u8; 512];
-        loop {
-            let quic_conn_dead = dead_conn.clone();
-            let udp = udp.clone();
-            if *quic_conn_dead.lock().await {
-                watcher.abort();
-                break;
-            }
+		let mut dns_query = [0u8; 512];
+		loop {
+			let quic_conn_dead = dead_conn.clone();
+			let udp = udp.clone();
+			if *quic_conn_dead.lock().await {
+				watcher.abort();
+				break;
+			}
 
-            let message = crate::keepalive::recv_timeout_with(
-                &udp,
-                CONFIG.connection_keep_alive,
-                &mut dns_query,
-                async {
-                    let mut h3 = h3.clone();
-                    let req =
-                        http::Request::get(format!("https://{}/", CONFIG.server_name.as_str()))
-                            .body(())
-                            .unwrap();
-                    if let Err(e) = h3.send_request(req).await {
-                        log::warn!("{e}");
-                        *(quic_conn_dead.lock().await) = true;
-                    }
-                },
-            )
-            .await;
+			let message =
+				crate::keepalive::recv_timeout_with(&udp, CONFIG.connection_keep_alive, &mut dns_query, async {
+					let mut h3 = h3.clone();
+					let req = http::Request::get(format!("https://{}/", CONFIG.server_name.as_str()))
+						.body(())
+						.unwrap();
+					if let Err(e) = h3.send_request(req).await {
+						log::warn!("{e}");
+						*(quic_conn_dead.lock().await) = true;
+					}
+				})
+				.await;
 
-            if let Some(Ok((query_size, addr))) = message {
-                // rule check
-                if (CONFIG.rules.is_some()
-                    && rulecheck(
-                        &CONFIG.rules,
-                        &mut dns_query[..query_size],
-                        addr,
-                        udp.clone(),
-                    )
-                    .await)
-                    || query_size < 12
-                {
-                    continue;
-                }
+			if let Some(Ok((query_size, addr))) = message {
+				// rule check
+				if (CONFIG.rules.is_some()
+					&& rulecheck(&CONFIG.rules, &mut dns_query[..query_size], addr, udp.clone()).await)
+					|| query_size < 12
+				{
+					continue;
+				}
 
-                if *quic_conn_dead.lock().await {
-                    tank = Some((Box::new(dns_query), query_size, addr));
-                    watcher.abort();
-                    break;
-                }
+				if *quic_conn_dead.lock().await {
+					tank = Some((Box::new(dns_query), query_size, addr));
+					watcher.abort();
+					break;
+				}
 
-                let h3 = h3.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = send_request(h3, (dns_query, query_size), addr, udp).await {
-                        log::warn!("{e}");
-                        if e.kind() == std::io::ErrorKind::TimedOut {
-                            *quic_conn_dead.lock().await = true;
-                        }
-                    }
-                });
-            }
-        }
-    }
+				let h3 = h3.clone();
+				tokio::spawn(async move {
+					if let Err(e) = send_request(h3, (dns_query, query_size), addr, udp).await {
+						log::warn!("{e}");
+						if e.kind() == std::io::ErrorKind::TimedOut {
+							*quic_conn_dead.lock().await = true;
+						}
+					}
+				});
+			}
+		}
+	}
 }
 
 #[inline(always)]
 async fn send_request(
-    mut h3: SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
-    dns_query: ([u8; 512], usize),
-    addr: SocketAddr,
-    udp: Arc<tokio::net::UdpSocket>,
+	mut h3: SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
+	dns_query: ([u8; 512], usize),
+	addr: SocketAddr,
+	udp: Arc<tokio::net::UdpSocket>,
 ) -> tokio::io::Result<()> {
-    let path = if let Some(path) = &CONFIG.custom_http_path {
-        path.as_str()
-    } else {
-        "/dns-query"
-    };
-    let mut reqs = match CONFIG.http_method {
-        config::HttpMethod::GET => {
-            get(
-                &mut h3,
-                &CONFIG.server_name,
-                path,
-                &dns_query.0[..dns_query.1],
-            )
-            .await?
-        }
-        config::HttpMethod::POST => {
-            post(
-                &mut h3,
-                &CONFIG.server_name,
-                path,
-                &dns_query.0[..dns_query.1],
-            )
-            .await?
-        }
-    };
+	let path = if let Some(path) = &CONFIG.custom_http_path {
+		path.as_str()
+	} else {
+		"/dns-query"
+	};
+	let mut reqs = match CONFIG.http_method {
+		config::HttpMethod::GET => get(&mut h3, &CONFIG.server_name, path, &dns_query.0[..dns_query.1]).await?,
+		config::HttpMethod::POST => post(&mut h3, &CONFIG.server_name, path, &dns_query.0[..dns_query.1]).await?,
+	};
 
-    reqs.finish().await.map_err(tokio::io::Error::other)?;
+	reqs.finish().await.map_err(tokio::io::Error::other)?;
 
-    let resp = timeout(
-        std::time::Duration::from_secs(CONFIG.response_timeout),
-        reqs.recv_response(),
-    )
-    .await?
-    .map_err(tokio::io::Error::other)?;
+	let resp = timeout(
+		std::time::Duration::from_secs(CONFIG.response_timeout),
+		reqs.recv_response(),
+	)
+	.await?
+	.map_err(tokio::io::Error::other)?;
 
-    if resp.status() == http::status::StatusCode::OK {
-        let clen: usize = if let Some(clen) = resp.headers().get("content-length")
-            && let Ok(clen) = clen.to_str()
-        {
-            clen.parse().unwrap_or(0)
-        } else {
-            0
-        };
+	if resp.status() == http::status::StatusCode::OK {
+		let clen: usize = if let Some(clen) = resp.headers().get("content-length")
+			&& let Ok(clen) = clen.to_str()
+		{
+			clen.parse().unwrap_or(0)
+		} else {
+			0
+		};
 
-        let mut buff = [0; 1024 * 8];
-        let mut data_read = 0;
-        loop {
-            if let Some(body) = timeout(
-                std::time::Duration::from_secs(CONFIG.response_timeout),
-                reqs.recv_data(),
-            )
-            .await?
-            .map_err(tokio::io::Error::other)?
-            {
-                data_read += body.reader().read(&mut buff[data_read..])?;
-            }
-            if clen == 0 {
-                // if no content-length provided we read only once
-                break;
-            }
-            if data_read >= clen {
-                break;
-            }
-        }
+		let mut buff = [0; 1024 * 8];
+		let mut data_read = 0;
+		loop {
+			if let Some(body) = timeout(
+				std::time::Duration::from_secs(CONFIG.response_timeout),
+				reqs.recv_data(),
+			)
+			.await?
+			.map_err(tokio::io::Error::other)?
+			{
+				data_read += body.reader().read(&mut buff[data_read..])?;
+			}
+			if clen == 0 {
+				// if no content-length provided we read only once
+				break;
+			}
+			if data_read >= clen {
+				break;
+			}
+		}
 
-        if CONFIG.overwrite.is_some() {
-            crate::ipoverwrite::overwrite_ip(&mut buff[..data_read], &CONFIG.overwrite);
-        }
-        let _ = udp.send_to(&buff[..data_read], addr).await;
-    } else {
-        log::warn!(
-            "remote responded with status code of {}",
-            resp.status().as_str()
-        );
-    }
+		if CONFIG.overwrite.is_some() {
+			crate::ipoverwrite::overwrite_ip(&mut buff[..data_read], &CONFIG.overwrite);
+		}
+		let _ = udp.send_to(&buff[..data_read], addr).await;
+	} else {
+		log::warn!("remote responded with status code of {}", resp.status().as_str());
+	}
 
-    Ok(())
+	Ok(())
 }
 
 #[inline(always)]
 async fn get(
-    h3: &mut SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
-    server_name: &str,
-    path: &str,
-    dns_query: &[u8],
-) -> tokio::io::Result<h3::client::RequestStream<h3_quinn::BidiStream<bytes::Bytes>, bytes::Bytes>>
-{
-    h3.send_request(
-        http::Request::get(
-            http::Uri::builder()
-                .scheme("https")
-                .authority(server_name)
-                .path_and_query(format!("{}?dns={}", path, base64_url::encode(dns_query)))
-                .build()
-                .map_err(tokio::io::Error::other)?,
-        )
-        .version(http::Version::HTTP_3)
-        .header("Accept", "application/dns-message")
-        .body(())
-        .map_err(tokio::io::Error::other)?,
-    )
-    .await
-    .map_err(tokio::io::Error::other)
+	h3: &mut SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
+	server_name: &str,
+	path: &str,
+	dns_query: &[u8],
+) -> tokio::io::Result<h3::client::RequestStream<h3_quinn::BidiStream<bytes::Bytes>, bytes::Bytes>> {
+	h3.send_request(
+		http::Request::get(
+			http::Uri::builder()
+				.scheme("https")
+				.authority(server_name)
+				.path_and_query(format!("{}?dns={}", path, base64_url::encode(dns_query)))
+				.build()
+				.map_err(tokio::io::Error::other)?,
+		)
+		.version(http::Version::HTTP_3)
+		.header("Accept", "application/dns-message")
+		.body(())
+		.map_err(tokio::io::Error::other)?,
+	)
+	.await
+	.map_err(tokio::io::Error::other)
 }
 
 #[inline(always)]
 async fn post(
-    h3: &mut SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
-    server_name: &str,
-    path: &str,
-    dns_query: &[u8],
-) -> tokio::io::Result<h3::client::RequestStream<h3_quinn::BidiStream<bytes::Bytes>, bytes::Bytes>>
-{
-    let mut pending = h3
-        .send_request(
-            http::Request::post(
-                http::Uri::builder()
-                    .scheme("https")
-                    .authority(server_name)
-                    .path_and_query(path)
-                    .build()
-                    .map_err(tokio::io::Error::other)?,
-            )
-            .header("Accept", "application/dns-message")
-            .header("Content-Type", "application/dns-message")
-            .header("content-length", dns_query.len())
-            .version(http::Version::HTTP_3)
-            .body(())
-            .map_err(tokio::io::Error::other)?,
-        )
-        .await
-        .map_err(tokio::io::Error::other)?;
+	h3: &mut SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
+	server_name: &str,
+	path: &str,
+	dns_query: &[u8],
+) -> tokio::io::Result<h3::client::RequestStream<h3_quinn::BidiStream<bytes::Bytes>, bytes::Bytes>> {
+	let mut pending = h3
+		.send_request(
+			http::Request::post(
+				http::Uri::builder()
+					.scheme("https")
+					.authority(server_name)
+					.path_and_query(path)
+					.build()
+					.map_err(tokio::io::Error::other)?,
+			)
+			.header("Accept", "application/dns-message")
+			.header("Content-Type", "application/dns-message")
+			.header("content-length", dns_query.len())
+			.version(http::Version::HTTP_3)
+			.body(())
+			.map_err(tokio::io::Error::other)?,
+		)
+		.await
+		.map_err(tokio::io::Error::other)?;
 
-    pending
-        .send_data(bytes::Bytes::copy_from_slice(dns_query))
-        .await
-        .map_err(tokio::io::Error::other)?;
-    Ok(pending)
+	pending
+		.send_data(bytes::Bytes::copy_from_slice(dns_query))
+		.await
+		.map_err(tokio::io::Error::other)?;
+	Ok(pending)
 }

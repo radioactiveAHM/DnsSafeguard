@@ -2,156 +2,146 @@ use std::{fmt::Display, net::SocketAddr};
 use tokio::{io::AsyncWriteExt, net::UdpSocket};
 
 use crate::{
-    CONFIG,
-    keepalive::recv_timeout,
-    utils::{c_len, catch_in_buff},
+	CONFIG,
+	keepalive::recv_timeout,
+	utils::{c_len, catch_in_buff},
 };
 
 pub async fn serve_http11(
-    mut stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
-    serve_addrs: SocketAddr,
-    log: bool,
+	tls: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
+	serve_addrs: SocketAddr,
 ) -> tokio::io::Result<()> {
-    let peer = stream.get_ref().0.peer_addr()?;
-    let serving_ip = if serve_addrs.ip() == std::net::Ipv4Addr::UNSPECIFIED {
-        std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
-    } else if serve_addrs.ip() == std::net::Ipv6Addr::UNSPECIFIED {
-        std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST)
-    } else {
-        serve_addrs.ip()
-    };
-    let agent = crate::udp::udp_socket(std::net::SocketAddr::new(serving_ip, 0)).await?;
-    agent
-        .connect(std::net::SocketAddr::new(serving_ip, serve_addrs.port()))
-        .await?;
+	let serving_ip = if serve_addrs.ip() == std::net::Ipv4Addr::UNSPECIFIED {
+		std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
+	} else if serve_addrs.ip() == std::net::Ipv6Addr::UNSPECIFIED {
+		std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST)
+	} else {
+		serve_addrs.ip()
+	};
+	let agent = crate::udp::udp_socket(std::net::SocketAddr::new(serving_ip, 0)).await?;
+	agent
+		.connect(std::net::SocketAddr::new(serving_ip, serve_addrs.port()))
+		.await?;
 
-    let mut reqbuff = [0; 1024];
-    let mut reqbuff: tokio::io::ReadBuf<'_> = tokio::io::ReadBuf::new(&mut reqbuff);
-    let mut respbuff = [0; 4096];
-    loop {
-        crate::ioutils::Fill(std::pin::Pin::new(&mut stream), &mut reqbuff).await?;
-        if let Err(e) = handle_req(&mut stream, &mut reqbuff, &agent, &mut respbuff).await
-            && log
-        {
-            log::warn!("DoH1.1 server<{peer}>: {e}");
-        }
-        reqbuff.clear();
-    }
+	let mut reqbuff = [0; 1024];
+	let mut reqbuff: tokio::io::ReadBuf<'_> = tokio::io::ReadBuf::new(&mut reqbuff);
+	let mut respbuff = [0; 1024 * 8];
+	loop {
+		crate::ioutils::Fill(std::pin::Pin::new(tls), &mut reqbuff).await?;
+		handle_req(tls, &mut reqbuff, &agent, &mut respbuff).await?;
+		reqbuff.clear();
+	}
 }
 
 #[inline(always)]
 async fn handle_req(
-    stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
-    reqbuff: &mut tokio::io::ReadBuf<'_>,
-    udp: &UdpSocket,
-    respbuff: &mut [u8],
+	stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
+	reqbuff: &mut tokio::io::ReadBuf<'_>,
+	udp: &UdpSocket,
+	respbuff: &mut [u8],
 ) -> tokio::io::Result<()> {
-    let req = HTTP11::parse(reqbuff, stream).await?;
-    log::trace!("{}", String::from_utf8_lossy(reqbuff.filled()));
-    let dqbuff = match &req.method {
-        Method::Get(dq) => dq.as_slice(),
-        Method::Post(body_pos) => &reqbuff.filled()[*body_pos..],
-    };
+	let req = HTTP11::parse(reqbuff, stream).await?;
+	log::trace!("{}", String::from_utf8_lossy(reqbuff.filled()));
+	let dqbuff = match &req.method {
+		Method::Get(dq) => dq.as_slice(),
+		Method::Post(body_pos) => &reqbuff.filled()[*body_pos..],
+	};
 
-    udp.send(dqbuff).await?;
+	udp.send(dqbuff).await?;
 
-    let size: usize;
-    if let Ok((v, _)) =
-        recv_timeout(udp, Some(CONFIG.doh_server.response_timeout.0), respbuff).await
-    {
-        size = v;
-    } else if let Ok((v, _)) =
-        recv_timeout(udp, Some(CONFIG.doh_server.response_timeout.1), respbuff).await
-    {
-        size = v;
-    } else {
-        stream
-            .write_all(b"HTTP/1.1 503 Service Unavailable\r\n\r\n")
-            .await?;
-        return Err(tokio::io::Error::from(tokio::io::ErrorKind::TimedOut));
-    }
+	let size: usize;
+	if let Ok((v, _)) = recv_timeout(udp, Some(CONFIG.doh_server.response_timeout.0), respbuff).await {
+		size = v;
+	} else if let Ok((v, _)) = recv_timeout(udp, Some(CONFIG.doh_server.response_timeout.1), respbuff).await {
+		size = v;
+	} else {
+		stream.write_all(b"HTTP/1.1 503 Service Unavailable\r\n\r\n").await?;
+		return Err(tokio::io::Error::from(tokio::io::ErrorKind::TimedOut));
+	}
 
-    stream.write_all(
-        format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/dns-message\r\nCache-Control: {}\r\nAccess-Control-Allow-Origin: *\r\ncontent-length: {size}\r\n\r\n",
-            &CONFIG.doh_server.cache_control
-        ).as_bytes()
-    ).await?;
-    stream.write_all(&respbuff[..size]).await?;
-    Ok(())
+	stream
+        .write_all(
+            format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/dns-message\r\nCache-Control: {}\r\nAccess-Control-Allow-Origin: *\r\ncontent-length: {size}\r\n\r\n",
+                &CONFIG.doh_server.cache_control
+            )
+            .as_bytes(),
+        )
+        .await?;
+	stream.write_all(&respbuff[..size]).await
 }
 
 #[derive(Debug)]
 enum HTTP11Errors {
-    NoDnsQuery,
-    InvalidMethod,
-    MalformedHttp,
+	NoDnsQuery,
+	InvalidMethod,
+	MalformedHttp,
+	NoContentLength,
 }
 impl Display for HTTP11Errors {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            HTTP11Errors::NoDnsQuery => write!(f, "NoDnsQuery"),
-            HTTP11Errors::InvalidMethod => write!(f, "InvalidMethod"),
-            HTTP11Errors::MalformedHttp => write!(f, "MalformedHttp"),
-        }
-    }
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			HTTP11Errors::NoDnsQuery => write!(f, "NoDnsQuery"),
+			HTTP11Errors::InvalidMethod => write!(f, "InvalidMethod"),
+			HTTP11Errors::MalformedHttp => write!(f, "MalformedHttp"),
+			HTTP11Errors::NoContentLength => write!(f, "NoContentLength"),
+		}
+	}
 }
 impl std::error::Error for HTTP11Errors {}
 
 enum Method {
-    Get(Vec<u8>),
-    Post(usize),
+	Get(Vec<u8>),
+	Post(usize),
 }
 struct HTTP11 {
-    method: Method,
+	method: Method,
 }
 impl HTTP11 {
-    fn find_query(buff: &[u8]) -> Option<&[u8]> {
-        let a = catch_in_buff(b"?dns=", buff)?;
-        let b = catch_in_buff(b" HTTP/1.1", buff)?;
-        Some(&buff[a.1..b.0])
-    }
-    async fn parse(
-        reqbuff: &mut tokio::io::ReadBuf<'_>,
-        mut stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
-    ) -> tokio::io::Result<Self> {
-        if &reqbuff.filled()[..3] == b"GET" {
-            if let Some(bs4dns) = HTTP11::find_query(reqbuff.filled()) {
-                Ok(Self {
-                    method: Method::Get(
-                        base64_url::decode(bs4dns)
-                            .map_err(|_| tokio::io::Error::other("base64 url encode error"))?,
-                    ),
-                })
-            } else {
-                Err(tokio::io::Error::other(HTTP11Errors::NoDnsQuery))
-            }
-        } else if &reqbuff.filled()[..4] == b"POST" {
-            if let Some(body_pos) = catch_in_buff(b"\r\n\r\n", reqbuff.filled()) {
-                let content_length = c_len(&reqbuff.filled()[..body_pos.0]);
-                if content_length > 0 {
-                    loop {
-                        if reqbuff.filled()[body_pos.1..].len() >= content_length {
-                            break;
-                        }
-                        crate::ioutils::read_buffered_timeout(
-                            reqbuff,
-                            &mut stream,
-                            std::time::Duration::from_secs(5),
-                        )
-                        .await?;
-                    }
-                    Ok(Self {
-                        method: Method::Post(body_pos.1),
-                    })
-                } else {
-                    Err(tokio::io::Error::other(HTTP11Errors::MalformedHttp))
-                }
-            } else {
-                Err(tokio::io::Error::other(HTTP11Errors::MalformedHttp))
-            }
-        } else {
-            Err(tokio::io::Error::other(HTTP11Errors::InvalidMethod))
-        }
-    }
+	fn find_query(buff: &[u8]) -> Option<&[u8]> {
+		let a = catch_in_buff(b"?dns=", buff)?;
+		let b = catch_in_buff(b" HTTP/1.1", buff)?;
+		Some(&buff[a.1..b.0])
+	}
+	async fn parse(
+		reqbuff: &mut tokio::io::ReadBuf<'_>,
+		mut stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
+	) -> tokio::io::Result<Self> {
+		match &reqbuff.filled()[..4] {
+			// _| | do not remove this space
+			b"GET " => {
+				if let Some(bs4dns) = HTTP11::find_query(reqbuff.filled()) {
+					Ok(Self {
+						method: Method::Get(
+							base64_url::decode(bs4dns)
+								.map_err(|_| tokio::io::Error::other("base64 url encode error"))?,
+						),
+					})
+				} else {
+					Err(tokio::io::Error::other(HTTP11Errors::NoDnsQuery))
+				}
+			}
+			b"POST" => {
+				if let Some(body_pos) = catch_in_buff(b"\r\n\r\n", reqbuff.filled()) {
+					let content_length = c_len(&reqbuff.filled()[..body_pos.0]);
+					if content_length == 0 {
+						return Err(tokio::io::Error::other(HTTP11Errors::NoContentLength));
+					}
+					loop {
+						if reqbuff.filled()[body_pos.1..].len() >= content_length {
+							break;
+						}
+						crate::ioutils::read_buffered_timeout(reqbuff, &mut stream, std::time::Duration::from_secs(5))
+							.await?;
+					}
+					Ok(Self {
+						method: Method::Post(body_pos.1),
+					})
+				} else {
+					Err(tokio::io::Error::other(HTTP11Errors::MalformedHttp))
+				}
+			}
+			_ => Err(tokio::io::Error::other(HTTP11Errors::InvalidMethod)),
+		}
+	}
 }

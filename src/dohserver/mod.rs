@@ -69,7 +69,9 @@ async fn tc_handler(tc: Tc, serve_addrs: SocketAddr, log: bool) {
 	let mut tls = match tc.accept().await {
 		Ok(tls) => tls,
 		Err(e) => {
-			log::warn!("TLS: {e}");
+			if log {
+				log::warn!("TLS: {e}");
+			}
 			return;
 		}
 	};

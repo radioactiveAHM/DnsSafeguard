@@ -6,7 +6,6 @@ use rand::{
 	distr::{Alphanumeric, SampleString},
 	rng,
 };
-use tokio::time::sleep;
 
 // Generate random standard dns record
 pub mod dns {
@@ -198,33 +197,33 @@ fn syslog() -> Vec<u8> {
 	packet
 }
 
-#[inline(never)]
-async fn rand_noiser(noise: &Noise, target: SocketAddr, socket: &socket2::Socket) -> tokio::io::Result<usize> {
+fn rand_noiser(noise: &Noise, target: SocketAddr, udp: &std::net::UdpSocket) -> tokio::io::Result<usize> {
+	let mut rng = rand::rng();
 	let mut packet = [0u8; 1500];
 	let psize_range = crate::utils::parse_range(&noise.packet_length).expect("failed to parse packet length range");
 	let mut sent_bytes = 0;
 	for _ in 0..noise.packets {
-		rand::rng().fill(&mut packet);
-		sent_bytes += socket.send_to(&packet[..rand::rng().random_range(psize_range.clone())], &target.into())?;
-		sleep(std::time::Duration::from_millis(noise.sleep)).await;
+		rng.fill(&mut packet);
+		sent_bytes += udp.send_to(&packet[..rng.random_range(psize_range.clone())], target)?;
+		std::thread::sleep(std::time::Duration::from_millis(noise.sleep));
 	}
 	Ok(sent_bytes)
 }
 
-pub async fn noiser(noise: &Noise, target: SocketAddr, socket: &socket2::Socket) {
+pub fn noiser(noise: &Noise, target: SocketAddr, udp: &std::net::UdpSocket) {
 	if let Ok(sent_bytes) = match noise.ntype {
-		NoiseType::rand => rand_noiser(noise, target, socket).await,
-		NoiseType::dns => socket.send_to(&dns::DnsRcord::with_domain(&noise.content), &target.into()),
-		NoiseType::str => socket.send_to(noise.content.as_bytes(), &target.into()),
-		NoiseType::lsd => socket.send_to(&Lsd::new(target).into_buffer(), &target.into()),
-		NoiseType::tracker => socket.send_to(&Tracker::new().bytes(), &target.into()),
-		NoiseType::stun => socket.send_to(&stun(), &target.into()),
-		NoiseType::tftp => socket.send_to(&tftp(), &target.into()),
-		NoiseType::ntp => socket.send_to(&ntp(), &target.into()),
-		NoiseType::syslog => socket.send_to(&syslog(), &target.into()),
+		NoiseType::rand => rand_noiser(noise, target, udp),
+		NoiseType::dns => udp.send_to(&dns::DnsRcord::with_domain(&noise.content), target),
+		NoiseType::str => udp.send_to(noise.content.as_bytes(), target),
+		NoiseType::lsd => udp.send_to(&Lsd::new(target).into_buffer(), target),
+		NoiseType::tracker => udp.send_to(&Tracker::new().bytes(), target),
+		NoiseType::stun => udp.send_to(&stun(), target),
+		NoiseType::tftp => udp.send_to(&tftp(), target),
+		NoiseType::ntp => udp.send_to(&ntp(), target),
+		NoiseType::syslog => udp.send_to(&syslog(), target),
 	} {
 		log::info!("{sent_bytes} bytes sent as noise");
-		sleep(std::time::Duration::from_millis(noise.sleep)).await;
+		std::thread::sleep(std::time::Duration::from_millis(noise.sleep));
 	} else {
 		log::warn!("noise failed");
 	}

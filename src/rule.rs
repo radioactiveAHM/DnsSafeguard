@@ -311,7 +311,7 @@ pub enum Targets {
 }
 
 impl Targets {
-	fn octets(&self) -> [u8; 2] {
+	const fn octets(&self) -> [u8; 2] {
 		match self {
 			Self::ALL => [0, 255],
 			Self::A => [0, 1],

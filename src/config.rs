@@ -112,7 +112,6 @@ pub enum HttpMethod {
 #[derive(serde::Deserialize)]
 #[allow(non_camel_case_types)]
 pub enum LevelFilter {
-	off,
 	error,
 	warn,
 	info,
@@ -121,9 +120,8 @@ pub enum LevelFilter {
 }
 
 impl LevelFilter {
-	pub fn convert(&self) -> log::LevelFilter {
+	pub const fn into(&self) -> log::LevelFilter {
 		match self {
-			Self::off => log::LevelFilter::Off,
 			Self::error => log::LevelFilter::Error,
 			Self::warn => log::LevelFilter::Warn,
 			Self::info => log::LevelFilter::Info,
@@ -136,7 +134,7 @@ impl LevelFilter {
 #[derive(serde::Deserialize)]
 #[allow(dead_code)]
 pub struct Log {
-	pub level: LevelFilter,
+	pub level: Option<LevelFilter>,
 	pub file: Option<std::path::PathBuf>,
 }
 

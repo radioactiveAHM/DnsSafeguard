@@ -72,7 +72,7 @@ fn main() {
 }
 
 async fn app() {
-	{
+	if let Some(level) = &CONFIG.log.level {
 		let mut logger = env_logger::builder();
 		#[cfg(not(debug_assertions))]
 		{
@@ -87,8 +87,11 @@ async fn app() {
 			}
 		}
 		// Level order: Error, Warn, Info, Debug, Trace
-		logger.filter_level(CONFIG.log.level.convert()).init();
+		logger.filter_level(level.into()).init();
 	}
+
+	// Set log level to trace which is required for tracing to work fine
+	log::set_max_level(log::LevelFilter::Trace);
 
 	// Log panic info
 	std::panic::set_hook(Box::new(|message| {

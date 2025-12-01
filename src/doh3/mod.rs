@@ -26,24 +26,16 @@ pub async fn quic_setup(
 	alpn: &str,
 	network_interface: &'static Option<String>,
 ) -> quinn::Endpoint {
-	let addr = crate::udp::udp_addr_to_bind(network_interface, target.is_ipv4());
-	let socket = socket2::Socket::new(
-		socket2::Domain::for_address(addr),
-		socket2::Type::DGRAM,
-		Some(socket2::Protocol::UDP),
-	)
-	.unwrap();
-	socket.set_nonblocking(true).unwrap();
-	socket.bind(&addr.into()).unwrap();
+	let udp = std::net::UdpSocket::bind(crate::udp::udp_addr_to_bind(network_interface, target.is_ipv4())).unwrap();
 
 	if noise.enable {
-		noise::noiser(noise, target, &socket).await;
+		noise::noiser(noise, target, &udp);
 	}
 
 	let mut endpoint = quinn::Endpoint::new(
 		quinn::EndpointConfig::default(),
 		None,
-		socket.into(),
+		udp,
 		Arc::new(quinn::TokioRuntime),
 	)
 	.unwrap();

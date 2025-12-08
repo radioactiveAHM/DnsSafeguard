@@ -4,9 +4,20 @@ use h2::client::SendRequest;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::{sync::Mutex, time::sleep};
 
+fn h2config(config: &config::H2) -> h2::client::Builder {
+	let mut builder = h2::client::Builder::new();
+	builder
+		.header_table_size(config.header_table_size)
+		.max_header_list_size(config.max_header_list_size)
+		.initial_connection_window_size(config.initial_connection_window_size)
+		.initial_window_size(config.initial_window_size);
+	builder
+}
+
 pub async fn http2() {
 	// TLS Conf
 	let h2tls = tls::tlsconf(vec![b"h2".to_vec()], CONFIG.disable_certificate_validation);
+	let builder = h2config(&CONFIG.h2);
 
 	let udp = Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
 
@@ -21,7 +32,7 @@ pub async fn http2() {
 			continue;
 		}
 
-		let (client, h2c) = h2::client::handshake(tls.unwrap()).await.unwrap();
+		let (client, h2c) = builder.handshake(tls.unwrap()).await.unwrap();
 		log::info!("H2 connection established");
 
 		let dead_conn = Arc::new(Mutex::new(false));

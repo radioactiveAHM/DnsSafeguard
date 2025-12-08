@@ -19,13 +19,25 @@ async fn accept_stream(
 	}
 }
 
+fn h2config(config: &crate::config::H2) -> h2::server::Builder {
+	let mut builder = h2::server::Builder::new();
+	builder
+		.max_header_list_size(config.max_header_list_size)
+		.initial_connection_window_size(config.initial_connection_window_size)
+		.initial_window_size(config.initial_window_size);
+	builder
+}
+
 pub async fn serve_h2(
 	tls: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
 	serve_addrs: SocketAddr,
 	log: bool,
 ) -> tokio::io::Result<()> {
 	let peer_addr = tls.get_ref().0.peer_addr()?;
-	let mut h2c = h2::server::handshake(tls).await.map_err(tokio::io::Error::other)?;
+	let mut h2c = h2config(&CONFIG.h2)
+		.handshake(tls)
+		.await
+		.map_err(tokio::io::Error::other)?;
 	loop {
 		let (mut req, mut resp) = accept_stream(&mut h2c).await?;
 		log::trace!("{:?}", &req);

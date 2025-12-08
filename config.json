@@ -32,12 +32,22 @@
 	},
 	"quic": {
 		"congestion_controller": "bbr",
-		"keep_alive_interval": 15,
+		"keep_alive_interval": null,
 		"connecting_timeout": 2,
-		"datagram_receive_buffer_size": null,
-		"datagram_send_buffer_size": null,
+		"datagram_receive_buffer_size": 1048576,
+		"datagram_send_buffer_size": 1048576,
 		"packet_threshold": 12,
+		"initial_mtu": null,
+		"min_mtu": null,
+		"crypto_buffer_size": 1048576,
+		"stream_receive_window": 8192,
 		"max_idle_timeout": 3600
+	},
+	"h2": {
+		"header_table_size": 4096,
+		"max_header_list_size": 16384,
+		"initial_connection_window_size": 1048576,
+		"initial_window_size": 8192
 	},
 	"connection": {
 		"h1_multi_connections": 3,

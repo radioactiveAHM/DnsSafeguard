@@ -44,7 +44,7 @@ pub fn set_tcp_socket_options(tcp: &mut tokio::net::TcpSocket, options: &crate::
 pub async fn tcp_connect_handle(
 	target: SocketAddr,
 	connection_cfg: crate::config::Connection,
-	network_interface: &'static Option<String>,
+	network_interface: &Option<String>,
 	options: &crate::config::TcpSocketOptions,
 ) -> TcpStream {
 	loop {

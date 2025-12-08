@@ -67,7 +67,7 @@ where
 }
 
 pub async fn rulecheck(
-	rules: &'static Option<Vec<Rule>>,
+	rules: &Option<Vec<Rule>>,
 	dq: &mut [u8],
 	client_addr: SocketAddr,
 	udp: Arc<tokio::net::UdpSocket>,

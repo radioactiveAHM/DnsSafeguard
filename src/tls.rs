@@ -42,7 +42,7 @@ pub fn tlsfragmenting(
 	}
 }
 
-pub trait AsyncIO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Debug + Send + 'static {}
+pub trait AsyncIO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Debug + Send {}
 impl AsyncIO for tokio_native_tls::TlsStream<tokio::net::TcpStream> {}
 impl AsyncIO for tokio_rustls::client::TlsStream<tokio::net::TcpStream> {}
 

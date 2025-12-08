@@ -5,7 +5,7 @@ pub fn genrequrlh1<'a>(
 	url: &'a mut Buffering,
 	server_name: &[u8],
 	query_bs4url: &[u8],
-	path: &'static Option<String>,
+	path: &Option<String>,
 ) -> &'a [u8] {
 	let main = b"GET /dns-query?dns=";
 	let main_end = b" HTTP/1.1\r\nHost: ";

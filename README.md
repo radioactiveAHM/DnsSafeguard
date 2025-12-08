@@ -100,7 +100,7 @@ The `config.json` file is a crucial part of the DnsSafeguard application. It con
 The configuration file is structured in JSON format and includes the following settings:
 
 - `Log`:
-  - `level`: Specifies the logging verbosity. Available options: `off`, `error`, `warn`, `info`, `debug`, `trace`.
+  - `level`: Specifies the logging verbosity. Available options: `error`, `warn`, `info`, `debug`, `trace`. Set to null to disable.
   - `file`: Path to the log output file. Set to null to disable file logging and enable console output instead. Logging to both file and console simultaneously is not supported. You must choose one.
 - `Protocol`: Specifies the protocol used for DNS queries.
   - `h1`: Single HTTP/1.1 Connection.
@@ -131,12 +131,21 @@ The configuration file is structured in JSON format and includes the following s
   - `Sleep`: Defines the sleep time (in milliseconds) after each UDP noise packet is sent.
 - `Quic`: Configuration for QUIC protocol.
   - `Congestion Controller`: The congestion controller algorithm, options are `bbr`, `cubic` and `newreno`.
-  - `Keep Alive Interval`: The interval in seconds to keep the connection alive.
+  - `Keep Alive Interval`: The interval in seconds to keep the connection alive. Use `null` to disable.
   - `Datagram Receive Buffer Size`: Size of the receive buffer for datagrams. Use `null` for default.
   - `Datagram Send Buffer Size`: Size of the send buffer for datagrams. Use `null` for default.
   - `Connecting Timeout`: Specifies the maximum connection timeout duration in seconds.
   - `Packet Threshold`: Maximum reordering in packet number space before FACK style loss detection considers a packet lost. Should not be less than 3, per RFC5681.
+  - `Initial MTU`: The initial value to be used as the maximum UDP payload size before running MTU discovery. Must be at least 1200, Use `null` for default.
+  - `Min MTU`: The maximum UDP payload size guaranteed to be supported by the network. Must be at least 1200, Use `null` for default.
+  - `Crypto Buffer Size`: Maximum quantity of out-of-order crypto layer data to buffer. Use `null` for default.
+  - `Stream Receive Window`: Maximum number of bytes the peer may transmit without acknowledgement on any one stream before becoming blocked. Use `null` for default.
   - `Max Idle Timeout`: Maximum duration in seconds of inactivity to accept before timing out the connection. `null` represents an infinite timeout.
+- `H2`:
+  - `header_table_size`: This setting informs the peer of the maximum size of the header compression table used to encode header blocks.
+  - `max_header_list_size`: This advisory setting informs a peer of the maximum size of header list that the sender is prepared to accept.
+  - `initial_connection_window_size`: Indicates the initial window size (in octets) for connection-level flow control for received data.
+  - `initial_window_size`: Indicates the initial window size (in octets) for stream-level flow control for received data.
 - `Connection`:
   - `H1 Multi Connections`: Number of connections for the `h1 multi` protocol.
   - `Reconnect Sleep`: Duration to sleep before reconnecting (in seconds).

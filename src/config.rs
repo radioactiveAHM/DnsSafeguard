@@ -68,12 +68,24 @@ pub enum CongestionController {
 #[derive(serde::Deserialize, Clone)]
 pub struct Quic {
 	pub congestion_controller: CongestionController,
-	pub keep_alive_interval: u64,
+	pub keep_alive_interval: Option<u64>,
 	pub connecting_timeout: u64,
 	pub datagram_receive_buffer_size: Option<usize>,
 	pub datagram_send_buffer_size: Option<usize>,
 	pub packet_threshold: u32,
+	pub initial_mtu: Option<u16>,
+	pub min_mtu: Option<u16>,
+	pub crypto_buffer_size: Option<usize>,
+	pub stream_receive_window: Option<u32>,
 	pub max_idle_timeout: Option<u32>,
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub struct H2 {
+	pub header_table_size: u32,
+	pub max_header_list_size: u32,
+	pub initial_connection_window_size: u32,
+	pub initial_window_size: u32,
 }
 
 #[derive(serde::Deserialize, Clone, Copy)]
@@ -173,6 +185,7 @@ pub struct Config {
 	pub fragmenting: Fragmenting,
 	pub noise: Noise,
 	pub quic: Quic,
+	pub h2: H2,
 	pub connection: Connection,
 	pub tcp_socket_options: TcpSocketOptions,
 	pub doh_server: DohServer,

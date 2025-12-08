@@ -24,7 +24,7 @@ pub async fn udp_socket(serve_addrs: std::net::SocketAddr) -> tokio::io::Result<
 	tokio::net::UdpSocket::from_std(socket.into())
 }
 
-pub fn udp_addr_to_bind(network_interface: &'static Option<String>, v4: bool) -> std::net::SocketAddr {
+pub fn udp_addr_to_bind(network_interface: &Option<String>, v4: bool) -> std::net::SocketAddr {
 	if let Some(interface) = network_interface {
 		crate::interface::get_interface(v4, interface.as_str())
 	} else {

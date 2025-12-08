@@ -24,7 +24,7 @@ pub async fn quic_setup(
 	noise: &Noise,
 	quic_conf_file: &crate::config::Quic,
 	alpn: &str,
-	network_interface: &'static Option<String>,
+	network_interface: &Option<String>,
 ) -> quinn::Endpoint {
 	let udp = std::net::UdpSocket::bind(crate::udp::udp_addr_to_bind(network_interface, target.is_ipv4())).unwrap();
 

@@ -57,12 +57,7 @@
 		"send_buffer_size": null,
 		"recv_buffer_size": null,
 		"nodelay": null,
-		"keepalive": null,
-		"linux": {
-			"bind_to_device": null,
-			"mss": null,
-			"congestion": null
-		}
+		"keepalive": null
 	},
 	"doh_server": {
 		"enable": false,

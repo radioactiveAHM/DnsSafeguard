@@ -3,24 +3,22 @@ use std::net::SocketAddr;
 use tokio::{net::TcpStream, time::sleep};
 
 pub fn get_interface(ipv4: bool, interface: &str) -> SocketAddr {
-	// Cause panic if it fails, informing the user that the binding interface is not available.
-	let interfaces = local_ip_address::list_afinet_netifas().expect("binding interface is not available");
-
-	let ip = interfaces.iter().find(|i| {
+	let ifaces = if_addrs::get_if_addrs().unwrap();
+	let iface = ifaces.iter().find(|iface| {
 		if ipv4 {
-			i.0.as_str().to_lowercase() == interface.to_lowercase() && i.1.is_ipv4()
+			iface.name.to_lowercase() == interface.to_lowercase() && iface.ip().is_ipv4()
 		} else {
-			i.0.as_str().to_lowercase() == interface.to_lowercase() && i.1.is_ipv6()
+			iface.name.to_lowercase() == interface.to_lowercase() && iface.ip().is_ipv6()
 		}
 	});
 
-	if let Some(ip) = ip {
-		log::info!("{} selected for binding", ip.1);
-		SocketAddr::new(ip.1, 0)
+	if let Some(iface) = iface {
+		log::info!("{} selected for binding", iface.name);
+		SocketAddr::new(iface.ip(), 0)
 	} else {
 		log::warn!("interface not found or interface does not provide IPv6.\navailable interface are:");
-		for interface in interfaces {
-			println!("{}: {}", interface.0, interface.1);
+		for iface in ifaces {
+			println!("{}: {}", iface.name, iface.ip());
 		}
 		std::process::exit(1);
 	}

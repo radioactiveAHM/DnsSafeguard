@@ -2,6 +2,7 @@
 
 mod chttp;
 mod config;
+mod disconnected;
 mod doh2;
 mod doh3;
 mod dohserver;

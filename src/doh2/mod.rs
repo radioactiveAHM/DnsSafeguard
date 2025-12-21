@@ -2,7 +2,7 @@ use crate::{CONFIG, config, rule::rulecheck, tls};
 use core::str;
 use h2::client::SendRequest;
 use std::{net::SocketAddr, sync::Arc};
-use tokio::{sync::Mutex, time::sleep};
+use tokio::time::sleep;
 
 fn h2config(config: &config::H2) -> h2::client::Builder {
 	let mut builder = h2::client::Builder::new();
@@ -22,6 +22,7 @@ pub async fn http2() {
 	let udp = Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
 
 	let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
+	let disconnected = crate::disconnected::Disconnected::new();
 
 	loop {
 		log::info!("H2 connecting");
@@ -32,14 +33,15 @@ pub async fn http2() {
 			continue;
 		}
 
-		let (client, h2c) = builder.handshake(tls.unwrap()).await.unwrap();
+		let (client, mut h2c) = builder.handshake(tls.unwrap()).await.unwrap();
+		let mut pinger = h2c.ping_pong().unwrap();
 		log::info!("H2 connection established");
 
-		let dead_conn = Arc::new(Mutex::new(false));
-		let dead_conn2 = dead_conn.clone();
+		disconnected.connect();
+		let _disconnected = disconnected.clone();
 		let watcher = tokio::spawn(async move {
 			if let Err(e) = h2c.await {
-				*dead_conn2.lock().await = true;
+				_disconnected.disconnect();
 				log::warn!("{e}");
 			}
 		});
@@ -57,23 +59,26 @@ pub async fn http2() {
 
 		let mut dns_query = [0u8; 512];
 		loop {
-			let h2_conn_dead = dead_conn.clone();
 			let udp = udp.clone();
-			if *h2_conn_dead.lock().await {
+			if disconnected.get() {
 				watcher.abort();
 				break;
 			}
 
 			let message =
 				crate::keepalive::recv_timeout_with(&udp, CONFIG.connection_keep_alive, &mut dns_query, async {
-					let mut h2 = client.clone();
-					let req = http::Request::get(format!("https://{}/", CONFIG.server_name.as_str()))
-						.body(())
-						.unwrap();
-					if let Err(e) = h2.send_request(req, true) {
-						log::warn!("{e}");
-						*h2_conn_dead.lock().await = true;
-					}
+					match tokio::time::timeout(
+						std::time::Duration::from_secs(CONFIG.response_timeout),
+						pinger.ping(h2::Ping::opaque()),
+					)
+					.await
+					{
+						Err(_) | Ok(Err(_)) => {
+							disconnected.disconnect();
+							log::warn!("timeout/error waiting for pong");
+						}
+						_ => (),
+					};
 				})
 				.await;
 
@@ -85,7 +90,7 @@ pub async fn http2() {
 					continue;
 				}
 
-				if *h2_conn_dead.lock().await {
+				if disconnected.get() {
 					tank = Some((Box::new(dns_query), query_size, addr));
 					watcher.abort();
 					break;

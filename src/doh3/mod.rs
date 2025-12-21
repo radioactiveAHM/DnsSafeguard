@@ -5,10 +5,7 @@ pub mod transporter;
 use core::str;
 use std::{io::Read, net::SocketAddr, sync::Arc};
 
-use tokio::{
-	sync::Mutex,
-	time::{sleep, timeout},
-};
+use tokio::time::{sleep, timeout};
 
 use bytes::Buf;
 use h3::client::SendRequest;
@@ -60,6 +57,7 @@ pub async fn http3() {
 	let udp = Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
 
 	let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
+	let disconnected = crate::disconnected::Disconnected::new();
 
 	let mut connecting_retry = 0u8;
 	loop {
@@ -124,24 +122,19 @@ pub async fn http3() {
 			}
 		};
 
-		let dead_conn = Arc::new(Mutex::new(false));
-
-		let dead_conn2 = dead_conn.clone();
+		disconnected.connect();
+		let _disconnected = disconnected.clone();
 		let watcher = tokio::spawn(async move {
 			log::warn!("{}", h3c.wait_idle().await);
-			*(dead_conn2.lock().await) = true;
+			_disconnected.disconnect();
 		});
 
 		if let Some((dns_query, query_size, addr)) = tank {
 			let udp = udp.clone();
-			let dead_conn = dead_conn.clone();
 			let h3 = h3.clone();
 			tokio::spawn(async move {
 				if let Err(e) = send_request(h3, (*dns_query, query_size), addr, udp).await {
 					log::warn!("{e}");
-					if e.kind() == std::io::ErrorKind::TimedOut {
-						*dead_conn.lock().await = true;
-					}
 				}
 			});
 			tank = None;
@@ -149,23 +142,31 @@ pub async fn http3() {
 
 		let mut dns_query = [0u8; 512];
 		loop {
-			let quic_conn_dead = dead_conn.clone();
+			let disconnected = disconnected.clone();
 			let udp = udp.clone();
-			if *quic_conn_dead.lock().await {
+			if disconnected.get() {
 				watcher.abort();
 				break;
 			}
 
 			let message =
 				crate::keepalive::recv_timeout_with(&udp, CONFIG.connection_keep_alive, &mut dns_query, async {
-					let mut h3 = h3.clone();
-					let req = http::Request::get(format!("https://{}/", CONFIG.server_name.as_str()))
-						.body(())
-						.unwrap();
-					if let Err(e) = h3.send_request(req).await {
-						log::warn!("{e}");
-						*(quic_conn_dead.lock().await) = true;
-					}
+					match tokio::time::timeout(
+						std::time::Duration::from_secs(CONFIG.response_timeout),
+						h3.clone().send_request(
+							http::Request::get(format!("https://{}/", CONFIG.server_name.as_str()))
+								.body(())
+								.unwrap(),
+						),
+					)
+					.await
+					{
+						Err(_) | Ok(Err(_)) => {
+							disconnected.disconnect();
+							log::warn!("timeout/error waiting for keep-alive response");
+						}
+						_ => (),
+					};
 				})
 				.await;
 
@@ -178,7 +179,7 @@ pub async fn http3() {
 					continue;
 				}
 
-				if *quic_conn_dead.lock().await {
+				if disconnected.get() {
 					tank = Some((Box::new(dns_query), query_size, addr));
 					watcher.abort();
 					break;
@@ -189,7 +190,7 @@ pub async fn http3() {
 					if let Err(e) = send_request(h3, (dns_query, query_size), addr, udp).await {
 						log::warn!("{e}");
 						if e.kind() == std::io::ErrorKind::TimedOut {
-							*quic_conn_dead.lock().await = true;
+							disconnected.disconnect();
 						}
 					}
 				});

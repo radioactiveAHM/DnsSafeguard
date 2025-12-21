@@ -6,7 +6,6 @@ where
 	type Output = tokio::io::Result<()>;
 	#[inline(always)]
 	fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
-		let coop = std::task::ready!(tokio::task::coop::poll_proceed(cx));
 		let this = &mut *self;
 		let mut filled = 0;
 		loop {
@@ -15,14 +14,12 @@ where
 					if filled == 0 {
 						return std::task::Poll::Pending;
 					} else {
-						coop.made_progress();
 						return std::task::Poll::Ready(Ok(()));
 					}
 				}
 				std::task::Poll::Ready(Ok(_)) => {
-					coop.made_progress();
 					let fill = this.1.filled().len();
-					if fill == 0 || filled == fill {
+					if filled == fill {
 						return std::task::Poll::Ready(Err(tokio::io::Error::other("pipe read EOF")));
 					} else if this.1.remaining() == 0 {
 						return std::task::Poll::Ready(Ok(()));
@@ -30,7 +27,6 @@ where
 					filled = fill;
 				}
 				std::task::Poll::Ready(Err(e)) => {
-					coop.made_progress();
 					return std::task::Poll::Ready(Err(e));
 				}
 			};

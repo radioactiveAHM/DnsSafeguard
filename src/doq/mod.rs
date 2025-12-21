@@ -1,10 +1,7 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use quinn::{RecvStream, SendStream};
-use tokio::{
-	sync::Mutex,
-	time::{sleep, timeout},
-};
+use tokio::time::{sleep, timeout};
 
 use crate::{
 	CONFIG,
@@ -26,6 +23,7 @@ pub async fn doq() {
 	.await;
 
 	let mut tank: Option<(Box<[u8; 514]>, usize, SocketAddr)> = None;
+	let disconnected = crate::disconnected::Disconnected::new();
 
 	let mut connecting_retry = 0u8;
 	loop {
@@ -83,17 +81,16 @@ pub async fn doq() {
 		connecting_retry = 0;
 
 		let quic = conn.unwrap();
-		let dead_conn = Arc::new(Mutex::new(false));
+		disconnected.connect();
 
 		let q2 = quic.clone();
-		let dead_conn2 = dead_conn.clone();
+		let _disconnected = disconnected.clone();
 		let watcher = tokio::spawn(async move {
 			log::warn!("watcher: {}", q2.closed().await);
-			*dead_conn2.lock().await = true;
+			_disconnected.disconnect();
 		});
 
 		if tank.is_some() {
-			let dead = dead_conn.clone();
 			let udp = udp.clone();
 			match quic.open_bi().await {
 				Ok(bistream) => {
@@ -102,9 +99,6 @@ pub async fn doq() {
 					tokio::spawn(async move {
 						if let Err(e) = send_dq(bistream, (*dns_query, query_size), addr, udp).await {
 							log::warn!("{stream_id}: {e}");
-							if e.kind() == std::io::ErrorKind::TimedOut {
-								*dead.lock().await = true;
-							}
 						}
 					});
 				}
@@ -118,9 +112,9 @@ pub async fn doq() {
 
 		let mut dns_query = [0u8; 514];
 		loop {
-			let dead = dead_conn.clone();
+			let disconnected = disconnected.clone();
 			let udp = udp.clone();
-			if *dead.lock().await {
+			if disconnected.get() {
 				watcher.abort();
 				break;
 			}
@@ -128,14 +122,14 @@ pub async fn doq() {
 			let message =
 				crate::keepalive::recv_timeout_with(&udp, CONFIG.connection_keep_alive, &mut dns_query[2..], async {
 					match quic.open_bi().await {
-						Ok((mut send, mut recv)) => {
-							let _ = send.write(&[]).await;
-							let _ = send.finish();
-							let _ = recv.read_chunk(1024 * 4, false).await;
+						Ok((mut send, _)) => {
+							if send.write(&[]).await.is_ok() {
+								let _ = send.finish();
+							}
 						}
 						Err(e) => {
 							log::warn!("{e}");
-							*dead.lock().await = true;
+							disconnected.disconnect();
 						}
 					};
 				})
@@ -151,7 +145,7 @@ pub async fn doq() {
 					continue;
 				}
 
-				if *dead.lock().await {
+				if disconnected.get() {
 					tank = Some((Box::new(dns_query), query_size, addr));
 					watcher.abort();
 					break;
@@ -164,7 +158,7 @@ pub async fn doq() {
 							if let Err(e) = send_dq(bistream, (dns_query, query_size), addr, udp).await {
 								log::warn!("{stream_id}: {e}");
 								if e.kind() == std::io::ErrorKind::TimedOut {
-									*dead.lock().await = true;
+									disconnected.disconnect();
 								}
 							}
 						});
@@ -246,10 +240,8 @@ impl<'a, 'b> Future for Recv<'a, 'b> {
 	type Output = tokio::io::Result<()>;
 	#[inline(always)]
 	fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
-		let coop = std::task::ready!(tokio::task::coop::poll_proceed(cx));
 		let this = &mut *self;
 		let poll = std::task::ready!(this.0.poll_read_buf(cx, this.1));
-		coop.made_progress();
 		std::task::Poll::Ready(poll.map_err(tokio::io::Error::other))
 	}
 }

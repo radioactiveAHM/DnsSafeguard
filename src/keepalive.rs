@@ -4,15 +4,11 @@ impl<'a> Future for UdpRecv<'a> {
 	type Output = tokio::io::Result<(usize, std::net::SocketAddr)>;
 	#[inline(always)]
 	fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
-		let coop = std::task::ready!(tokio::task::coop::poll_proceed(cx));
 		let this = &mut *self;
 		let polling = this
 			.0
 			.poll_recv_from(cx, this.1)
 			.map_ok(|addr| (this.1.filled().len(), addr));
-		if polling.is_ready() {
-			coop.made_progress();
-		}
 		polling
 	}
 }

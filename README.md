@@ -92,14 +92,14 @@ cargo build --release --no-default-features --features "ring"
 2. **Create the Service**
    - Replace `"PATH TO DnsSafeguard EXE"` with the actual location of the DnsSafeguard program on your computer.
    - Run this command in PowerShell:
-      `sc create DnsSafeguard binPath= "PATH TO DnsSafeguard EXE" start= auto`
+      `sc.exe create DnsSafeguard binPath= "PATH TO DnsSafeguard EXE" start= auto`
 
    - Example:
-     `sc create DnsSafeguard binPath= "C:\Users\Sara\Desktop\DnsSafeguard\DnsSafeguard.exe" start= auto`
+     `sc.exe create DnsSafeguard binPath= "C:\Users\Sara\Desktop\DnsSafeguard\DnsSafeguard.exe" start= auto`
 
 3. **Start the Service**
    - Run this command:
-     `sc start DnsSafeguard`
+     `sc.exe start DnsSafeguard`
 
 4. **Automatic Startup**
    - Once created, the DnsSafeguard service will automatically start every time Windows boots up.
@@ -107,10 +107,10 @@ cargo build --release --no-default-features --features "ring"
 5. **Restart After Configuration Changes**  
    - If you make any changes to the DnsSafeguard configuration file, you must restart the service for the changes to take effect.
    - First, stop the service:
-     `sc stop DnsSafeguard`
+     `sc.exe stop DnsSafeguard`
 
    - Then, start it again:
-     `sc start DnsSafeguard`
+     `sc.exe start DnsSafeguard`
 
 #### Managing the Service in Windows (Alternative Way)
 
@@ -145,7 +145,7 @@ The configuration file is structured in JSON format and includes the following s
 
 - `Log`:
   - `level`: Specifies the logging verbosity. Available options: `error`, `warn`, `info`, `debug`, `trace`. Set to null to disable.
-  - `file`: Path to the log output file. Set to null to disable file logging and enable console output instead. Logging to both file and console simultaneously is not supported. You must choose one.
+  - `file`: Path to the log output file. Set to `null` to disable file logging and enable console output instead. Logging to both file and console simultaneously is not supported. You must choose one.
 - `Protocol`: Specifies the protocol used for DNS queries.
   - `h1`: Single HTTP/1.1 Connection.
   - `h1_multi`: Multiple HTTP/1.1 Connection.

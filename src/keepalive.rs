@@ -5,11 +5,9 @@ impl<'a> Future for UdpRecv<'a> {
 	#[inline(always)]
 	fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
 		let this = &mut *self;
-		let polling = this
-			.0
+		this.0
 			.poll_recv_from(cx, this.1)
-			.map_ok(|addr| (this.1.filled().len(), addr));
-		polling
+			.map_ok(|addr| (this.1.filled().len(), addr))
 	}
 }
 

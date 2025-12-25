@@ -199,6 +199,7 @@ pub fn load_config() -> Config {
 	if let Ok(mut p) = std::env::current_exe()
 		&& p.pop()
 	{
+		let _ = std::env::set_current_dir(&p);
 		let c = p.join("config.json");
 		if c.exists() {
 			let config_file = std::fs::read(c).expect("can not read config file");

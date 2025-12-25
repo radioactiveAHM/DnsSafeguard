@@ -1,6 +1,6 @@
-<img src="./sample-256.png" width="256">
-
 # DnsSafeguard
+
+![DnsSafeguard](./sample-256.png)
 
 DnsSafeguard is a fast and secure DNS client written in Rust, designed to intercept DNS queries over a UDP socket and Dns over HTTPS (DoH) to securely transmit them to a DNS server using DNS over HTTPS/TLS/QUIC (DoH/DoT/DoQ) protocols. By leveraging TLS client hello fragmentation and UDP Noise, it successfully bypasses the Great Firewall (GFW) censorship.
 
@@ -78,6 +78,50 @@ cargo build --release --no-default-features --features "ring"
 5. **Set Up Windows DNS:**
     1. Go to your Windows network settings.
     2. Configure the DNS server address to match the IP address specified in the `config.json` file for the `serve_addrs` section.
+
+### Setting Up DnsSafeguard as a Windows Service
+
+**Important:** Before creating the service, make sure DnsSafeguard is configured and working correctly.
+
+#### Steps
+
+1. **Open PowerShell as Administrator**
+   - Right‑click the Start menu, choose **Windows PowerShell (Admin)**.
+   - You need administrator rights to create or manage services.
+
+2. **Create the Service**
+   - Replace `"PATH TO DnsSafeguard EXE"` with the actual location of the DnsSafeguard program on your computer.
+   - Run this command in PowerShell:
+      `sc create DnsSafeguard binPath= "PATH TO DnsSafeguard EXE" start= auto`
+
+   - Example:
+     `sc create DnsSafeguard binPath= "C:\Users\Sara\Desktop\DnsSafeguard\DnsSafeguard.exe" start= auto`
+
+3. **Start the Service**
+   - Run this command:
+     `sc start DnsSafeguard`
+
+4. **Automatic Startup**
+   - Once created, the DnsSafeguard service will automatically start every time Windows boots up.
+
+5. **Restart After Configuration Changes**  
+   - If you make any changes to the DnsSafeguard configuration file, you must restart the service for the changes to take effect.
+   - First, stop the service:
+     `sc stop DnsSafeguard`
+
+   - Then, start it again:
+     `sc start DnsSafeguard`
+
+#### Managing the Service in Windows (Alternative Way)
+
+You don’t always need PowerShell — Windows also provides a built‑in tool to manage services:
+
+- Press **Windows Key + R** to open the Run dialog.  
+- Type `services.msc` and press **Enter**.  
+- In the **Services** window, scroll down to find **DnsSafeguard**.  
+- From here you can **Start**, **Stop**, or **Restart** the service by right‑clicking it and choosing the option you need.
+
+> 💡 This is a simple way to manage services if you prefer a graphical interface instead of command‑line tools.
 
 ### Linux
 

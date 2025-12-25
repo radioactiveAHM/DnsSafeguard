@@ -18,10 +18,19 @@ mod rule;
 mod tls;
 mod udp;
 mod utils;
+mod win;
 
 static CONFIG: std::sync::LazyLock<config::Config> = std::sync::LazyLock::new(config::load_config);
 
 fn main() {
+	// windows service pipe
+	#[cfg(target_os = "windows")]
+	{
+		use win::service::win_service_controller;
+		windows_service::define_windows_service!(ffi_service_main, win_service_controller);
+		std::thread::spawn(|| windows_service::service_dispatcher::start("DnsSafeguard", ffi_service_main));
+	}
+
 	match CONFIG.runtime.runtime_mode {
 		config::RuntimeMode::Multi => {
 			let mut r = tokio::runtime::Builder::new_multi_thread();

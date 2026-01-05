@@ -1,4 +1,5 @@
 use crate::{CONFIG, config, rule::rulecheck, tls};
+use bytes::BufMut;
 use core::str;
 use h2::client::SendRequest;
 use std::{net::SocketAddr, sync::Arc};
@@ -143,26 +144,31 @@ async fn send_req(
 			0
 		};
 
-		let mut buf = [0; 1024 * 8];
-		let mut buf_rb = tokio::io::ReadBuf::new(&mut buf);
+		let timeout_dur = std::time::Duration::from_secs(CONFIG.response_timeout);
+		let mut data = bytes::BytesMut::from(
+			tokio::time::timeout(timeout_dur, resp.body_mut().data())
+				.await?
+				.ok_or(tokio::io::Error::other("stream closed without data"))?
+				.map_err(tokio::io::Error::other)?,
+		);
 		loop {
-			if let Some(body) = resp.body_mut().data().await {
-				buf_rb.put_slice(&body.map_err(tokio::io::Error::other)?);
-			}
-			if clen == 0 {
+			if clen == 0 || data.len() >= clen {
 				// if no content-length provided we read only once
 				break;
 			}
-			if buf_rb.filled().len() >= clen {
-				break;
-			}
+			data.put(
+				tokio::time::timeout(timeout_dur, resp.body_mut().data())
+					.await?
+					.ok_or(tokio::io::Error::other("stream closed with incomplete data"))?
+					.map_err(tokio::io::Error::other)?,
+			);
 		}
 
 		if CONFIG.overwrite.is_some() {
-			crate::ipoverwrite::overwrite_ip(buf_rb.filled_mut(), &CONFIG.overwrite);
+			crate::ipoverwrite::overwrite_ip(&mut data, &CONFIG.overwrite);
 		}
 
-		let _ = udp.send_to(buf_rb.filled(), addr).await;
+		let _ = udp.send_to(&data, addr).await;
 	} else {
 		log::warn!("remote responded with status code of {}", resp.status().as_str());
 	}

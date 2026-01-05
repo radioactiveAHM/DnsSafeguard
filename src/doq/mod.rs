@@ -1,5 +1,6 @@
 use std::{net::SocketAddr, sync::Arc};
 
+use bytes::BufMut;
 use quinn::{RecvStream, SendStream};
 use tokio::time::{sleep, timeout};
 
@@ -186,71 +187,43 @@ async fn send_dq(
 	send.write_all(&dns_query.0[..dns_query.1 + 2]).await?;
 	send.finish()?;
 
-	let mut buf = [0u8; 1024 * 8];
-	let mut buf_rb = tokio::io::ReadBuf::new(&mut buf);
-	recv_timeout(
-		&mut recv,
-		&mut buf_rb,
-		std::time::Duration::from_secs(CONFIG.response_timeout),
-	)
-	.await?;
-
-	if buf_rb.filled().is_empty() {
+	let timeout_dur = std::time::Duration::from_secs(CONFIG.response_timeout);
+	let mut data = bytes::BytesMut::from(
+		recv_timeout(&mut recv, timeout_dur)
+			.await?
+			.ok_or(tokio::io::Error::other("stream closed without data"))?
+			.bytes,
+	);
+	if data.is_empty() {
 		log::warn!("{} closed", send.id());
 		return Ok(());
 	}
 
-	let message_size = convert_two_u8s_to_u16_be([buf_rb.filled()[0], buf_rb.filled()[1]]) as usize;
+	let message_size = convert_two_u8s_to_u16_be([data[0], data[1]]) as usize;
 	if message_size == 0 {
 		return Err(tokio::io::Error::other("malformed dns query response"));
 	}
 
-	let mut size = buf_rb.filled().len();
 	loop {
-		if size - 2 >= message_size {
+		if data.len() - 2 >= message_size {
 			break;
 		}
-		recv_timeout(
-			&mut recv,
-			&mut buf_rb,
-			std::time::Duration::from_secs(CONFIG.response_timeout),
-		)
-		.await?;
-		if size == buf_rb.filled().len() {
-			log::warn!(
-				"{} closed: target bytes {} recved bytes {}",
-				send.id(),
-				message_size,
-				size
-			);
-			return Ok(());
-		}
-		size = buf_rb.filled().len();
+		data.put(
+			recv_timeout(&mut recv, timeout_dur)
+				.await?
+				.ok_or(tokio::io::Error::other("stream closed with incomplete data"))?
+				.bytes,
+		);
 	}
 
 	if CONFIG.overwrite.is_some() {
-		crate::ipoverwrite::overwrite_ip(buf_rb.filled_mut(), &CONFIG.overwrite);
+		crate::ipoverwrite::overwrite_ip(&mut data, &CONFIG.overwrite);
 	}
-	let _ = udp.send_to(&buf_rb.filled()[2..], addr).await;
+	let _ = udp.send_to(&data[2..], addr).await;
 	Ok(())
 }
 
-struct Recv<'a, 'b>(&'a mut RecvStream, &'a mut tokio::io::ReadBuf<'b>);
-impl<'a, 'b> Future for Recv<'a, 'b> {
-	type Output = tokio::io::Result<()>;
-	#[inline(always)]
-	fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
-		let this = &mut *self;
-		let poll = std::task::ready!(this.0.poll_read_buf(cx, this.1));
-		std::task::Poll::Ready(poll.map_err(tokio::io::Error::other))
-	}
-}
-
 #[inline(always)]
-async fn recv_timeout(
-	recv: &mut RecvStream,
-	buf: &mut tokio::io::ReadBuf<'_>,
-	dur: std::time::Duration,
-) -> tokio::io::Result<()> {
-	tokio::time::timeout(dur, Recv(recv, buf)).await?
+async fn recv_timeout(recv: &mut RecvStream, dur: std::time::Duration) -> tokio::io::Result<Option<quinn::Chunk>> {
+	Ok(tokio::time::timeout(dur, recv.read_chunk(1024 * 64, true)).await??)
 }

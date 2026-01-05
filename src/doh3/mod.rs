@@ -3,11 +3,11 @@ pub mod qtls;
 pub mod transporter;
 
 use core::str;
-use std::{io::Read, net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc};
 
 use tokio::time::{sleep, timeout};
 
-use bytes::Buf;
+use bytes::BufMut;
 use h3::client::SendRequest;
 
 use crate::{
@@ -234,36 +234,41 @@ async fn send_request(
 			0
 		};
 
-		let mut buff = [0; 1024 * 8];
-		let mut data_read = 0;
+		let timeout_dur = std::time::Duration::from_secs(CONFIG.response_timeout);
+		let mut data = bytes::BytesMut::from(downcast(
+			timeout(timeout_dur, reqs.recv_data())
+				.await?
+				.map_err(tokio::io::Error::other)?
+				.ok_or(tokio::io::Error::other("stream closed without data"))?,
+		));
 		loop {
-			if let Some(body) = timeout(
-				std::time::Duration::from_secs(CONFIG.response_timeout),
-				reqs.recv_data(),
-			)
-			.await?
-			.map_err(tokio::io::Error::other)?
-			{
-				data_read += body.reader().read(&mut buff[data_read..])?;
-			}
-			if clen == 0 {
+			if clen == 0 || data.len() >= clen {
 				// if no content-length provided we read only once
 				break;
 			}
-			if data_read >= clen {
-				break;
-			}
+			data.put(
+				timeout(timeout_dur, reqs.recv_data())
+					.await?
+					.map_err(tokio::io::Error::other)?
+					.ok_or(tokio::io::Error::other("stream closed with incomplete data"))?,
+			);
 		}
 
 		if CONFIG.overwrite.is_some() {
-			crate::ipoverwrite::overwrite_ip(&mut buff[..data_read], &CONFIG.overwrite);
+			crate::ipoverwrite::overwrite_ip(&mut data, &CONFIG.overwrite);
 		}
-		let _ = udp.send_to(&buff[..data_read], addr).await;
+		let _ = udp.send_to(&data, addr).await;
 	} else {
 		log::warn!("remote responded with status code of {}", resp.status().as_str());
 	}
 
 	Ok(())
+}
+
+#[inline(always)]
+fn downcast(buf: impl std::any::Any + 'static) -> bytes::Bytes {
+	let boxed: Box<dyn std::any::Any> = Box::new(buf);
+	boxed.downcast::<bytes::Bytes>().ok().map(|b| *b).unwrap()
 }
 
 #[inline(always)]

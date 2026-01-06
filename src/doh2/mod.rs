@@ -22,7 +22,7 @@ pub async fn http2() {
 
 	let udp = Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
 
-	let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
+	let mut tank: Option<(Vec<u8>, SocketAddr)> = None;
 	let disconnected = crate::disconnected::Disconnected::new();
 
 	loop {
@@ -47,11 +47,11 @@ pub async fn http2() {
 			}
 		});
 
-		if let Some((dns_query, query_size, addr)) = tank {
+		if let Some((dns_query, addr)) = tank {
 			let udp = udp.clone();
 			let client = client.clone();
 			tokio::spawn(async move {
-				if let Err(e) = send_req((*dns_query, query_size), client, addr, udp).await {
+				if let Err(e) = send_req(dns_query, client, addr, udp).await {
 					log::warn!("{e}");
 				}
 			});
@@ -92,7 +92,7 @@ pub async fn http2() {
 				}
 
 				if disconnected.get() {
-					tank = Some((Box::new(dns_query), query_size, addr));
+					tank = Some((dns_query[..query_size].to_vec(), addr));
 					watcher.abort();
 					break;
 				}
@@ -100,14 +100,14 @@ pub async fn http2() {
 				match client.clone().ready().await {
 					Ok(client) => {
 						tokio::spawn(async move {
-							if let Err(e) = send_req((dns_query, query_size), client, addr, udp).await {
+							if let Err(e) = send_req(dns_query[..query_size].to_vec(), client, addr, udp).await {
 								log::warn!("{e}");
 							}
 						});
 					}
 					Err(e) => {
 						log::warn!("{e}");
-						tank = Some((Box::new(dns_query), query_size, addr));
+						tank = Some((dns_query[..query_size].to_vec(), addr));
 						watcher.abort();
 						break;
 					}
@@ -118,7 +118,7 @@ pub async fn http2() {
 }
 
 async fn send_req(
-	dns_query: ([u8; 512], usize),
+	dns_query: Vec<u8>,
 	mut h2_client: SendRequest<bytes::Bytes>,
 	addr: SocketAddr,
 	udp: Arc<tokio::net::UdpSocket>,
@@ -129,10 +129,8 @@ async fn send_req(
 		"/dns-query"
 	};
 	let mut resp = match CONFIG.http_method {
-		config::HttpMethod::GET => get(&mut h2_client, &CONFIG.server_name, path, &dns_query.0[..dns_query.1]).await?,
-		config::HttpMethod::POST => {
-			post(&mut h2_client, &CONFIG.server_name, path, &dns_query.0[..dns_query.1]).await?
-		}
+		config::HttpMethod::GET => get(&mut h2_client, &CONFIG.server_name, path, dns_query).await?,
+		config::HttpMethod::POST => post(&mut h2_client, &CONFIG.server_name, path, dns_query).await?,
 	};
 
 	if resp.status() == http::status::StatusCode::OK {
@@ -181,7 +179,7 @@ async fn get(
 	h2_client: &mut SendRequest<bytes::Bytes>,
 	server_name: &str,
 	path: &str,
-	dns_query: &[u8],
+	dns_query: Vec<u8>,
 ) -> tokio::io::Result<http::Response<h2::RecvStream>> {
 	h2_client
 		.send_request(
@@ -189,7 +187,7 @@ async fn get(
 				http::Uri::builder()
 					.scheme("https")
 					.authority(server_name)
-					.path_and_query(format!("{}?dns={}", path, base64_url::encode(dns_query)))
+					.path_and_query(format!("{}?dns={}", path, base64_url::encode(&dns_query)))
 					.build()
 					.map_err(tokio::io::Error::other)?,
 			)
@@ -210,7 +208,7 @@ async fn post(
 	h2_client: &mut SendRequest<bytes::Bytes>,
 	server_name: &str,
 	path: &str,
-	dns_query: &[u8],
+	dns_query: Vec<u8>,
 ) -> tokio::io::Result<http::Response<h2::RecvStream>> {
 	let mut p = h2_client
 		.send_request(
@@ -231,7 +229,7 @@ async fn post(
 			false,
 		)
 		.map_err(tokio::io::Error::other)?;
-	p.1.send_data(bytes::Bytes::copy_from_slice(dns_query), true)
+	p.1.send_data(bytes::Bytes::copy_from_slice(&dns_query), true)
 		.map_err(tokio::io::Error::other)?;
 	p.0.await.map_err(tokio::io::Error::other)
 }

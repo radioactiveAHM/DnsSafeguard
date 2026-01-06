@@ -56,7 +56,7 @@ pub async fn http3() {
 
 	let udp = Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
 
-	let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
+	let mut tank: Option<(Vec<u8>, SocketAddr)> = None;
 	let disconnected = crate::disconnected::Disconnected::new();
 
 	let mut connecting_retry = 0u8;
@@ -129,11 +129,11 @@ pub async fn http3() {
 			_disconnected.disconnect();
 		});
 
-		if let Some((dns_query, query_size, addr)) = tank {
+		if let Some((dns_query, addr)) = tank {
 			let udp = udp.clone();
 			let h3 = h3.clone();
 			tokio::spawn(async move {
-				if let Err(e) = send_request(h3, (*dns_query, query_size), addr, udp).await {
+				if let Err(e) = send_request(h3, dns_query, addr, udp).await {
 					log::warn!("{e}");
 				}
 			});
@@ -180,14 +180,14 @@ pub async fn http3() {
 				}
 
 				if disconnected.get() {
-					tank = Some((Box::new(dns_query), query_size, addr));
+					tank = Some((dns_query[..query_size].to_vec(), addr));
 					watcher.abort();
 					break;
 				}
 
 				let h3 = h3.clone();
 				tokio::spawn(async move {
-					if let Err(e) = send_request(h3, (dns_query, query_size), addr, udp).await {
+					if let Err(e) = send_request(h3, dns_query[..query_size].to_vec(), addr, udp).await {
 						log::warn!("{e}");
 						if e.kind() == std::io::ErrorKind::TimedOut {
 							disconnected.disconnect();
@@ -202,7 +202,7 @@ pub async fn http3() {
 #[inline(always)]
 async fn send_request(
 	mut h3: SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
-	dns_query: ([u8; 512], usize),
+	dns_query: Vec<u8>,
 	addr: SocketAddr,
 	udp: Arc<tokio::net::UdpSocket>,
 ) -> tokio::io::Result<()> {
@@ -212,8 +212,8 @@ async fn send_request(
 		"/dns-query"
 	};
 	let mut reqs = match CONFIG.http_method {
-		config::HttpMethod::GET => get(&mut h3, &CONFIG.server_name, path, &dns_query.0[..dns_query.1]).await?,
-		config::HttpMethod::POST => post(&mut h3, &CONFIG.server_name, path, &dns_query.0[..dns_query.1]).await?,
+		config::HttpMethod::GET => get(&mut h3, &CONFIG.server_name, path, dns_query).await?,
+		config::HttpMethod::POST => post(&mut h3, &CONFIG.server_name, path, dns_query).await?,
 	};
 
 	reqs.finish().await.map_err(tokio::io::Error::other)?;
@@ -276,14 +276,14 @@ async fn get(
 	h3: &mut SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
 	server_name: &str,
 	path: &str,
-	dns_query: &[u8],
+	dns_query: Vec<u8>,
 ) -> tokio::io::Result<h3::client::RequestStream<h3_quinn::BidiStream<bytes::Bytes>, bytes::Bytes>> {
 	h3.send_request(
 		http::Request::get(
 			http::Uri::builder()
 				.scheme("https")
 				.authority(server_name)
-				.path_and_query(format!("{}?dns={}", path, base64_url::encode(dns_query)))
+				.path_and_query(format!("{}?dns={}", path, base64_url::encode(&dns_query)))
 				.build()
 				.map_err(tokio::io::Error::other)?,
 		)
@@ -301,7 +301,7 @@ async fn post(
 	h3: &mut SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
 	server_name: &str,
 	path: &str,
-	dns_query: &[u8],
+	dns_query: Vec<u8>,
 ) -> tokio::io::Result<h3::client::RequestStream<h3_quinn::BidiStream<bytes::Bytes>, bytes::Bytes>> {
 	let mut pending = h3
 		.send_request(
@@ -324,7 +324,7 @@ async fn post(
 		.map_err(tokio::io::Error::other)?;
 
 	pending
-		.send_data(bytes::Bytes::copy_from_slice(dns_query))
+		.send_data(bytes::Bytes::copy_from_slice(&dns_query))
 		.await
 		.map_err(tokio::io::Error::other)?;
 	Ok(pending)

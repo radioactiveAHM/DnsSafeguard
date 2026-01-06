@@ -7,11 +7,10 @@ use crate::{
 };
 use tokio::{io::AsyncWriteExt, time::sleep};
 
-#[allow(unused_assignments)]
 pub async fn http1() {
 	// TLS Client
 	let ctls = crate::tls::tlsconf(vec![b"http/1.1".to_vec()], CONFIG.disable_certificate_validation);
-	let mut tank: Option<(Box<[u8; 512]>, usize, SocketAddr)> = None;
+	let mut tank: Option<(Vec<u8>, SocketAddr)> = None;
 
 	let udp = crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap();
 	loop {
@@ -33,22 +32,23 @@ pub async fn http1() {
 		let mut http_resp = vec![0; 1024 * 8];
 		let mut bf_http_resp: tokio::io::ReadBuf<'_> = tokio::io::ReadBuf::new(&mut http_resp);
 
-		if let Some((dns_query, query_size, addr)) = &tank {
+		if tank.is_some() {
+			let (dns_query, addr) = tank.unwrap();
+			tank = None;
 			if handler(
 				&mut tls,
 				&udp,
-				&dns_query[..*query_size],
+				&dns_query,
 				&mut base64_url_temp,
 				&mut url,
 				&mut bf_http_resp,
-				addr,
+				&addr,
 			)
 			.await
 			.is_err()
 			{
 				continue;
 			}
-			tank = None;
 		}
 
 		loop {
@@ -73,7 +73,7 @@ pub async fn http1() {
 				.await
 				{
 					log::warn!("{e}");
-					tank = Some((Box::new(dns_query), query_size, addr));
+					tank = Some((dns_query[..query_size].to_vec(), addr));
 					break;
 				}
 			}
@@ -142,7 +142,7 @@ async fn handler<IO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(
 	Ok(())
 }
 
-type RcLocker = Arc<tokio::sync::Mutex<tokio::sync::mpsc::Receiver<([u8; 512], usize, std::net::SocketAddr)>>>;
+type RcLocker = Arc<tokio::sync::Mutex<tokio::sync::mpsc::Receiver<(Vec<u8>, std::net::SocketAddr)>>>;
 
 pub async fn h1_multi() {
 	let ctls = crate::tls::tlsconf(vec![b"http/1.1".to_vec()], CONFIG.disable_certificate_validation);
@@ -173,11 +173,11 @@ pub async fn h1_multi() {
 				let mut bf_http_resp: tokio::io::ReadBuf<'_> = tokio::io::ReadBuf::new(&mut http_resp);
 				loop {
 					let udp = udp.clone();
-					if let Some((query, size, addr)) = recver_locker.lock().await.recv().await
+					if let Some((query, addr)) = recver_locker.lock().await.recv().await
 						&& let Err(e) = handler(
 							&mut c,
 							&udp,
-							&query[..size],
+							&query,
 							&mut base64_url_temp,
 							&mut url,
 							&mut bf_http_resp,
@@ -203,7 +203,7 @@ pub async fn h1_multi() {
 			{
 				continue;
 			}
-			let _ = sender.send((dns_query, query_size, addr)).await;
+			let _ = sender.send((dns_query[..query_size].to_vec(), addr)).await;
 		}
 	}
 }

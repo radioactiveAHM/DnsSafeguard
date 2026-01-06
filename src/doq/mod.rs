@@ -23,7 +23,7 @@ pub async fn doq() {
 	)
 	.await;
 
-	let mut tank: Option<(Box<[u8; 514]>, usize, SocketAddr)> = None;
+	let mut tank: Option<(Vec<u8>, SocketAddr)> = None;
 	let disconnected = crate::disconnected::Disconnected::new();
 
 	let mut connecting_retry = 0u8;
@@ -96,9 +96,9 @@ pub async fn doq() {
 			match quic.open_bi().await {
 				Ok(bistream) => {
 					let stream_id = bistream.0.id();
-					let (dns_query, query_size, addr) = tank.unwrap();
+					let (dns_query, addr) = tank.unwrap();
 					tokio::spawn(async move {
-						if let Err(e) = send_dq(bistream, (*dns_query, query_size), addr, udp).await {
+						if let Err(e) = send_dq(bistream, dns_query, addr, udp).await {
 							log::warn!("{stream_id}: {e}");
 						}
 					});
@@ -147,7 +147,7 @@ pub async fn doq() {
 				}
 
 				if disconnected.get() {
-					tank = Some((Box::new(dns_query), query_size, addr));
+					tank = Some((dns_query[..query_size + 2].to_vec(), addr));
 					watcher.abort();
 					break;
 				}
@@ -156,7 +156,7 @@ pub async fn doq() {
 					Ok(bistream) => {
 						let stream_id = bistream.0.id();
 						tokio::spawn(async move {
-							if let Err(e) = send_dq(bistream, (dns_query, query_size), addr, udp).await {
+							if let Err(e) = send_dq(bistream, dns_query[..query_size + 2].to_vec(), addr, udp).await {
 								log::warn!("{stream_id}: {e}");
 								if e.kind() == std::io::ErrorKind::TimedOut {
 									disconnected.disconnect();
@@ -166,7 +166,7 @@ pub async fn doq() {
 					}
 					Err(e) => {
 						log::warn!("{e}");
-						tank = Some((Box::new(dns_query), query_size, addr));
+						tank = Some((dns_query[..query_size + 2].to_vec(), addr));
 						watcher.abort();
 						break;
 					}
@@ -179,12 +179,12 @@ pub async fn doq() {
 #[inline(always)]
 async fn send_dq(
 	(mut send, mut recv): (SendStream, RecvStream),
-	mut dns_query: ([u8; 514], usize),
+	mut dns_query: Vec<u8>,
 	addr: SocketAddr,
 	udp: Arc<tokio::net::UdpSocket>,
 ) -> tokio::io::Result<()> {
-	[dns_query.0[0], dns_query.0[1]] = convert_u16_to_two_u8s_be(dns_query.1 as u16);
-	send.write_all(&dns_query.0[..dns_query.1 + 2]).await?;
+	[dns_query[0], dns_query[1]] = convert_u16_to_two_u8s_be(dns_query.len() as u16 - 2);
+	send.write_all(&dns_query).await?;
 	send.finish()?;
 
 	let timeout_dur = std::time::Duration::from_secs(CONFIG.response_timeout);

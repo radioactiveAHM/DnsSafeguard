@@ -73,8 +73,8 @@
 		"runtime_mode": "Multi",
 		"worker_threads": null,
 		"thread_stack_size": null,
-		"event_interval": null,
-		"global_queue_interval": null,
+		"event_interval": 30,
+		"global_queue_interval": 15,
 		"max_io_events_per_tick": null,
 		"thread_keep_alive": null
 	},

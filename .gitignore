@@ -2,3 +2,4 @@ Cargo.lock
 /target
 /*.pem
 /*.crt
+.goreleaser.yaml

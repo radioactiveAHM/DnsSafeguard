@@ -21,8 +21,8 @@ pub async fn dot() {
 	loop {
 		log::info!("TLS connecting");
 		let tls = crate::tls::dynamic_tls_conn_gen(&["dot"], ctls.clone()).await;
-		if tls.is_err() {
-			log::warn!("DoT: {}", tls.unwrap_err());
+		if let Err(e) = tls {
+			log::warn!("{e}");
 			tokio::time::sleep(std::time::Duration::from_secs(CONFIG.connection.reconnect_sleep)).await;
 			continue;
 		}

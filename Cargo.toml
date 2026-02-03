@@ -24,25 +24,26 @@ tokio = { version = "1.49.0", features = ["rt-multi-thread", "rt", "macros", "ne
 h3-quinn = "0.0.10"
 h3 = "0.0.8"
 http = "1.4.0"
-bytes = "1.11.0"
+bytes = "1.11.1"
 base64-url = "3.0.2"
 h2 = "0.4.13"
 tokio-rustls = { git = "https://github.com/radioactiveAHM/tokio-rustls.git", features = ["brotli", "zlib", "logging"] }
-socket2 = "0.6.1"
-native-tls = {version = "0.2.14", features = ["alpn", "vendored"]}
-tokio-native-tls = "0.3.1"
+socket2 = "0.6.2"
+native-tls = { version = "0.2.14", features = ["alpn", "vendored"], optional = true }
+tokio-native-tls = { version = "0.3.1", optional = true }
 log = "0.4.29"
 env_logger = "0.11.8"
-fastbloom = "0.14.0" # required for quinn
+fastbloom = "0.14.1" # required for quinn
 if-addrs = "0.14.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-service = "0.8.0"
 
 [features]
-default = ["aws-lc-rs"]
+default = ["aws-lc-rs", "nativetls"]
 aws-lc-rs = ["quinn/rustls-aws-lc-rs", "tokio-rustls/aws-lc-rs", "tokio-rustls/prefer-post-quantum"]
 ring = ["quinn/rustls-ring", "tokio-rustls/ring"]
+nativetls = ["native-tls", "tokio-native-tls"]
 
 [profile.release]
 panic = "abort"

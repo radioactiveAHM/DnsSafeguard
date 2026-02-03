@@ -43,9 +43,11 @@ pub fn tlsfragmenting(
 }
 
 pub trait AsyncIO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Debug + Send {}
-impl AsyncIO for tokio_native_tls::TlsStream<tokio::net::TcpStream> {}
 impl AsyncIO for tokio_rustls::client::TlsStream<tokio::net::TcpStream> {}
+#[cfg(feature = "nativetls")]
+impl AsyncIO for tokio_native_tls::TlsStream<tokio::net::TcpStream> {}
 
+#[cfg(feature = "nativetls")]
 pub async fn dynamic_tls_conn_gen(
 	alpn: &[&str],
 	ctls: Arc<tokio_rustls::rustls::ClientConfig>,
@@ -105,6 +107,42 @@ pub async fn dynamic_tls_conn_gen(
 				.await?,
 		))
 	}
+}
+
+#[cfg(not(feature = "nativetls"))]
+pub async fn dynamic_tls_conn_gen(
+	_alpn: &[&str],
+	ctls: Arc<tokio_rustls::rustls::ClientConfig>,
+) -> tokio::io::Result<Box<dyn AsyncIO>> {
+	let config = &crate::CONFIG;
+	if config.native_tls {
+		log::error!("native tls feature not available. fallback to rustls");
+	}
+
+	let example_com = if config.ip_as_sni {
+		(config.remote_addrs.ip()).into()
+	} else {
+		(config.server_name.clone()).try_into().expect("invalid server name")
+	};
+
+	Ok(Box::new(
+		tokio_rustls::TlsConnector::from(ctls)
+			.connect_with(
+				example_com,
+				tcp_connect_handle(
+					config.remote_addrs,
+					config.connection,
+					&config.interface,
+					&config.tcp_socket_options,
+				)
+				.await,
+				|tls, tcp| {
+					// Do fragmenting
+					tlsfragmenting(&config.fragmenting, tls, tcp);
+				},
+			)
+			.await?,
+	))
 }
 
 #[derive(Debug)]

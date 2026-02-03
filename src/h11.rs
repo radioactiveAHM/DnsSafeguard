@@ -16,8 +16,8 @@ pub async fn http1() {
 	loop {
 		log::info!("HTTP/1.1 connecting");
 		let tls = crate::tls::dynamic_tls_conn_gen(&["http/1.1"], ctls.clone()).await;
-		if tls.is_err() {
-			log::warn!("{}", tls.unwrap_err());
+		if let Err(e) = tls {
+			log::warn!("{e}");
 			sleep(std::time::Duration::from_secs(CONFIG.connection.reconnect_sleep)).await;
 			continue;
 		}
@@ -159,8 +159,8 @@ pub async fn h1_multi() {
 		tokio::spawn(async move {
 			loop {
 				let tls_conn = crate::tls::dynamic_tls_conn_gen(&["http/1.1"], tls_config.clone()).await;
-				if tls_conn.is_err() {
-					log::warn!("{}", tls_conn.unwrap_err());
+				if let Err(e) = tls_conn {
+					log::warn!("{e}");
 					tokio::time::sleep(std::time::Duration::from_secs(CONFIG.connection.reconnect_sleep)).await;
 					continue;
 				}

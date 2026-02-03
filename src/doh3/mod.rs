@@ -106,9 +106,9 @@ pub async fn http3() {
 			}
 		};
 
-		if conn.is_err() {
+		if let Err(e) = conn {
+			log::warn!("{e}");
 			connecting_retry += 1;
-			log::warn!("{}", conn.unwrap_err());
 			sleep(std::time::Duration::from_secs(CONFIG.connection.reconnect_sleep)).await;
 			continue;
 		}

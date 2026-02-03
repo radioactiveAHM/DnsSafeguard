@@ -28,8 +28,8 @@ pub async fn http2() {
 	loop {
 		log::info!("H2 connecting");
 		let tls = crate::tls::dynamic_tls_conn_gen(&["h2"], h2tls.clone()).await;
-		if tls.is_err() {
-			log::warn!("{}", tls.unwrap_err());
+		if let Err(e) = tls {
+			log::warn!("{e}");
 			sleep(std::time::Duration::from_secs(CONFIG.connection.reconnect_sleep)).await;
 			continue;
 		}

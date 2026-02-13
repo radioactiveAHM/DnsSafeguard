@@ -44,8 +44,9 @@ pub fn tlsfragmenting(
 
 pub trait AsyncIO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Debug + Send {}
 impl AsyncIO for tokio_rustls::client::TlsStream<tokio::net::TcpStream> {}
-impl AsyncIO for tokio_native_tls::TlsStream<tokio::net::TcpStream> {}
 impl AsyncIO for tokio_boring::SslStream<tokio::net::TcpStream> {}
+#[cfg(not(target_os = "linux"))]
+impl AsyncIO for tokio_native_tls::TlsStream<tokio::net::TcpStream> {}
 
 pub async fn dynamic_tls_conn_gen(
 	alpn: &[&str],
@@ -60,27 +61,35 @@ pub async fn dynamic_tls_conn_gen(
 				config.server_name.clone()
 			};
 
-			Ok(Box::new(
-				tokio_native_tls::TlsConnector::from(
-					native_tls::TlsConnector::builder()
-						.request_alpns(alpn)
-						.danger_accept_invalid_certs(config.disable_certificate_validation)
-						.build()
-						.map_err(tokio::io::Error::other)?,
-				)
-				.connect(
-					&sni,
-					tcp_connect_handle(
-						config.remote_addrs,
-						config.connection,
-						&config.interface,
-						&config.tcp_socket_options,
+			#[cfg(target_os = "linux")]
+			{
+				panic!("native tls not available")
+			}
+
+			#[cfg(not(target_os = "linux"))]
+			{
+				Ok(Box::new(
+					tokio_native_tls::TlsConnector::from(
+						native_tls::TlsConnector::builder()
+							.request_alpns(alpn)
+							.danger_accept_invalid_certs(config.disable_certificate_validation)
+							.build()
+							.map_err(tokio::io::Error::other)?,
 					)
-					.await,
-				)
-				.await
-				.map_err(tokio::io::Error::other)?,
-			))
+					.connect(
+						&sni,
+						tcp_connect_handle(
+							config.remote_addrs,
+							config.connection,
+							&config.interface,
+							&config.tcp_socket_options,
+						)
+						.await,
+					)
+					.await
+					.map_err(tokio::io::Error::other)?,
+				))
+			}
 		}
 		crate::config::TlsCore::rustls => {
 			let sni = if config.ip_as_sni {

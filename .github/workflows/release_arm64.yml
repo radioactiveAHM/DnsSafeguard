@@ -13,10 +13,10 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            use_cross: true
-            binary_name: DnsSafeguard
+          # - target: aarch64-unknown-linux-gnu
+          #   os: ubuntu-latest
+          #   use_cross: true
+          #   binary_name: DnsSafeguard
 
           - target: aarch64-apple-darwin
             os: macos-latest
@@ -38,9 +38,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y mingw-w64 libssl-dev
           case "${{ matrix.target }}" in
             "aarch64-unknown-linux-gnu")
-              sudo dpkg --add-architecture arm64
-              sudo apt-get update
-              sudo apt-get install -y gcc-aarch64-linux-gnu libssl-dev:arm64
+              sudo apt-get install -y gcc-aarch64-linux-gnu
               ;;
             "aarch64-unknown-linux-musl")
               sudo apt-get install -y gcc-aarch64-linux-gnu musl-tools

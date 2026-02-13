@@ -16,7 +16,7 @@ pub async fn doq() {
 
 	let mut endpoint = quic_setup(
 		CONFIG.remote_addrs,
-		&CONFIG.noise,
+		&CONFIG.noiser,
 		&CONFIG.quic,
 		"doq",
 		&CONFIG.interface,
@@ -32,7 +32,7 @@ pub async fn doq() {
 			connecting_retry = 0;
 			endpoint = quic_setup(
 				CONFIG.remote_addrs,
-				&CONFIG.noise,
+				&CONFIG.noiser,
 				&CONFIG.quic,
 				"doq",
 				&CONFIG.interface,

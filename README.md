@@ -169,13 +169,12 @@ The configuration file is structured in JSON format and includes the following s
 - `Http Method`: Values are `GET` and `POST`. GET is more compatible, it consumes more memory. POST, on the other hand, eliminates the need to encode DNS queries in base64url, resulting in lower memory usage. However, it requires two write system calls.
 - `Response Timeout`: How long to wait for http response for DoQ, H3 and H1.
 - `Connection Keep Alive`: Sends periodic keep-alive signals—such as `GET /` (H2/H3), empty DNS headers (DoT), or empty buffers (DoQ)—at a specified interval in seconds to maintain connections with remote servers that may ignore standard HTTP/2 or QUIC keep-alives; set to `null` to disable.
-- `Native Tls`: Enables Native TLS using SChannel on Windows, Security.framework on macOS, and OpenSSL elsewhere; fragmenting is not supported. Compatible with `h1`, `h2`, and `dot`.
+- `TLS Core`: Default backend is `rustls`, which supports all current features. Alternative TLS backends include `boring` and `native` (SChannel on Windows, Security.framework on macOS, and OpenSSL on other platforms). Fragmentation is not supported. `boring` and `native` are only compatible with `h1`, `h2`, and `dot`.
 - `Fragmenting`: The fragmentation method to use during the TLS handshake. [Fragmenting page](/FRAG.md)
-- `Noise`: UDP noise setting.
-  - `ntype`: Noise type. Variants include `dns`, `str`, `lsd`, `tracker`, `stun`, `tftp` and `rand`.
+- `Noise`: List of UDP noises.
+  - `Ntype`: Noise type. Variants include `dns`, `str`, `lsd`, `tracker`, `stun`, `tftp` and `rand`.
   - `Content`: Domain for `dns` ntype. Text for `str` ntype.
-  - `Packet Length`: Specifies the length of each noise packet in bytes for `rand` ntype.
-  - `Packets`: Indicates the total number of UDP noise packets to send for `rand` ntype.
+  - `Size`: Specifies the length of each noise packet in bytes for `rand` ntype.
   - `Sleep`: Defines the sleep time (in milliseconds) after each UDP noise packet is sent.
 - `Quic`: Configuration for QUIC protocol.
   - `Congestion Controller`: The congestion controller algorithm, options are `bbr`, `cubic` and `newreno`.

@@ -2,14 +2,12 @@ use std::net::SocketAddr;
 
 use crate::config::{Noise, NoiseType};
 use rand::{
-	Rng,
 	distr::{Alphanumeric, SampleString},
 	rng,
 };
 
 // Generate random standard dns record
 pub mod dns {
-	use rand::Rng;
 
 	struct Query {
 		asize: [u8; 1],
@@ -57,7 +55,7 @@ pub mod dns {
 
 		pub fn with_domain(domain: &str) -> Vec<u8> {
 			let mut random = [0u8; 1024];
-			rand::rng().fill(&mut random);
+			rand::fill(&mut random);
 
 			let ab: Vec<&str> = domain.split(".").collect();
 			let query = Query {
@@ -100,7 +98,7 @@ impl Lsd<'_> {
 		Lsd {
 			header: "BT-SEARCH * HTTP/1.1",
 			host: format!("Host: {target}"),
-			port: format!("Port: {}", rng.random::<u16>()),
+			port: format!("Port: {}", rand::random::<u16>()),
 			infohash: format!("Infohash: {}", Alphanumeric.sample_string(&mut rng, 40)),
 			cookie: format!("Cookie: {}", Alphanumeric.sample_string(&mut rng, 8)),
 		}
@@ -144,7 +142,7 @@ impl Tracker {
 
 fn stun() -> [u8; 20] {
 	let mut message = [0, 1, 0, 0, 33, 18, 164, 66, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-	rand::rng().fill(&mut message[8..]);
+	rand::fill(&mut message[8..]);
 	message
 }
 
@@ -153,7 +151,7 @@ fn tftp() -> Vec<u8> {
 	let mut packet: Vec<u8> = vec![0, 1];
 
 	let mut rng = rng();
-	let filename_len = rng.random_range(1..128);
+	let filename_len = rand::random_range(1..128);
 	packet.extend_from_slice(Alphanumeric.sample_string(&mut rng, filename_len).as_bytes());
 
 	//                          |---".bin"---|
@@ -163,15 +161,14 @@ fn tftp() -> Vec<u8> {
 }
 
 fn ntp() -> [u8; 48] {
-	let mut rng = rand::rng();
 	let mut packet: [u8; 48] = [
 		219, 0, 17, 233, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 236, 77, 18, 206, 29, 109, 124, 219, 0, 0, 0, 0, 0, 0, 0,
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 236, 77, 36, 9, 81, 101, 92, 123,
 	];
 
-	rng.fill(&mut packet[2..12]);
-	rng.fill(&mut packet[16..24]);
-	rng.fill(&mut packet[40..]);
+	rand::fill(&mut packet[2..12]);
+	rand::fill(&mut packet[16..24]);
+	rand::fill(&mut packet[40..]);
 	packet
 }
 
@@ -183,9 +180,9 @@ fn syslog() -> Vec<u8> {
 	let mut rng = rand::rng();
 
 	let host = crate::CONFIG.server_name.as_str();
-	let pid: u8 = rng.random();
-	let mid: u8 = rng.random();
-	let mlen = rng.random_range(10..256);
+	let pid: u8 = rand::random();
+	let mid: u8 = rand::random();
+	let mlen = rand::random_range(10..256);
 	packet.extend_from_slice(
 		format!(
 			" {host} syslog {pid} ID{mid} - {}",
@@ -198,33 +195,31 @@ fn syslog() -> Vec<u8> {
 }
 
 fn rand_noiser(noise: &Noise, target: SocketAddr, udp: &std::net::UdpSocket) -> tokio::io::Result<usize> {
-	let mut rng = rand::rng();
 	let mut packet = [0u8; 1500];
-	let psize_range = crate::utils::parse_range(&noise.packet_length).expect("failed to parse packet length range");
+	let psize_range = crate::utils::parse_range(&noise.size).expect("failed to parse packet length range");
 	let mut sent_bytes = 0;
-	for _ in 0..noise.packets {
-		rng.fill(&mut packet);
-		sent_bytes += udp.send_to(&packet[..rng.random_range(psize_range.clone())], target)?;
-		std::thread::sleep(std::time::Duration::from_millis(noise.sleep));
-	}
+	rand::fill(&mut packet);
+	sent_bytes += udp.send_to(&packet[..rand::random_range(psize_range.clone())], target)?;
 	Ok(sent_bytes)
 }
 
-pub fn noiser(noise: &Noise, target: SocketAddr, udp: &std::net::UdpSocket) {
-	if let Ok(sent_bytes) = match noise.ntype {
-		NoiseType::rand => rand_noiser(noise, target, udp),
-		NoiseType::dns => udp.send_to(&dns::DnsRcord::with_domain(&noise.content), target),
-		NoiseType::str => udp.send_to(noise.content.as_bytes(), target),
-		NoiseType::lsd => udp.send_to(&Lsd::new(target).into_buffer(), target),
-		NoiseType::tracker => udp.send_to(&Tracker::new().bytes(), target),
-		NoiseType::stun => udp.send_to(&stun(), target),
-		NoiseType::tftp => udp.send_to(&tftp(), target),
-		NoiseType::ntp => udp.send_to(&ntp(), target),
-		NoiseType::syslog => udp.send_to(&syslog(), target),
-	} {
-		log::info!("{sent_bytes} bytes sent as noise");
-		std::thread::sleep(std::time::Duration::from_millis(noise.sleep));
-	} else {
-		log::warn!("noise failed");
+pub fn noiser(noises: &Vec<Noise>, target: SocketAddr, udp: &std::net::UdpSocket) {
+	for noise in noises {
+		if let Ok(sent_bytes) = match noise.ntype {
+			NoiseType::rand => rand_noiser(noise, target, udp),
+			NoiseType::dns => udp.send_to(&dns::DnsRcord::with_domain(&noise.content), target),
+			NoiseType::str => udp.send_to(noise.content.as_bytes(), target),
+			NoiseType::lsd => udp.send_to(&Lsd::new(target).into_buffer(), target),
+			NoiseType::tracker => udp.send_to(&Tracker::new().bytes(), target),
+			NoiseType::stun => udp.send_to(&stun(), target),
+			NoiseType::tftp => udp.send_to(&tftp(), target),
+			NoiseType::ntp => udp.send_to(&ntp(), target),
+			NoiseType::syslog => udp.send_to(&syslog(), target),
+		} {
+			log::info!("{sent_bytes} bytes sent as noise");
+			std::thread::sleep(std::time::Duration::from_millis(noise.sleep));
+		} else {
+			log::warn!("noise failed");
+		}
 	}
 }

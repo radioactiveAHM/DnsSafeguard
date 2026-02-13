@@ -44,54 +44,32 @@ pub fn tlsfragmenting(
 
 pub trait AsyncIO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Debug + Send {}
 impl AsyncIO for tokio_rustls::client::TlsStream<tokio::net::TcpStream> {}
-#[cfg(feature = "nativetls")]
 impl AsyncIO for tokio_native_tls::TlsStream<tokio::net::TcpStream> {}
+impl AsyncIO for tokio_boring::SslStream<tokio::net::TcpStream> {}
 
-#[cfg(feature = "nativetls")]
 pub async fn dynamic_tls_conn_gen(
 	alpn: &[&str],
 	ctls: Arc<tokio_rustls::rustls::ClientConfig>,
 ) -> tokio::io::Result<Box<dyn AsyncIO>> {
-	let config = &crate::CONFIG;
-	if config.native_tls {
-		let sni = if config.ip_as_sni {
-			config.remote_addrs.ip().to_string()
-		} else {
-			config.server_name.clone()
-		};
+	let config: &std::sync::LazyLock<crate::config::Config> = &crate::CONFIG;
+	match config.tls_core {
+		crate::config::TlsCore::native => {
+			let sni = if config.ip_as_sni {
+				config.remote_addrs.ip().to_string()
+			} else {
+				config.server_name.clone()
+			};
 
-		Ok(Box::new(
-			tokio_native_tls::TlsConnector::from(
-				native_tls::TlsConnector::builder()
-					.request_alpns(alpn)
-					.danger_accept_invalid_certs(config.disable_certificate_validation)
-					.build()
-					.map_err(tokio::io::Error::other)?,
-			)
-			.connect(
-				&sni,
-				tcp_connect_handle(
-					config.remote_addrs,
-					config.connection,
-					&config.interface,
-					&config.tcp_socket_options,
+			Ok(Box::new(
+				tokio_native_tls::TlsConnector::from(
+					native_tls::TlsConnector::builder()
+						.request_alpns(alpn)
+						.danger_accept_invalid_certs(config.disable_certificate_validation)
+						.build()
+						.map_err(tokio::io::Error::other)?,
 				)
-				.await,
-			)
-			.await
-			.map_err(tokio::io::Error::other)?,
-		))
-	} else {
-		let example_com = if config.ip_as_sni {
-			(config.remote_addrs.ip()).into()
-		} else {
-			(config.server_name.clone()).try_into().expect("invalid server name")
-		};
-
-		Ok(Box::new(
-			tokio_rustls::TlsConnector::from(ctls)
-				.connect_with(
-					example_com,
+				.connect(
+					&sni,
 					tcp_connect_handle(
 						config.remote_addrs,
 						config.connection,
@@ -99,50 +77,72 @@ pub async fn dynamic_tls_conn_gen(
 						&config.tcp_socket_options,
 					)
 					.await,
-					|tls, tcp| {
-						// Do fragmenting
-						tlsfragmenting(&config.fragmenting, tls, tcp);
-					},
 				)
-				.await?,
-		))
-	}
-}
+				.await
+				.map_err(tokio::io::Error::other)?,
+			))
+		}
+		crate::config::TlsCore::rustls => {
+			let sni = if config.ip_as_sni {
+				(config.remote_addrs.ip()).into()
+			} else {
+				(config.server_name.clone()).try_into().expect("invalid server name")
+			};
 
-#[cfg(not(feature = "nativetls"))]
-pub async fn dynamic_tls_conn_gen(
-	_alpn: &[&str],
-	ctls: Arc<tokio_rustls::rustls::ClientConfig>,
-) -> tokio::io::Result<Box<dyn AsyncIO>> {
-	let config = &crate::CONFIG;
-	if config.native_tls {
-		log::error!("native tls feature not available. fallback to rustls");
-	}
+			Ok(Box::new(
+				tokio_rustls::TlsConnector::from(ctls)
+					.connect_with(
+						sni,
+						tcp_connect_handle(
+							config.remote_addrs,
+							config.connection,
+							&config.interface,
+							&config.tcp_socket_options,
+						)
+						.await,
+						|tls, tcp| {
+							// Do fragmenting
+							tlsfragmenting(&config.fragmenting, tls, tcp);
+						},
+					)
+					.await?,
+			))
+		}
+		crate::config::TlsCore::boring => {
+			let alpn: &[u8] = match alpn[0] {
+				"h2" => b"\x02h2",
+				"http/1.1" => b"\x08http/1.1",
+				"dot" => b"\x03dot",
+				_ => panic!("invalid alpn"),
+			};
 
-	let example_com = if config.ip_as_sni {
-		(config.remote_addrs.ip()).into()
-	} else {
-		(config.server_name.clone()).try_into().expect("invalid server name")
-	};
+			let mut builder = boring::ssl::SslConnector::builder(boring::ssl::SslMethod::tls())?;
+			builder.set_min_proto_version(Some(boring::ssl::SslVersion::TLS1_2))?;
+			builder.set_alpn_protos(alpn)?;
+			builder.set_verify(if config.disable_certificate_validation {
+				boring::ssl::SslVerifyMode::NONE
+			} else {
+				boring::ssl::SslVerifyMode::PEER
+			});
+			builder.set_ca_file("MOZILLA_ROOTS.pem")?;
 
-	Ok(Box::new(
-		tokio_rustls::TlsConnector::from(ctls)
-			.connect_with(
-				example_com,
-				tcp_connect_handle(
-					config.remote_addrs,
-					config.connection,
-					&config.interface,
-					&config.tcp_socket_options,
+			Ok(Box::new(
+				tokio_boring::connect(
+					builder.build().configure()?,
+					&config.server_name,
+					tcp_connect_handle(
+						config.remote_addrs,
+						config.connection,
+						&config.interface,
+						&config.tcp_socket_options,
+					)
+					.await,
 				)
-				.await,
-				|tls, tcp| {
-					// Do fragmenting
-					tlsfragmenting(&config.fragmenting, tls, tcp);
-				},
-			)
-			.await?,
-	))
+				.await
+				.map_err(tokio::io::Error::other)?,
+			))
+		}
+	}
 }
 
 #[derive(Debug)]

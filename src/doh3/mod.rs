@@ -12,21 +12,21 @@ use h3::client::SendRequest;
 
 use crate::{
 	CONFIG,
-	config::{self, Noise},
+	config::{self, Noiser},
 	rule::rulecheck,
 };
 
 pub async fn quic_setup(
 	target: SocketAddr,
-	noise: &Noise,
+	noiser: &Noiser,
 	quic_conf_file: &crate::config::Quic,
 	alpn: &str,
 	network_interface: &Option<String>,
 ) -> quinn::Endpoint {
 	let udp = std::net::UdpSocket::bind(crate::udp::udp_addr_to_bind(network_interface, target.is_ipv4())).unwrap();
 
-	if noise.enable {
-		noise::noiser(noise, target, &udp);
+	if noiser.enable {
+		noise::noiser(&noiser.noises, target, &udp);
 	}
 
 	let mut endpoint = quinn::Endpoint::new(
@@ -47,7 +47,7 @@ pub async fn quic_setup(
 pub async fn http3() {
 	let mut endpoint = quic_setup(
 		CONFIG.remote_addrs,
-		&CONFIG.noise,
+		&CONFIG.noiser,
 		&CONFIG.quic,
 		"h3",
 		&CONFIG.interface,
@@ -65,7 +65,7 @@ pub async fn http3() {
 			connecting_retry = 0;
 			endpoint = quic_setup(
 				CONFIG.remote_addrs,
-				&CONFIG.noise,
+				&CONFIG.noiser,
 				&CONFIG.quic,
 				"h3",
 				&CONFIG.interface,

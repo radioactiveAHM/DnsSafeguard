@@ -13,7 +13,7 @@
 	"custom_http_path": null,
 	"http_method": "GET",
 	"response_timeout": 5,
-	"native_tls": false,
+	"tls_core": "rustls",
 	"connection_keep_alive": 10,
 	"fragmenting": {
 		"enable": false,
@@ -22,13 +22,28 @@
 		"fragment_size": "50-100",
 		"segments": 2
 	},
-	"noise": {
+	"noiser": {
 		"enable": false,
-		"ntype": "tftp",
-		"content": "google.com",
-		"packet_length": "1-100",
-		"packets": 8,
-		"sleep": 50
+		"noises": [
+			{
+				"ntype": "tftp",
+				"content": "",
+				"size": "1-100",
+				"sleep": 50
+			},
+			{
+				"ntype": "rand",
+				"content": "",
+				"size": "1-6",
+				"sleep": 25
+			},
+			{
+				"ntype": "rand",
+				"content": "",
+				"size": "1-6",
+				"sleep": 25
+			}
+		]
 	},
 	"quic": {
 		"congestion_controller": "bbr",

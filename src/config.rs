@@ -38,12 +38,16 @@ pub enum NoiseType {
 
 #[derive(serde::Deserialize)]
 pub struct Noise {
-	pub enable: bool,
-	pub packet_length: String,
-	pub packets: u8,
-	pub sleep: u64,
 	pub ntype: NoiseType,
 	pub content: String,
+	pub size: String,
+	pub sleep: u64,
+}
+
+#[derive(serde::Deserialize)]
+pub struct Noiser {
+	pub enable: bool,
+	pub noises: Vec<Noise>,
 }
 
 #[derive(serde::Deserialize, Clone, Copy)]
@@ -157,6 +161,14 @@ pub enum RuntimeMode {
 }
 
 #[derive(serde::Deserialize)]
+#[allow(non_camel_case_types)]
+pub enum TlsCore {
+	rustls,
+	boring,
+	native,
+}
+
+#[derive(serde::Deserialize)]
 pub struct Runtime {
 	pub runtime_mode: RuntimeMode,
 	pub worker_threads: Option<usize>,
@@ -181,9 +193,9 @@ pub struct Config {
 	pub response_timeout: u64,
 	pub http_method: HttpMethod,
 	pub connection_keep_alive: Option<u64>,
-	pub native_tls: bool,
+	pub tls_core: TlsCore,
 	pub fragmenting: Fragmenting,
-	pub noise: Noise,
+	pub noiser: Noiser,
 	pub quic: Quic,
 	pub h2: H2,
 	pub connection: Connection,

@@ -1,4 +1,3 @@
-use rand::Rng;
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
@@ -126,7 +125,7 @@ async fn send_query<W: tokio::io::AsyncWrite + Unpin + Send>(
 			[query[0], query[1]] = convert_u16_to_two_u8s_be(size as u16);
 			let mut id = convert_two_u8s_to_u16_be([query[2], query[3]]);
 			if id == 0 {
-				id = rand::rng().random::<u16>();
+				id = rand::random::<u16>();
 				[query[2], query[3]] = convert_u16_to_two_u8s_be(id);
 				waiters.lock().await.insert(id, IdType::ZeroID(addr));
 			} else {

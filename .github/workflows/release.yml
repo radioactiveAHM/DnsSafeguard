@@ -16,7 +16,7 @@ jobs:
           # Linux builds (using cross for cross-compilation)
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            use_cross: true
+            use_cross: false
             binary_name: DnsSafeguard
           # - target: aarch64-unknown-linux-gnu
           #   os: ubuntu-latest
@@ -62,6 +62,11 @@ jobs:
               sudo apt-get install -y musl-tools
               ;;
           esac
+      
+      - name: Install deps for linux
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update && sudo apt-get install -y mingw-w64 nasm cmake libssl-dev
 
       - name: Install cross-compilation tool
         if: matrix.use_cross == true

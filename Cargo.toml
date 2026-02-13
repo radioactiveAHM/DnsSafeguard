@@ -1,6 +1,6 @@
 [package]
 name = "DnsSafeguard"
-version = "1.13.5"
+version = "1.14.0"
 edition = "2024"
 license = "Apache-2.0"
 description = "DnsSafeguard is dedicated to providing a secure DNS client solution, ensuring your DNS queries remain private and uncensored."
@@ -29,7 +29,7 @@ base64-url = "3.0.2"
 h2 = "0.4.13"
 tokio-rustls = { git = "https://github.com/radioactiveAHM/tokio-rustls.git", features = ["brotli", "zlib", "logging"] }
 socket2 = "0.6.2"
-native-tls = { version = "0.2.15", features = ["alpn", "vendored"]}
+native-tls = { version = "0.2.16", features = ["alpn"]}
 tokio-native-tls = { version = "0.3.1"}
 log = "0.4.29"
 env_logger = "0.11.9"

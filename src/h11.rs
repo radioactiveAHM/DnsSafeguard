@@ -102,6 +102,7 @@ async fn handler<IO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(
 	);
 
 	c.write_all(http_req).await?;
+	c.flush().await?;
 
 	// Handle Reciving Data
 	bf_http_resp.clear();

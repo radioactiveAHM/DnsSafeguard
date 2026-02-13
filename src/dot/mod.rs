@@ -113,6 +113,7 @@ async fn send_query<W: tokio::io::AsyncWrite + Unpin + Send>(
 			let _ = w
 				.write_all(&[0, 12, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]) // Empty dns query
 				.await;
+			let _ = w.flush().await;
 		})
 		.await;
 
@@ -132,6 +133,7 @@ async fn send_query<W: tokio::io::AsyncWrite + Unpin + Send>(
 				waiters.lock().await.insert(id, IdType::WithID(addr));
 			}
 			w.write_all(&query[..size + 2]).await?;
+			w.flush().await?;
 		}
 	}
 }

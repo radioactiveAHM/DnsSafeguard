@@ -48,14 +48,6 @@ jobs:
               ;;
           esac
 
-      - name: Install Zig
-        if: matrix.target == 'aarch64-apple-darwin'
-        run: |
-          brew install zig
-          
-          echo "CC_aarch64_apple_darwin=zig cc -target aarch64-macos" >> $GITHUB_ENV
-          echo "CXX_aarch64_apple_darwin=zig c++ -target aarch64-macos" >> $GITHUB_ENV
-
       - name: Install cross-compilation tool
         if: matrix.use_cross == true
         run: |

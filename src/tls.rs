@@ -44,9 +44,9 @@ pub fn tlsfragmenting(
 
 pub trait AsyncIO: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Debug + Send {}
 impl AsyncIO for tokio_rustls::client::TlsStream<tokio::net::TcpStream> {}
-impl AsyncIO for tokio_boring::SslStream<tokio::net::TcpStream> {}
-#[cfg(not(target_os = "linux"))]
 impl AsyncIO for tokio_native_tls::TlsStream<tokio::net::TcpStream> {}
+#[cfg(target_os = "windows")]
+impl AsyncIO for tokio_boring::SslStream<tokio::net::TcpStream> {}
 
 pub async fn dynamic_tls_conn_gen(
 	alpn: &[&str],
@@ -61,12 +61,6 @@ pub async fn dynamic_tls_conn_gen(
 				config.server_name.clone()
 			};
 
-			#[cfg(target_os = "linux")]
-			{
-				panic!("native tls not available")
-			}
-
-			#[cfg(not(target_os = "linux"))]
 			{
 				Ok(Box::new(
 					tokio_native_tls::TlsConnector::from(
@@ -118,38 +112,46 @@ pub async fn dynamic_tls_conn_gen(
 			))
 		}
 		crate::config::TlsCore::boring => {
-			let alpn: &[u8] = match alpn[0] {
-				"h2" => b"\x02h2",
-				"http/1.1" => b"\x08http/1.1",
-				"dot" => b"\x03dot",
-				_ => panic!("invalid alpn"),
-			};
+			#[cfg(not(target_os = "windows"))]
+			{
+				panic!("boringSSL is not available")
+			}
 
-			let mut builder = boring::ssl::SslConnector::builder(boring::ssl::SslMethod::tls())?;
-			builder.set_min_proto_version(Some(boring::ssl::SslVersion::TLS1_2))?;
-			builder.set_alpn_protos(alpn)?;
-			builder.set_verify(if config.disable_certificate_validation {
-				boring::ssl::SslVerifyMode::NONE
-			} else {
-				boring::ssl::SslVerifyMode::PEER
-			});
-			builder.set_ca_file("MOZILLA_ROOTS.pem")?;
+			#[cfg(target_os = "windows")]
+			{
+				let alpn: &[u8] = match alpn[0] {
+					"h2" => b"\x02h2",
+					"http/1.1" => b"\x08http/1.1",
+					"dot" => b"\x03dot",
+					_ => panic!("invalid alpn"),
+				};
 
-			Ok(Box::new(
-				tokio_boring::connect(
-					builder.build().configure()?,
-					&config.server_name,
-					tcp_connect_handle(
-						config.remote_addrs,
-						config.connection,
-						&config.interface,
-						&config.tcp_socket_options,
+				let mut builder = boring::ssl::SslConnector::builder(boring::ssl::SslMethod::tls())?;
+				builder.set_min_proto_version(Some(boring::ssl::SslVersion::TLS1_2))?;
+				builder.set_alpn_protos(alpn)?;
+				builder.set_verify(if config.disable_certificate_validation {
+					boring::ssl::SslVerifyMode::NONE
+				} else {
+					boring::ssl::SslVerifyMode::PEER
+				});
+				builder.set_ca_file("MOZILLA_ROOTS.pem")?;
+
+				Ok(Box::new(
+					tokio_boring::connect(
+						builder.build().configure()?,
+						&config.server_name,
+						tcp_connect_handle(
+							config.remote_addrs,
+							config.connection,
+							&config.interface,
+							&config.tcp_socket_options,
+						)
+						.await,
 					)
-					.await,
-				)
-				.await
-				.map_err(tokio::io::Error::other)?,
-			))
+					.await
+					.map_err(tokio::io::Error::other)?,
+				))
+			}
 		}
 	}
 }

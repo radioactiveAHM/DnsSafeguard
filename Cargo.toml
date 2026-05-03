@@ -15,30 +15,30 @@ categories = [
 ]
 
 [dependencies]
-webpki-roots = "1.0.6"
+webpki-roots = "1.0.7"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
-rand = "0.10.0"
+rand = "0.10.1"
 quinn = { version = "0.11.9", default-features = false, features = ["runtime-tokio", "bloom"] }
-tokio = { version = "1.49.0", features = ["rt-multi-thread", "rt", "macros", "net", "time"] }
+tokio = { version = "1.52.1", features = ["rt-multi-thread", "rt", "macros", "net", "time"] }
 h3-quinn = "0.0.10"
 h3 = "0.0.8"
 http = "1.4.0"
 bytes = "1.11.1"
-base64-url = "3.0.2"
+base64-url = "3.0.3"
 h2 = "0.4.13"
 tokio-rustls = { git = "https://github.com/radioactiveAHM/tokio-rustls.git", features = ["brotli", "zlib", "logging"] }
-socket2 = "0.6.2"
-native-tls = { version = "0.2.16", features = ["alpn"]}
+socket2 = "0.6.3"
+native-tls = { version = "0.2.18", features = ["alpn"]}
 tokio-native-tls = { version = "0.3.1"}
 log = "0.4.29"
-env_logger = "0.11.9"
-fastbloom = "0.15.0" # required for quinn
+env_logger = "0.11.10"
+fastbloom = "0.17.0" # required for quinn
 if-addrs = "0.15.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-service = "0.8.0"
-boring = "5.0.1"
+boring = "5.1.0"
 tokio-boring = "5.0.0"
 
 [features]

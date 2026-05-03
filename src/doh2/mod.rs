@@ -11,7 +11,10 @@ fn h2config(config: &config::H2) -> h2::client::Builder {
 		.header_table_size(config.header_table_size)
 		.max_header_list_size(config.max_header_list_size)
 		.initial_connection_window_size(config.initial_connection_window_size)
-		.initial_window_size(config.initial_window_size);
+		.initial_window_size(config.initial_window_size)
+		.max_pending_accept_reset_streams(config.max_pending_accept_reset_streams)
+		.max_concurrent_reset_streams(config.max_concurrent_reset_streams)
+		.max_frame_size(config.max_frame_size);
 	builder
 }
 

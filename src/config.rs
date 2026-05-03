@@ -90,6 +90,9 @@ pub struct H2 {
 	pub max_header_list_size: u32,
 	pub initial_connection_window_size: u32,
 	pub initial_window_size: u32,
+	pub max_pending_accept_reset_streams: usize,
+	pub max_concurrent_reset_streams: usize,
+	pub max_frame_size: u32
 }
 
 #[derive(serde::Deserialize, Clone, Copy)]

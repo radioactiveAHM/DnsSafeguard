@@ -62,7 +62,10 @@
 		"header_table_size": 4096,
 		"max_header_list_size": 16384,
 		"initial_connection_window_size": 1048576,
-		"initial_window_size": 8192
+		"initial_window_size": 8192,
+		"max_pending_accept_reset_streams": 20,
+		"max_concurrent_reset_streams": 50,
+		"max_frame_size": 16777214
 	},
 	"connection": {
 		"h1_multi_connections": 3,

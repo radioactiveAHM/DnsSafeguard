@@ -44,9 +44,9 @@ pub async fn quic_setup(
 	endpoint
 }
 
-pub async fn http3() {
+pub async fn http3(server: &'static crate::config::Server, rpipe: crate::pipe::ReceiverPipe) {
 	let mut endpoint = quic_setup(
-		CONFIG.remote_addrs,
+		server.remote_addrs,
 		&CONFIG.noiser,
 		&CONFIG.quic,
 		"h3",
@@ -54,9 +54,7 @@ pub async fn http3() {
 	)
 	.await;
 
-	let udp = Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
-
-	let mut tank: Option<(Vec<u8>, SocketAddr)> = None;
+	let mut tank: Option<crate::pipe::Message> = None;
 	let disconnected = crate::disconnected::Disconnected::new();
 
 	let mut connecting_retry = 0u8;
@@ -64,7 +62,7 @@ pub async fn http3() {
 		if connecting_retry == 3 {
 			connecting_retry = 0;
 			endpoint = quic_setup(
-				CONFIG.remote_addrs,
+				server.remote_addrs,
 				&CONFIG.noiser,
 				&CONFIG.quic,
 				"h3",
@@ -72,24 +70,21 @@ pub async fn http3() {
 			)
 			.await;
 		}
-		log::info!("H3 connecting");
+		log::info!("{}: H3 connecting", server.id);
 		// Connect to dns server
-		let connecting = endpoint.connect(CONFIG.remote_addrs, &CONFIG.server_name).unwrap();
+		let connecting = endpoint.connect(server.remote_addrs, &server.sni).unwrap();
 
 		let conn = {
 			let timing = timeout(std::time::Duration::from_secs(CONFIG.quic.connecting_timeout), async {
 				let connecting = connecting.into_0rtt();
 				if let Ok((conn, rtt)) = connecting {
 					rtt.await;
-					log::info!("H3 0RTT connection established");
+					log::info!("{}: H3 0RTT connection established", server.id);
 					Ok(conn)
 				} else {
-					let conn = endpoint
-						.connect(CONFIG.remote_addrs, &CONFIG.server_name)
-						.unwrap()
-						.await;
+					let conn = endpoint.connect(server.remote_addrs, &server.sni).unwrap().await;
 					if conn.is_ok() {
-						log::info!("H3 connection established");
+						log::info!("{}: H3 connection established", server.id);
 					}
 					conn
 				}
@@ -100,16 +95,16 @@ pub async fn http3() {
 				pending
 			} else {
 				connecting_retry += 1;
-				log::warn!("connecting timeout");
-				sleep(std::time::Duration::from_secs(CONFIG.connection.reconnect_sleep)).await;
+				log::warn!("{}: connecting timeout", server.id);
+				sleep(std::time::Duration::from_secs(CONFIG.reconnect_sleep)).await;
 				continue;
 			}
 		};
 
 		if let Err(e) = conn {
-			log::warn!("{e}");
+			log::warn!("{}: {e}", server.id);
 			connecting_retry += 1;
-			sleep(std::time::Duration::from_secs(CONFIG.connection.reconnect_sleep)).await;
+			sleep(std::time::Duration::from_secs(CONFIG.reconnect_sleep)).await;
 			continue;
 		}
 		connecting_retry = 0;
@@ -117,7 +112,7 @@ pub async fn http3() {
 		let (mut h3c, h3) = match h3::client::new(h3_quinn::Connection::new(conn.unwrap())).await {
 			Ok(conn) => conn,
 			Err(e) => {
-				log::warn!("{e}");
+				log::warn!("{}: {e}", server.id);
 				continue;
 			}
 		};
@@ -125,70 +120,76 @@ pub async fn http3() {
 		disconnected.connect();
 		let _disconnected = disconnected.clone();
 		let watcher = tokio::spawn(async move {
-			log::warn!("{}", h3c.wait_idle().await);
+			log::warn!("{}: {}", server.id, h3c.wait_idle().await);
 			_disconnected.disconnect();
 		});
 
-		if let Some((dns_query, addr)) = tank {
-			let udp = udp.clone();
+		if let Some(message) = tank {
 			let h3 = h3.clone();
 			tokio::spawn(async move {
-				if let Err(e) = send_request(h3, dns_query, addr, udp).await {
-					log::warn!("{e}");
+				if let Err(e) = send_request(
+					message,
+					h3,
+					&server.hostname,
+					&server.custom_http_path,
+					&server.http_method,
+				)
+				.await
+				{
+					log::warn!("{}: {e}", server.id);
 				}
 			});
 			tank = None;
 		}
 
-		let mut dns_query = [0u8; 512];
 		loop {
 			let disconnected = disconnected.clone();
-			let udp = udp.clone();
 			if disconnected.get() {
 				watcher.abort();
 				break;
 			}
 
-			let message =
-				crate::keepalive::recv_timeout_with(&udp, CONFIG.connection_keep_alive, &mut dns_query, async {
-					match tokio::time::timeout(
-						std::time::Duration::from_secs(CONFIG.response_timeout),
-						h3.clone().send_request(
-							http::Request::get(format!("https://{}/", CONFIG.server_name.as_str()))
-								.body(())
-								.unwrap(),
-						),
-					)
-					.await
-					{
-						Err(_) | Ok(Err(_)) => {
-							disconnected.disconnect();
-							log::warn!("timeout/error waiting for keep-alive response");
-						}
-						_ => (),
-					};
-				})
-				.await;
-
-			if let Some(Ok((query_size, addr))) = message {
-				// rule check
-				if (CONFIG.rules.is_some()
-					&& rulecheck(&CONFIG.rules, &mut dns_query[..query_size], addr, udp.clone()).await)
-					|| query_size < 12
+			let message = crate::keepalive::pipe_recv_timeout_with(&rpipe, CONFIG.connection_keep_alive, async {
+				match tokio::time::timeout(
+					std::time::Duration::from_secs(CONFIG.response_timeout),
+					h3.clone().send_request(
+						http::Request::get(format!("https://{}/", server.hostname.as_str()))
+							.body(())
+							.unwrap(),
+					),
+				)
+				.await
 				{
-					continue;
-				}
+					Err(_) | Ok(Err(_)) => {
+						disconnected.disconnect();
+						log::warn!("{}: timeout/error waiting for keep-alive response", server.id);
+					}
+					_ => (),
+				};
+			})
+			.await;
 
+			if let Some(message) = message
+				&& let Some(message) = rulecheck(CONFIG.rules.is_some(), &CONFIG.rules, message).await
+			{
 				if disconnected.get() {
-					tank = Some((dns_query[..query_size].to_vec(), addr));
+					tank = Some(message);
 					watcher.abort();
 					break;
 				}
 
 				let h3 = h3.clone();
 				tokio::spawn(async move {
-					if let Err(e) = send_request(h3, dns_query[..query_size].to_vec(), addr, udp).await {
-						log::warn!("{e}");
+					if let Err(e) = send_request(
+						message,
+						h3,
+						&server.hostname,
+						&server.custom_http_path,
+						&server.http_method,
+					)
+					.await
+					{
+						log::warn!("{}: {e}", server.id);
 						if e.kind() == std::io::ErrorKind::TimedOut {
 							disconnected.disconnect();
 						}
@@ -201,19 +202,20 @@ pub async fn http3() {
 
 #[inline(always)]
 async fn send_request(
+	message: crate::pipe::Message,
 	mut h3: SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
-	dns_query: Vec<u8>,
-	addr: SocketAddr,
-	udp: Arc<tokio::net::UdpSocket>,
+	hostname: &str,
+	custom_http_path: &Option<String>,
+	http_method: &config::HttpMethod,
 ) -> tokio::io::Result<()> {
-	let path = if let Some(path) = &CONFIG.custom_http_path {
+	let path = if let Some(path) = custom_http_path {
 		path.as_str()
 	} else {
 		"/dns-query"
 	};
-	let mut reqs = match CONFIG.http_method {
-		config::HttpMethod::GET => get(&mut h3, &CONFIG.server_name, path, dns_query).await?,
-		config::HttpMethod::POST => post(&mut h3, &CONFIG.server_name, path, dns_query).await?,
+	let mut reqs = match http_method {
+		config::HttpMethod::GET => get(&mut h3, hostname, path, message.message_slice()).await?,
+		config::HttpMethod::POST => post(&mut h3, hostname, path, message.message_slice()).await?,
 	};
 
 	reqs.finish().await.map_err(tokio::io::Error::other)?;
@@ -257,7 +259,7 @@ async fn send_request(
 		if CONFIG.overwrite.is_some() {
 			crate::ipoverwrite::overwrite_ip(&mut data, &CONFIG.overwrite);
 		}
-		let _ = udp.send_to(&data, addr).await;
+		message.send_response(data.freeze()).await;
 	} else {
 		log::warn!("remote responded with status code of {}", resp.status().as_str());
 	}
@@ -276,7 +278,7 @@ async fn get(
 	h3: &mut SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
 	server_name: &str,
 	path: &str,
-	dns_query: Vec<u8>,
+	dns_query: &[u8],
 ) -> tokio::io::Result<h3::client::RequestStream<h3_quinn::BidiStream<bytes::Bytes>, bytes::Bytes>> {
 	h3.send_request(
 		http::Request::get(
@@ -301,7 +303,7 @@ async fn post(
 	h3: &mut SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
 	server_name: &str,
 	path: &str,
-	dns_query: Vec<u8>,
+	dns_query: &[u8],
 ) -> tokio::io::Result<h3::client::RequestStream<h3_quinn::BidiStream<bytes::Bytes>, bytes::Bytes>> {
 	let mut pending = h3
 		.send_request(
@@ -324,7 +326,7 @@ async fn post(
 		.map_err(tokio::io::Error::other)?;
 
 	pending
-		.send_data(bytes::Bytes::copy_from_slice(&dns_query))
+		.send_data(bytes::Bytes::copy_from_slice(dns_query))
 		.await
 		.map_err(tokio::io::Error::other)?;
 	Ok(pending)

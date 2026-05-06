@@ -49,16 +49,17 @@ impl AsyncIO for tokio_native_tls::TlsStream<tokio::net::TcpStream> {}
 impl AsyncIO for tokio_boring::SslStream<tokio::net::TcpStream> {}
 
 pub async fn dynamic_tls_conn_gen(
+	server: &crate::config::Server,
 	alpn: &[&str],
 	ctls: Arc<tokio_rustls::rustls::ClientConfig>,
 ) -> tokio::io::Result<Box<dyn AsyncIO>> {
 	let config: &std::sync::LazyLock<crate::config::Config> = &crate::CONFIG;
 	match config.tls_core {
 		crate::config::TlsCore::native => {
-			let sni = if config.ip_as_sni {
-				config.remote_addrs.ip().to_string()
+			let sni = if server.ip_as_sni {
+				server.remote_addrs.ip().to_string()
 			} else {
-				config.server_name.clone()
+				server.sni.clone()
 			};
 
 			{
@@ -66,15 +67,15 @@ pub async fn dynamic_tls_conn_gen(
 					tokio_native_tls::TlsConnector::from(
 						native_tls::TlsConnector::builder()
 							.request_alpns(alpn)
-							.danger_accept_invalid_certs(config.disable_certificate_validation)
+							.danger_accept_invalid_certs(server.disable_certificate_validation)
 							.build()
 							.map_err(tokio::io::Error::other)?,
 					)
 					.connect(
 						&sni,
 						tcp_connect_handle(
-							config.remote_addrs,
-							config.connection,
+							server.remote_addrs,
+							config.reconnect_sleep,
 							&config.interface,
 							&config.tcp_socket_options,
 						)
@@ -86,10 +87,10 @@ pub async fn dynamic_tls_conn_gen(
 			}
 		}
 		crate::config::TlsCore::rustls => {
-			let sni = if config.ip_as_sni {
-				(config.remote_addrs.ip()).into()
+			let sni = if server.ip_as_sni {
+				(server.remote_addrs.ip()).into()
 			} else {
-				(config.server_name.clone()).try_into().expect("invalid server name")
+				(server.sni.clone()).try_into().expect("invalid server name")
 			};
 
 			Ok(Box::new(
@@ -97,8 +98,8 @@ pub async fn dynamic_tls_conn_gen(
 					.connect_with(
 						sni,
 						tcp_connect_handle(
-							config.remote_addrs,
-							config.connection,
+							server.remote_addrs,
+							config.reconnect_sleep,
 							&config.interface,
 							&config.tcp_socket_options,
 						)
@@ -129,7 +130,7 @@ pub async fn dynamic_tls_conn_gen(
 				let mut builder = boring::ssl::SslConnector::builder(boring::ssl::SslMethod::tls())?;
 				builder.set_min_proto_version(Some(boring::ssl::SslVersion::TLS1_2))?;
 				builder.set_alpn_protos(alpn)?;
-				builder.set_verify(if config.disable_certificate_validation {
+				builder.set_verify(if server.disable_certificate_validation {
 					boring::ssl::SslVerifyMode::NONE
 				} else {
 					boring::ssl::SslVerifyMode::PEER
@@ -139,10 +140,10 @@ pub async fn dynamic_tls_conn_gen(
 				Ok(Box::new(
 					tokio_boring::connect(
 						builder.build().configure()?,
-						&config.server_name,
+						&server.sni,
 						tcp_connect_handle(
-							config.remote_addrs,
-							config.connection,
+							server.remote_addrs,
+							config.reconnect_sleep,
 							&config.interface,
 							&config.tcp_socket_options,
 						)

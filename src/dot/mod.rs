@@ -10,22 +10,21 @@ use crate::{
 };
 
 enum IdType {
-	ZeroID(std::net::SocketAddr),
-	WithID(std::net::SocketAddr),
+	ZeroID(crate::pipe::Message),
+	WithID(crate::pipe::Message),
 }
 
-pub async fn dot() {
-	let udp = Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
-	let ctls = tls::tlsconf(vec![b"dot".to_vec()], CONFIG.disable_certificate_validation);
+pub async fn dot(server: &'static crate::config::Server, rpipe: crate::pipe::ReceiverPipe) {
+	let ctls = tls::tlsconf(vec![b"dot".to_vec()], server.disable_certificate_validation);
 	loop {
-		log::info!("TLS connecting");
-		let tls = crate::tls::dynamic_tls_conn_gen(&["dot"], ctls.clone()).await;
+		log::info!("{}: TLS connecting", server.id);
+		let tls = crate::tls::dynamic_tls_conn_gen(server, &["dot"], ctls.clone()).await;
 		if let Err(e) = tls {
-			log::warn!("{e}");
-			tokio::time::sleep(std::time::Duration::from_secs(CONFIG.connection.reconnect_sleep)).await;
+			log::warn!("{}: {e}", server.id);
+			tokio::time::sleep(std::time::Duration::from_secs(CONFIG.reconnect_sleep)).await;
 			continue;
 		}
-		log::info!("TLS connection established");
+		log::info!("{}: TLS connection established", server.id);
 
 		let (r, w) = tokio::io::split(tls.unwrap());
 
@@ -34,16 +33,16 @@ pub async fn dot() {
 			Arc::new(Mutex::new(std::collections::HashMap::new()));
 
 		let waiters2 = waiters.clone();
-		let udp2 = udp.clone();
+		let rpipe = rpipe.clone();
 		tokio::select! {
-			recver = tokio::spawn(recv_query(udp2, r, waiters2)) => {
+			recver = tokio::spawn(recv_query(r, waiters2)) => {
 				if let Err(e) = recver {
-					log::warn!("{e}")
+					log::warn!("{}: {e}", server.id);
 				}
 			}
-			sender = send_query(udp.clone(), w, waiters) => {
+			sender = send_query(rpipe, w, waiters) => {
 				if let Err(e) = sender {
-					log::warn!("{e}")
+					log::warn!("{}: {e}", server.id);
 				}
 			}
 		}
@@ -52,7 +51,6 @@ pub async fn dot() {
 
 #[inline(always)]
 async fn recv_query<R: tokio::io::AsyncRead + Unpin>(
-	udp: Arc<tokio::net::UdpSocket>,
 	mut r: R,
 	waiters: Arc<Mutex<std::collections::HashMap<u16, IdType>>>,
 ) -> tokio::io::Result<()> {
@@ -87,12 +85,12 @@ async fn recv_query<R: tokio::io::AsyncRead + Unpin>(
 					crate::ipoverwrite::overwrite_ip(message, &CONFIG.overwrite);
 				}
 				match addr {
-					IdType::WithID(addr) => {
-						udp.send_to(message, addr).await?;
+					IdType::WithID(responser) => {
+						responser.send_response_slice(message).await;
 					}
-					IdType::ZeroID(addr) => {
+					IdType::ZeroID(responser) => {
 						[message[0], message[1]] = [0, 0];
-						udp.send_to(message, addr).await?;
+						responser.send_response_slice(message).await;
 					}
 				}
 			}
@@ -103,13 +101,12 @@ async fn recv_query<R: tokio::io::AsyncRead + Unpin>(
 
 #[inline(always)]
 async fn send_query<W: tokio::io::AsyncWrite + Unpin + Send>(
-	udp: Arc<tokio::net::UdpSocket>,
+	rpipe: crate::pipe::ReceiverPipe,
 	mut w: W,
 	waiters: Arc<Mutex<std::collections::HashMap<u16, IdType>>>,
 ) -> tokio::io::Result<()> {
-	let mut query = [0; 514];
 	loop {
-		let message = crate::keepalive::recv_timeout_with(&udp, CONFIG.connection_keep_alive, &mut query[2..], async {
+		let message = crate::keepalive::pipe_recv_timeout_with(&rpipe, CONFIG.connection_keep_alive, async {
 			let _ = w
 				.write_all(&[0, 12, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]) // Empty dns query
 				.await;
@@ -117,22 +114,22 @@ async fn send_query<W: tokio::io::AsyncWrite + Unpin + Send>(
 		})
 		.await;
 
-		if let Some(Ok((size, addr))) = message {
-			if (CONFIG.rules.is_some() && rulecheck(&CONFIG.rules, &mut query[2..size + 2], addr, udp.clone()).await)
-				|| size < 12
-			{
-				continue;
-			}
-			[query[0], query[1]] = convert_u16_to_two_u8s_be(size as u16);
-			let mut id = convert_two_u8s_to_u16_be([query[2], query[3]]);
+		if let Some(message) = message
+			&& let Some(message) = rulecheck(CONFIG.rules.is_some(), &CONFIG.rules, message).await
+		{
+			let message_slice = message.message_slice();
+			let mut id = convert_two_u8s_to_u16_be([message_slice[0], message_slice[1]]);
+			let mut dq = Vec::with_capacity(message_slice.len() + 2);
+			dq.extend_from_slice(&convert_u16_to_two_u8s_be(message_slice.len() as u16));
+			dq.extend_from_slice(message_slice);
 			if id == 0 {
 				id = rand::random::<u16>();
-				[query[2], query[3]] = convert_u16_to_two_u8s_be(id);
-				waiters.lock().await.insert(id, IdType::ZeroID(addr));
+				[dq[2], dq[3]] = convert_u16_to_two_u8s_be(id);
+				waiters.lock().await.insert(id, IdType::ZeroID(message));
 			} else {
-				waiters.lock().await.insert(id, IdType::WithID(addr));
+				waiters.lock().await.insert(id, IdType::WithID(message));
 			}
-			w.write_all(&query[..size + 2]).await?;
+			w.write_all(&dq).await?;
 			w.flush().await?;
 		}
 	}

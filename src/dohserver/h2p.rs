@@ -1,9 +1,8 @@
 use bytes::Bytes;
 use h2::{Reason, server::SendResponse};
 use http::Response;
-use std::net::SocketAddr;
 
-use crate::{CONFIG, keepalive::recv_timeout};
+use crate::CONFIG;
 
 #[inline(always)]
 async fn accept_stream(
@@ -30,8 +29,8 @@ fn h2config(config: &crate::config::H2) -> h2::server::Builder {
 
 pub async fn serve_h2(
 	tls: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
-	serve_addrs: SocketAddr,
 	log: bool,
+	spipe: crate::pipe::SendPipe,
 ) -> tokio::io::Result<()> {
 	let peer_addr = tls.get_ref().0.peer_addr()?;
 	let mut h2c = h2config(&CONFIG.h2)
@@ -45,8 +44,9 @@ pub async fn serve_h2(
 			http::Method::GET => {
 				if let Some(bs4dns) = req.uri().query() {
 					if let Ok(dq) = base64_url::decode(&bs4dns.as_bytes()[4..]) {
+						let spipe = spipe.clone();
 						tokio::spawn(async move {
-							if let Err(e) = handle_dns_req_get(&mut resp, dq, serve_addrs).await
+							if let Err(e) = handle_req(&mut resp, Bytes::from(dq), spipe).await
 								&& log
 							{
 								log::warn!("<{}:stream(GET):{}>: {}", peer_addr, resp.stream_id().as_u32(), e);
@@ -59,11 +59,14 @@ pub async fn serve_h2(
 			}
 			http::Method::POST => {
 				if let Some(Ok(body)) = req.body_mut().data().await {
-					if let Err(e) = handle_dns_req_post(&mut resp, body, serve_addrs).await
-						&& log
-					{
-						log::warn!("<{}:stream(POST):{}>: {}", peer_addr, resp.stream_id().as_u32(), e);
-					}
+					let spipe = spipe.clone();
+					tokio::spawn(async move {
+						if let Err(e) = handle_req(&mut resp, body, spipe).await
+							&& log
+						{
+							log::warn!("<{}:stream(POST):{}>: {}", peer_addr, resp.stream_id().as_u32(), e);
+						}
+					});
 				} else {
 					resp.send_reset(Reason::PROTOCOL_ERROR);
 				}
@@ -80,87 +83,44 @@ pub async fn serve_h2(
 }
 
 #[inline(always)]
-async fn handle_dns_req_post(
+async fn handle_req(
 	resp: &mut SendResponse<Bytes>,
 	body: Bytes,
-	serve_addrs: SocketAddr,
+	spipe: crate::pipe::SendPipe,
 ) -> tokio::io::Result<()> {
-	let serving_ip = if serve_addrs.ip() == std::net::Ipv4Addr::UNSPECIFIED {
-		std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
-	} else if serve_addrs.ip() == std::net::Ipv6Addr::UNSPECIFIED {
-		std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST)
-	} else {
-		serve_addrs.ip()
-	};
-	let udp = crate::udp::udp_socket(std::net::SocketAddr::new(serving_ip, 0)).await?;
-	udp.connect(std::net::SocketAddr::new(serving_ip, serve_addrs.port()))
-		.await?;
-	udp.send(&body).await?;
-
-	let mut buff = [0; 1024 * 8];
-	let size: usize;
-	if let Ok((v, _)) = recv_timeout(&udp, Some(CONFIG.doh_server.response_timeout.0), &mut buff).await {
-		size = v;
-	} else if let Ok((v, _)) = recv_timeout(&udp, Some(CONFIG.doh_server.response_timeout.1), &mut buff).await {
-		size = v;
-	} else {
-		resp.send_response(
-			Response::builder()
-				.version(http::Version::HTTP_2)
-				.status(http::status::StatusCode::SERVICE_UNAVAILABLE)
-				.body(())
-				.unwrap(),
-			true,
-		)
-		.map_err(tokio::io::Error::other)?;
-		return Ok(());
+	let recver = spipe.send_doh_message(body).await;
+	match tokio::time::timeout(
+		std::time::Duration::from_secs(CONFIG.doh_server.response_timeout),
+		recver,
+	)
+	.await
+	{
+		Ok(Ok(response)) => handle_resp(resp, response).await,
+		Ok(Err(e)) => {
+			resp.send_response(
+				Response::builder()
+					.version(http::Version::HTTP_2)
+					.status(http::status::StatusCode::SERVICE_UNAVAILABLE)
+					.body(())
+					.unwrap(),
+				true,
+			)
+			.map_err(tokio::io::Error::other)?;
+			Err(tokio::io::Error::other(e))
+		}
+		Err(_) => {
+			resp.send_response(
+				Response::builder()
+					.version(http::Version::HTTP_2)
+					.status(http::status::StatusCode::SERVICE_UNAVAILABLE)
+					.body(())
+					.unwrap(),
+				true,
+			)
+			.map_err(tokio::io::Error::other)?;
+			Err(tokio::io::Error::from(tokio::io::ErrorKind::TimedOut))
+		}
 	}
-
-	if let Err(e) = handle_resp(resp, &buff, size).await {
-		return Err(tokio::io::Error::other(e));
-	}
-
-	Ok(())
-}
-
-#[inline(always)]
-async fn handle_dns_req_get(
-	resp: &mut SendResponse<Bytes>,
-	dq: Vec<u8>,
-	serve_addrs: SocketAddr,
-) -> tokio::io::Result<()> {
-	let serving_ip = if serve_addrs.ip() == std::net::Ipv4Addr::UNSPECIFIED {
-		std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
-	} else if serve_addrs.ip() == std::net::Ipv6Addr::UNSPECIFIED {
-		std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST)
-	} else {
-		serve_addrs.ip()
-	};
-	let udp = crate::udp::udp_socket(std::net::SocketAddr::new(serving_ip, 0)).await?;
-	udp.connect(std::net::SocketAddr::new(serving_ip, serve_addrs.port()))
-		.await?;
-	udp.send(&dq).await?;
-
-	let mut buff = [0; 1024 * 8];
-	let size: usize;
-	if let Ok((v, _)) = recv_timeout(&udp, Some(CONFIG.doh_server.response_timeout.0), &mut buff).await {
-		size = v;
-	} else if let Ok((v, _)) = recv_timeout(&udp, Some(CONFIG.doh_server.response_timeout.1), &mut buff).await {
-		size = v;
-	} else {
-		resp.send_response(
-			Response::builder()
-				.version(http::Version::HTTP_2)
-				.status(http::status::StatusCode::SERVICE_UNAVAILABLE)
-				.body(())
-				.unwrap(),
-			true,
-		)
-		.map_err(tokio::io::Error::other)?;
-		return Ok(());
-	}
-
-	handle_resp(resp, &buff, size).await
 }
 
 struct SendResponseHeader<'a>(&'a mut SendResponse<Bytes>, http::Response<()>);
@@ -180,20 +140,20 @@ impl Future for SendResponseHeader<'_> {
 }
 
 #[inline(always)]
-async fn handle_resp(rframe: &mut SendResponse<Bytes>, buff: &[u8], size: usize) -> tokio::io::Result<()> {
+async fn handle_resp(rframe: &mut SendResponse<Bytes>, buf: Bytes) -> tokio::io::Result<()> {
 	let heads = Response::builder()
 		.version(http::Version::HTTP_2)
 		.status(http::status::StatusCode::OK)
 		.header("Content-Type", "application/dns-message")
 		.header("Cache-Control", &CONFIG.doh_server.cache_control)
 		.header("Access-Control-Allow-Origin", "*")
-		.header("content-length", size)
+		.header("content-length", buf.len())
 		.body(())
 		.unwrap();
 
 	if let Ok(Ok(mut bframe)) = SendResponseHeader(rframe, heads).await {
 		bframe
-			.send_data(Bytes::copy_from_slice(&buff[..size]), true)
+			.send_data(Bytes::copy_from_slice(&buf), true)
 			.map_err(tokio::io::Error::other)
 	} else {
 		Ok(())

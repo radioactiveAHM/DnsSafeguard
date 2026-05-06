@@ -19,7 +19,7 @@ OR
 A rule object consists of two main components:
 
 - `options`: A list of keywords or domains.
-- `target`: Can either be a `block`, `dns`, or `ip` object.
+- `target`: Can either be a `block` or `ip` object.
 
 Example:
 
@@ -44,16 +44,6 @@ OR
 
 ```json
 "block": ["A", "TXT"]
-```
-
-### DNS Object
-
-The `dns` object specifies a DNS server to which queries should be bypassed. The value must be in the format of `udp ip port`.
-
-Example:
-
-```json
-"dns": "1.1.1.1:53"
 ```
 
 ### IP Object
@@ -97,16 +87,6 @@ Here's an example configuration for the `rules` object:
     ],
     "target": {
       "block": ["AAAA"]
-    }
-  },
-  // Bypass DNS queries containing domains in the options object to 8.8.8.8:53 (Google plaintext DNS server)
-  {
-    "options": [
-      "rust-lang.org",
-      "crates.io"
-    ],
-    "target": {
-      "dns": "8.8.8.8:53"
     }
   },
   // Respond to DNS queries containing domains in the options object with the IP 192.168.2.1

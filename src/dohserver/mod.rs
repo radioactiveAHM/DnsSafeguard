@@ -3,7 +3,6 @@ pub mod h2p;
 
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
@@ -31,7 +30,7 @@ impl Tc {
 	}
 }
 
-pub async fn doh_server(dsc: &DohServer, serve_addrs: SocketAddr) {
+pub async fn doh_server(dsc: &DohServer, spipe: crate::pipe::SendPipe) {
 	sleep(Duration::from_secs(2)).await;
 	let certs = CertificateDer::pem_file_iter(&dsc.certificate)
 		.unwrap()
@@ -54,7 +53,8 @@ pub async fn doh_server(dsc: &DohServer, serve_addrs: SocketAddr) {
 	loop {
 		match Tc::new(acceptor.clone(), listener.accept().await) {
 			Ok(tc) => {
-				tokio::spawn(tc_handler(tc, serve_addrs, log_errors));
+				let spipe = spipe.clone();
+				tokio::spawn(tc_handler(tc, log_errors, spipe));
 			}
 			Err(e) => {
 				if dsc.log_errors {
@@ -65,7 +65,7 @@ pub async fn doh_server(dsc: &DohServer, serve_addrs: SocketAddr) {
 	}
 }
 
-async fn tc_handler(tc: Tc, serve_addrs: SocketAddr, log: bool) {
+async fn tc_handler(tc: Tc, log: bool, spipe: crate::pipe::SendPipe) {
 	let mut tls = match tc.accept().await {
 		Ok(tls) => tls,
 		Err(e) => {
@@ -79,14 +79,14 @@ async fn tc_handler(tc: Tc, serve_addrs: SocketAddr, log: bool) {
 	if let Some(alpn) = tls.get_ref().1.alpn_protocol() {
 		match alpn {
 			b"h2" => {
-				if let Err(e) = h2p::serve_h2(&mut tls, serve_addrs, log).await
+				if let Err(e) = h2p::serve_h2(&mut tls, log, spipe).await
 					&& log
 				{
 					log::warn!("H2: {e}");
 				}
 			}
 			b"http/1.1" => {
-				if let Err(e) = h11p::serve_http11(&mut tls, serve_addrs).await
+				if let Err(e) = h11p::serve_http11(&mut tls, spipe).await
 					&& log
 				{
 					log::warn!("HTTP/1.1: {e}");
@@ -96,7 +96,7 @@ async fn tc_handler(tc: Tc, serve_addrs: SocketAddr, log: bool) {
 				log::warn!("invalid TLS ALPN");
 			}
 		}
-	} else if let Err(e) = h11p::serve_http11(&mut tls, serve_addrs).await
+	} else if let Err(e) = h11p::serve_http11(&mut tls, spipe).await
 		&& log
 	{
 		log::warn!("HTTP/1.1: {e}");

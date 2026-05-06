@@ -1,28 +1,13 @@
-struct UdpRecv<'a>(&'a tokio::net::UdpSocket, &'a mut tokio::io::ReadBuf<'a>);
-
-impl<'a> Future for UdpRecv<'a> {
-	type Output = tokio::io::Result<(usize, std::net::SocketAddr)>;
-	#[inline(always)]
-	fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
-		let this = &mut *self;
-		this.0
-			.poll_recv_from(cx, this.1)
-			.map_ok(|addr| (this.1.filled().len(), addr))
-	}
-}
-
 #[inline(always)]
-pub async fn recv_timeout_with<Fu>(
-	udp: &tokio::net::UdpSocket,
+pub async fn pipe_recv_timeout_with<Fu>(
+	rpipe: &crate::pipe::ReceiverPipe,
 	dur: Option<u64>,
-	buf: &mut [u8],
 	f: Fu,
-) -> Option<Result<(usize, std::net::SocketAddr), tokio::io::Error>>
+) -> Option<crate::pipe::Message>
 where
 	Fu: Future<Output = ()>,
 {
-	let mut buf = tokio::io::ReadBuf::new(buf);
-	let poll_recv = UdpRecv(udp, &mut buf);
+	let poll_recv = rpipe.recv_message();
 	if let Some(dur) = dur {
 		match tokio::time::timeout(std::time::Duration::from_secs(dur), poll_recv).await {
 			Ok(message) => Some(message),
@@ -33,20 +18,5 @@ where
 		}
 	} else {
 		Some(poll_recv.await)
-	}
-}
-
-#[inline(always)]
-pub async fn recv_timeout(
-	udp: &tokio::net::UdpSocket,
-	dur: Option<u64>,
-	buf: &mut [u8],
-) -> Result<(usize, std::net::SocketAddr), tokio::io::Error> {
-	let mut buf = tokio::io::ReadBuf::new(buf);
-	let poll_recv = UdpRecv(udp, &mut buf);
-	if let Some(dur) = dur {
-		tokio::time::timeout(std::time::Duration::from_secs(dur), poll_recv).await?
-	} else {
-		poll_recv.await
 	}
 }

@@ -3,18 +3,26 @@
 		"level": "info",
 		"file": ".log"
 	},
-	"protocol": "h2",
-	"server_name": "cloudflare-dns.com",
-	"ip_as_sni": false,
-	"disable_certificate_validation": false,
-	"remote_addrs": "1.1.1.1:443",
-	"interface": null,
+	"servers": [
+		{
+			"id": "cloudflare",
+			"protocol": "h2",
+			"remote_addrs": "1.1.1.1:443",
+			"hostname": "cloudflare-dns.com",
+			"custom_http_path": null,
+			"http_method": "GET",
+			"sni": "cloudflare-dns.com",
+			"ip_as_sni": false,
+			"disable_certificate_validation": false
+		}
+	],
 	"serve_addrs": "127.0.0.1:53",
-	"custom_http_path": null,
-	"http_method": "GET",
+	"interface": null,
 	"response_timeout": 5,
-	"tls_core": "rustls",
 	"connection_keep_alive": 10,
+	"reconnect_sleep": 1,
+	"pipe_capacity": 6,
+	"tls_core": "rustls",
 	"fragmenting": {
 		"enable": false,
 		"method": "single",
@@ -30,12 +38,6 @@
 				"content": "",
 				"size": "1-100",
 				"sleep": 50
-			},
-			{
-				"ntype": "rand",
-				"content": "",
-				"size": "1-6",
-				"sleep": 25
 			},
 			{
 				"ntype": "rand",
@@ -67,10 +69,6 @@
 		"max_concurrent_reset_streams": 50,
 		"max_frame_size": 16777214
 	},
-	"connection": {
-		"h1_multi_connections": 3,
-		"reconnect_sleep": 1
-	},
 	"tcp_socket_options": {
 		"send_buffer_size": null,
 		"recv_buffer_size": null,
@@ -84,7 +82,7 @@
 		"certificate": "cert.crt",
 		"key": "key.pem",
 		"cache_control": "max-age=3600",
-		"response_timeout": [2, 3],
+		"response_timeout": 3,
 		"log_errors": false
 	},
 	"runtime": {

@@ -1,6 +1,6 @@
 [package]
 name = "DnsSafeguard"
-version = "1.14.0"
+version = "2.0.0"
 edition = "2024"
 license = "Apache-2.0"
 description = "DnsSafeguard is dedicated to providing a secure DNS client solution, ensuring your DNS queries remain private and uncensored."
@@ -20,13 +20,13 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 rand = "0.10.1"
 quinn = { version = "0.11.9", default-features = false, features = ["runtime-tokio", "bloom"] }
-tokio = { version = "1.52.1", features = ["rt-multi-thread", "rt", "macros", "net", "time"] }
+tokio = { version = "1.52.2", features = ["rt-multi-thread", "rt", "macros", "net", "time"] }
 h3-quinn = "0.0.10"
 h3 = "0.0.8"
 http = "1.4.0"
 bytes = "1.11.1"
 base64-url = "3.0.3"
-h2 = "0.4.13"
+h2 = "0.4.14"
 tokio-rustls = { git = "https://github.com/radioactiveAHM/tokio-rustls.git", features = ["brotli", "zlib", "logging"] }
 socket2 = "0.6.3"
 native-tls = { version = "0.2.18", features = ["alpn"]}

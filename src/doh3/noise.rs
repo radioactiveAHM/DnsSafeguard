@@ -172,28 +172,6 @@ fn ntp() -> [u8; 48] {
 	packet
 }
 
-fn syslog() -> Vec<u8> {
-	let mut packet = Vec::with_capacity(256);
-	packet.extend_from_slice(&[60, 49, 54, 53, 62, 49, 32]);
-	packet.extend_from_slice(&[0; 24]);
-
-	let mut rng = rand::rng();
-
-	let host = crate::CONFIG.server_name.as_str();
-	let pid: u8 = rand::random();
-	let mid: u8 = rand::random();
-	let mlen = rand::random_range(10..256);
-	packet.extend_from_slice(
-		format!(
-			" {host} syslog {pid} ID{mid} - {}",
-			Alphanumeric.sample_string(&mut rng, mlen)
-		)
-		.as_bytes(),
-	);
-
-	packet
-}
-
 fn rand_noiser(noise: &Noise, target: SocketAddr, udp: &std::net::UdpSocket) -> tokio::io::Result<usize> {
 	let mut packet = [0u8; 1500];
 	let psize_range = crate::utils::parse_range(&noise.size).expect("failed to parse packet length range");
@@ -214,7 +192,6 @@ pub fn noiser(noises: &Vec<Noise>, target: SocketAddr, udp: &std::net::UdpSocket
 			NoiseType::stun => udp.send_to(&stun(), target),
 			NoiseType::tftp => udp.send_to(&tftp(), target),
 			NoiseType::ntp => udp.send_to(&ntp(), target),
-			NoiseType::syslog => udp.send_to(&syslog(), target),
 		} {
 			log::info!("{sent_bytes} bytes sent as noise");
 			std::thread::sleep(std::time::Duration::from_millis(noise.sleep));

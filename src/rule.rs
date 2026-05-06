@@ -1,10 +1,6 @@
-use std::{
-	net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-	sync::Arc,
-};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use crate::{
-	CONFIG,
 	config::TargetType,
 	utils::{Buffering, catch_in_buff},
 };
@@ -67,11 +63,14 @@ where
 }
 
 pub async fn rulecheck(
+	check: bool,
 	rules: &Option<Vec<Rule>>,
-	dq: &mut [u8],
-	client_addr: SocketAddr,
-	udp: Arc<tokio::net::UdpSocket>,
-) -> bool {
+	message: crate::pipe::Message,
+) -> Option<crate::pipe::Message> {
+	if !check {
+		return Some(message);
+	}
+	let dq = message.message_slice();
 	for rule in rules.as_deref().unwrap() {
 		match &rule.target {
 			TargetType::block(t) => {
@@ -82,35 +81,21 @@ pub async fn rulecheck(
 								let dq_size = dq.len();
 								let dq_type = &dq[dq_size - 4..dq_size - 2];
 								if tv.iter().any(|target| target.octets() == dq_type) {
-									let resp = dq;
+									let mut resp = bytes::BytesMut::from(dq);
 									resp[2] = 133;
 									resp[3] = 128;
-									let _ = udp.send_to(resp, client_addr).await;
-									return true;
+									message.send_response(resp.freeze()).await;
+									return None;
 								}
 							}
 							None => {
-								let resp = dq;
+								let mut resp = bytes::BytesMut::from(dq);
 								resp[2] = 133;
 								resp[3] = 128;
-								let _ = udp.send_to(resp, client_addr).await;
-								return true;
+								message.send_response(resp.freeze()).await;
+								return None;
 							}
 						}
-					}
-				}
-			}
-			TargetType::dns(dns_server) => {
-				for option in &rule.options {
-					if catch_in_buff(option, dq).is_some() {
-						let dns_server = *dns_server;
-						let dq = dq.to_vec();
-						tokio::spawn(async move {
-							if let Err(e) = handle_bypass(dq, client_addr, dns_server, udp).await {
-								log::warn!("bypass<{dns_server}>: {e}");
-							};
-						});
-						return true;
 					}
 				}
 			}
@@ -122,23 +107,23 @@ pub async fn rulecheck(
 						match ip {
 							IpAddr::V4(ipv4) => {
 								if gen_resp_v4(dq, &mut resp, ipv4) {
-									let _ = udp.send_to(resp.get(), client_addr).await;
-									return true;
+									message.send_response_slice(resp.get()).await;
+									return None;
 								}
 							}
 							IpAddr::V6(ipv6) => {
 								if gen_resp_v6(dq, &mut resp, ipv6) {
-									let _ = udp.send_to(resp.get(), client_addr).await;
-									return true;
+									message.send_response_slice(resp.get()).await;
+									return None;
 								}
 							}
 						}
 						if let Some(ipv6) = ip2 {
 							if gen_resp_v6(dq, &mut resp, ipv6) {
-								let _ = udp.send_to(resp.get(), client_addr).await;
-								return true;
+								message.send_response_slice(resp.get()).await;
+								return None;
 							} else {
-								return false;
+								return Some(message);
 							}
 						}
 					}
@@ -147,116 +132,7 @@ pub async fn rulecheck(
 		}
 	}
 
-	false
-}
-
-async fn handle_bypass(
-	dq: Vec<u8>,
-	client_addr: SocketAddr,
-	bypass_target: SocketAddr,
-	udp: Arc<tokio::net::UdpSocket>,
-) -> tokio::io::Result<usize> {
-	let agent = tokio::net::UdpSocket::bind("0.0.0.0:0").await?;
-	agent.connect(bypass_target).await?;
-	agent.send(&dq).await?;
-
-	let mut buf = [0; 4096];
-	let (size, _) = crate::keepalive::recv_timeout(&agent, Some(CONFIG.response_timeout), &mut buf).await?;
-	udp.send_to(&buf[..size], client_addr).await
-}
-
-pub async fn rulecheck_sync(
-	rules: &Option<Vec<Rule>>,
-	dq: &mut [u8],
-	client_addr: SocketAddr,
-	udp: &tokio::net::UdpSocket,
-) -> bool {
-	for rule in rules.as_ref().unwrap() {
-		match &rule.target {
-			TargetType::block(t) => {
-				for option in &rule.options {
-					if catch_in_buff(option, dq).is_some() {
-						match t {
-							Some(tv) => {
-								let dq_type = &dq[dq.len() - 4..dq.len() - 2];
-								if tv.iter().any(|target| target.octets() == dq_type) {
-									dq[2] = 133;
-									dq[3] = 128;
-									let _ = udp.send_to(dq, client_addr).await;
-									return true;
-								}
-							}
-							None => {
-								dq[2] = 133;
-								dq[3] = 128;
-								let _ = udp.send_to(dq, client_addr).await;
-								return true;
-							}
-						}
-					}
-				}
-			}
-			TargetType::dns(dns_server) => {
-				for option in &rule.options {
-					if catch_in_buff(option, dq).is_some() {
-						if let Err(e) = handle_bypass_sync(dq, client_addr, *dns_server, udp).await {
-							log::warn!("{e}");
-						};
-						return true;
-					}
-				}
-			}
-			TargetType::ip(ip, ip2) => {
-				for option in &rule.options {
-					if catch_in_buff(option, dq).is_some() {
-						let mut temp = [0; 1024];
-						let mut resp = Buffering(&mut temp, 0);
-						match ip {
-							IpAddr::V4(ipv4) => {
-								if gen_resp_v4(dq, &mut resp, ipv4) {
-									let _ = udp.send_to(resp.get(), client_addr).await;
-									return true;
-								}
-							}
-							IpAddr::V6(ipv6) => {
-								if gen_resp_v6(dq, &mut resp, ipv6) {
-									let _ = udp.send_to(resp.get(), client_addr).await;
-									return true;
-								}
-							}
-						}
-						if let Some(ipv6) = ip2 {
-							if gen_resp_v6(dq, &mut resp, ipv6) {
-								let _ = udp.send_to(resp.get(), client_addr).await;
-								return true;
-							} else {
-								return false;
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	false
-}
-
-async fn handle_bypass_sync(
-	dq: &[u8],
-	client_addr: SocketAddr,
-	bypass_target: SocketAddr,
-	udp: &tokio::net::UdpSocket,
-) -> tokio::io::Result<usize> {
-	// stage 1: send udp query to dns server
-	let agent = tokio::net::UdpSocket::bind("0.0.0.0:0").await?;
-	agent.connect(bypass_target).await?;
-	agent.send(dq).await?;
-
-	// stage 2: recv udp query from dns server
-	let mut buf = [0; 4096];
-	let (size, _) = crate::keepalive::recv_timeout(&agent, Some(CONFIG.response_timeout), &mut buf).await?;
-	udp.send_to(&buf[..size], client_addr).await
+	Some(message)
 }
 
 #[derive(serde::Deserialize, Clone)]

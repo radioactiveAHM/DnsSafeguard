@@ -2,7 +2,6 @@ use crate::{CONFIG, config, rule::rulecheck, tls};
 use bytes::BufMut;
 use core::str;
 use h2::client::SendRequest;
-use std::{net::SocketAddr, sync::Arc};
 use tokio::time::sleep;
 
 fn h2config(config: &config::H2) -> h2::client::Builder {
@@ -18,84 +17,80 @@ fn h2config(config: &config::H2) -> h2::client::Builder {
 	builder
 }
 
-pub async fn http2() {
-	// TLS Conf
-	let h2tls = tls::tlsconf(vec![b"h2".to_vec()], CONFIG.disable_certificate_validation);
+pub async fn http2(server: &'static crate::config::Server, rpipe: crate::pipe::ReceiverPipe) {
+	let h2tls = tls::tlsconf(vec![b"h2".to_vec()], server.disable_certificate_validation);
 	let builder = h2config(&CONFIG.h2);
 
-	let udp = Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
-
-	let mut tank: Option<(Vec<u8>, SocketAddr)> = None;
+	let mut tank: Option<crate::pipe::Message> = None;
 	let disconnected = crate::disconnected::Disconnected::new();
 
 	loop {
-		log::info!("H2 connecting");
-		let tls = crate::tls::dynamic_tls_conn_gen(&["h2"], h2tls.clone()).await;
+		log::info!("{}: H2 connecting", server.id);
+		let tls = crate::tls::dynamic_tls_conn_gen(server, &["h2"], h2tls.clone()).await;
 		if let Err(e) = tls {
-			log::warn!("{e}");
-			sleep(std::time::Duration::from_secs(CONFIG.connection.reconnect_sleep)).await;
+			log::warn!("{}: {e}", server.id);
+			sleep(std::time::Duration::from_secs(CONFIG.reconnect_sleep)).await;
 			continue;
 		}
 
 		let (client, mut h2c) = builder.handshake(tls.unwrap()).await.unwrap();
 		let mut pinger = h2c.ping_pong().unwrap();
-		log::info!("H2 connection established");
+		log::info!("{}: H2 connection established", server.id);
 
 		disconnected.connect();
 		let _disconnected = disconnected.clone();
 		let watcher = tokio::spawn(async move {
 			if let Err(e) = h2c.await {
 				_disconnected.disconnect();
-				log::warn!("{e}");
+				log::warn!("{}: {e}", server.id);
 			}
 		});
 
-		if let Some((dns_query, addr)) = tank {
-			let udp = udp.clone();
+		if let Some(message) = tank {
 			let client = client.clone();
 			tokio::spawn(async move {
-				if let Err(e) = send_req(dns_query, client, addr, udp).await {
-					log::warn!("{e}");
+				if let Err(e) = send_req(
+					message,
+					client,
+					&server.hostname,
+					&server.custom_http_path,
+					&server.http_method,
+				)
+				.await
+				{
+					log::warn!("{}: {e}", server.id);
 				}
 			});
 			tank = None;
 		}
 
-		let mut dns_query = [0u8; 512];
 		loop {
-			let udp = udp.clone();
 			if disconnected.get() {
 				watcher.abort();
 				break;
 			}
 
-			let message =
-				crate::keepalive::recv_timeout_with(&udp, CONFIG.connection_keep_alive, &mut dns_query, async {
-					match tokio::time::timeout(
-						std::time::Duration::from_secs(CONFIG.response_timeout),
-						pinger.ping(h2::Ping::opaque()),
-					)
-					.await
-					{
-						Err(_) | Ok(Err(_)) => {
-							disconnected.disconnect();
-							log::warn!("timeout/error waiting for pong");
-						}
-						_ => (),
-					};
-				})
-				.await;
-
-			if let Some(Ok((query_size, addr))) = message {
-				if (CONFIG.rules.is_some()
-					&& rulecheck(&CONFIG.rules, &mut dns_query[..query_size], addr, udp.clone()).await)
-					|| query_size < 12
+			let message = crate::keepalive::pipe_recv_timeout_with(&rpipe, CONFIG.connection_keep_alive, async {
+				match tokio::time::timeout(
+					std::time::Duration::from_secs(CONFIG.response_timeout),
+					pinger.ping(h2::Ping::opaque()),
+				)
+				.await
 				{
-					continue;
-				}
+					Err(_) | Ok(Err(_)) => {
+						disconnected.disconnect();
+						log::warn!("{}: timeout/error waiting for pong", server.id);
+					}
+					_ => (),
+				};
+			})
+			.await;
 
+			if let Some(message) = message
+				&& let Some(message) = rulecheck(CONFIG.rules.is_some(), &CONFIG.rules, message).await
+			{
 				if disconnected.get() {
-					tank = Some((dns_query[..query_size].to_vec(), addr));
+					tank = Some(message);
 					watcher.abort();
 					break;
 				}
@@ -103,14 +98,22 @@ pub async fn http2() {
 				match client.clone().ready().await {
 					Ok(client) => {
 						tokio::spawn(async move {
-							if let Err(e) = send_req(dns_query[..query_size].to_vec(), client, addr, udp).await {
-								log::warn!("{e}");
+							if let Err(e) = send_req(
+								message,
+								client,
+								&server.hostname,
+								&server.custom_http_path,
+								&server.http_method,
+							)
+							.await
+							{
+								log::warn!("{}: {e}", server.id);
 							}
 						});
 					}
 					Err(e) => {
-						log::warn!("{e}");
-						tank = Some((dns_query[..query_size].to_vec(), addr));
+						log::warn!("{}: {e}", server.id);
+						tank = Some(message);
 						watcher.abort();
 						break;
 					}
@@ -121,19 +124,20 @@ pub async fn http2() {
 }
 
 async fn send_req(
-	dns_query: Vec<u8>,
+	message: crate::pipe::Message,
 	mut h2_client: SendRequest<bytes::Bytes>,
-	addr: SocketAddr,
-	udp: Arc<tokio::net::UdpSocket>,
+	hostname: &str,
+	custom_http_path: &Option<String>,
+	http_method: &config::HttpMethod,
 ) -> tokio::io::Result<()> {
-	let path = if let Some(path) = &CONFIG.custom_http_path {
+	let path = if let Some(path) = custom_http_path {
 		path.as_str()
 	} else {
 		"/dns-query"
 	};
-	let mut resp = match CONFIG.http_method {
-		config::HttpMethod::GET => get(&mut h2_client, &CONFIG.server_name, path, dns_query).await?,
-		config::HttpMethod::POST => post(&mut h2_client, &CONFIG.server_name, path, dns_query).await?,
+	let mut resp = match http_method {
+		config::HttpMethod::GET => get(&mut h2_client, hostname, path, message.message_slice()).await?,
+		config::HttpMethod::POST => post(&mut h2_client, hostname, path, message.message_slice()).await?,
 	};
 
 	if resp.status() == http::status::StatusCode::OK {
@@ -169,7 +173,7 @@ async fn send_req(
 			crate::ipoverwrite::overwrite_ip(&mut data, &CONFIG.overwrite);
 		}
 
-		let _ = udp.send_to(&data, addr).await;
+		message.send_response(data.freeze()).await;
 	} else {
 		log::warn!("remote responded with status code of {}", resp.status().as_str());
 	}
@@ -182,7 +186,7 @@ async fn get(
 	h2_client: &mut SendRequest<bytes::Bytes>,
 	server_name: &str,
 	path: &str,
-	dns_query: Vec<u8>,
+	dns_query: &[u8],
 ) -> tokio::io::Result<http::Response<h2::RecvStream>> {
 	h2_client
 		.send_request(
@@ -211,7 +215,7 @@ async fn post(
 	h2_client: &mut SendRequest<bytes::Bytes>,
 	server_name: &str,
 	path: &str,
-	dns_query: Vec<u8>,
+	dns_query: &[u8],
 ) -> tokio::io::Result<http::Response<h2::RecvStream>> {
 	let mut p = h2_client
 		.send_request(
@@ -232,7 +236,7 @@ async fn post(
 			false,
 		)
 		.map_err(tokio::io::Error::other)?;
-	p.1.send_data(bytes::Bytes::copy_from_slice(&dns_query), true)
+	p.1.send_data(bytes::Bytes::copy_from_slice(dns_query), true)
 		.map_err(tokio::io::Error::other)?;
 	p.0.await.map_err(tokio::io::Error::other)
 }

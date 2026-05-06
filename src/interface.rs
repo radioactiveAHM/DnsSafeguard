@@ -41,7 +41,7 @@ pub fn set_tcp_socket_options(tcp: &mut tokio::net::TcpSocket, options: &crate::
 
 pub async fn tcp_connect_handle(
 	target: SocketAddr,
-	connection_cfg: crate::config::Connection,
+	reconnect_sleep: u64,
 	network_interface: &Option<String>,
 	options: &crate::config::TcpSocketOptions,
 ) -> TcpStream {
@@ -76,7 +76,7 @@ pub async fn tcp_connect_handle(
 			}
 			Err(e) => {
 				log::warn!("TCP connection: {e}");
-				sleep(std::time::Duration::from_secs(connection_cfg.reconnect_sleep)).await;
+				sleep(std::time::Duration::from_secs(reconnect_sleep)).await;
 				continue;
 			}
 		}

@@ -1,34 +1,20 @@
-use std::{fmt::Display, net::SocketAddr};
-use tokio::{io::AsyncWriteExt, net::UdpSocket};
+use std::fmt::Display;
+use tokio::io::AsyncWriteExt;
 
 use crate::{
 	CONFIG,
-	keepalive::recv_timeout,
 	utils::{c_len, catch_in_buff},
 };
 
 pub async fn serve_http11(
 	tls: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
-	serve_addrs: SocketAddr,
+	spipe: crate::pipe::SendPipe,
 ) -> tokio::io::Result<()> {
-	let serving_ip = if serve_addrs.ip() == std::net::Ipv4Addr::UNSPECIFIED {
-		std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
-	} else if serve_addrs.ip() == std::net::Ipv6Addr::UNSPECIFIED {
-		std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST)
-	} else {
-		serve_addrs.ip()
-	};
-	let agent = crate::udp::udp_socket(std::net::SocketAddr::new(serving_ip, 0)).await?;
-	agent
-		.connect(std::net::SocketAddr::new(serving_ip, serve_addrs.port()))
-		.await?;
-
 	let mut reqbuff = [0; 1024];
 	let mut reqbuff: tokio::io::ReadBuf<'_> = tokio::io::ReadBuf::new(&mut reqbuff);
-	let mut respbuff = [0; 1024 * 8];
 	loop {
 		crate::ioutils::Fill(std::pin::Pin::new(tls), &mut reqbuff).await?;
-		handle_req(tls, &mut reqbuff, &agent, &mut respbuff).await?;
+		handle_req(tls, &mut reqbuff, &spipe).await?;
 		reqbuff.clear();
 	}
 }
@@ -37,38 +23,44 @@ pub async fn serve_http11(
 async fn handle_req(
 	stream: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
 	reqbuff: &mut tokio::io::ReadBuf<'_>,
-	udp: &UdpSocket,
-	respbuff: &mut [u8],
+	spipe: &crate::pipe::SendPipe,
 ) -> tokio::io::Result<()> {
 	let req = HTTP11::parse(reqbuff, stream).await?;
 	log::trace!("{}", String::from_utf8_lossy(reqbuff.filled()));
-	let dqbuff = match &req.method {
-		Method::Get(dq) => dq.as_slice(),
-		Method::Post(body_pos) => &reqbuff.filled()[*body_pos..],
+	let dq = match req.method {
+		Method::Get(dq) => bytes::Bytes::from(dq),
+		Method::Post(body_pos) => bytes::Bytes::copy_from_slice(&reqbuff.filled()[body_pos..]),
 	};
 
-	udp.send(dqbuff).await?;
-
-	let size: usize;
-	if let Ok((v, _)) = recv_timeout(udp, Some(CONFIG.doh_server.response_timeout.0), respbuff).await {
-		size = v;
-	} else if let Ok((v, _)) = recv_timeout(udp, Some(CONFIG.doh_server.response_timeout.1), respbuff).await {
-		size = v;
-	} else {
-		stream.write_all(b"HTTP/1.1 503 Service Unavailable\r\n\r\n").await?;
-		return Err(tokio::io::Error::from(tokio::io::ErrorKind::TimedOut));
+	let recver = spipe.send_doh_message(dq).await;
+	match tokio::time::timeout(
+		std::time::Duration::from_secs(CONFIG.doh_server.response_timeout),
+		recver,
+	)
+	.await
+	{
+		Ok(Ok(response)) => {
+			stream
+				.write_all(
+					format!(
+						"HTTP/1.1 200 OK\r\nContent-Type: application/dns-message\r\nCache-Control: {}\r\nAccess-Control-Allow-Origin: *\r\ncontent-length: {}\r\n\r\n",
+						&CONFIG.doh_server.cache_control,
+						response.len()
+					)
+					.as_bytes(),
+				)
+				.await?;
+			stream.write_all(&response).await
+		}
+		Ok(Err(e)) => {
+			stream.write_all(b"HTTP/1.1 503 Service Unavailable\r\n\r\n").await?;
+			Err(tokio::io::Error::other(e))
+		}
+		Err(_) => {
+			stream.write_all(b"HTTP/1.1 503 Service Unavailable\r\n\r\n").await?;
+			Err(tokio::io::Error::from(tokio::io::ErrorKind::TimedOut))
+		}
 	}
-
-	stream
-        .write_all(
-            format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: application/dns-message\r\nCache-Control: {}\r\nAccess-Control-Allow-Origin: *\r\ncontent-length: {size}\r\n\r\n",
-                &CONFIG.doh_server.cache_control
-            )
-            .as_bytes(),
-        )
-        .await?;
-	stream.write_all(&respbuff[..size]).await
 }
 
 #[derive(Debug)]

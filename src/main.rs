@@ -14,6 +14,7 @@ mod interface;
 mod ioutils;
 mod ipoverwrite;
 mod keepalive;
+mod pipe;
 mod rule;
 mod tls;
 mod udp;
@@ -108,18 +109,26 @@ async fn app() {
 		log::error!("{message}");
 	}));
 
+	let (spipe, rpipe) = pipe::new_message_pipe(CONFIG.pipe_capacity);
+
 	if CONFIG.doh_server.enable {
-		tokio::spawn(dohserver::doh_server(&CONFIG.doh_server, CONFIG.serve_addrs));
+		let spipe = spipe.clone();
+		tokio::spawn(dohserver::doh_server(&CONFIG.doh_server, spipe));
 	}
 
-	match CONFIG.protocol {
-		config::Protocol::h1_multi => tokio::spawn(h11::h1_multi()),
-		config::Protocol::h1 => tokio::spawn(h11::http1()),
-		config::Protocol::h2 => tokio::spawn(doh2::http2()),
-		config::Protocol::h3 => tokio::spawn(doh3::http3()),
-		config::Protocol::dot => tokio::spawn(dot::dot()),
-		config::Protocol::doq => tokio::spawn(doq::doq()),
-	};
+	let udp = std::sync::Arc::new(crate::udp::udp_socket(CONFIG.serve_addrs).await.unwrap());
+	tokio::spawn(spipe.pipe_udp_message(udp));
+
+	for server in &CONFIG.servers {
+		let rpipe = rpipe.clone();
+		match server.protocol {
+			config::Protocol::h1 => tokio::spawn(h11::http1(server, rpipe)),
+			config::Protocol::h2 => tokio::spawn(doh2::http2(server, rpipe)),
+			config::Protocol::h3 => tokio::spawn(doh3::http3(server, rpipe)),
+			config::Protocol::dot => tokio::spawn(dot::dot(server, rpipe)),
+			config::Protocol::doq => tokio::spawn(doq::doq(server, rpipe)),
+		};
+	}
 
 	std::future::pending::<()>().await
 }

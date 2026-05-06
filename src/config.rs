@@ -33,7 +33,6 @@ pub enum NoiseType {
 	stun,
 	tftp,
 	ntp,
-	syslog,
 }
 
 #[derive(serde::Deserialize)]
@@ -54,7 +53,6 @@ pub struct Noiser {
 #[allow(non_camel_case_types)]
 pub enum Protocol {
 	h1,
-	h1_multi,
 	h2,
 	h3,
 	dot,
@@ -92,19 +90,12 @@ pub struct H2 {
 	pub initial_window_size: u32,
 	pub max_pending_accept_reset_streams: usize,
 	pub max_concurrent_reset_streams: usize,
-	pub max_frame_size: u32
-}
-
-#[derive(serde::Deserialize, Clone, Copy)]
-pub struct Connection {
-	pub h1_multi_connections: usize,
-	pub reconnect_sleep: u64,
+	pub max_frame_size: u32,
 }
 
 #[derive(serde::Deserialize, Clone)]
 #[allow(non_camel_case_types)]
 pub enum TargetType {
-	dns(std::net::SocketAddr),
 	block(Option<Vec<crate::rule::Targets>>),
 	ip(std::net::IpAddr, Option<std::net::Ipv6Addr>),
 }
@@ -117,7 +108,7 @@ pub struct DohServer {
 	pub certificate: std::path::PathBuf,
 	pub key: std::path::PathBuf,
 	pub cache_control: String,
-	pub response_timeout: (u64, u64),
+	pub response_timeout: u64,
 	pub log_errors: bool,
 }
 
@@ -183,25 +174,33 @@ pub struct Runtime {
 }
 
 #[derive(serde::Deserialize)]
-pub struct Config {
-	pub log: Log,
+pub struct Server {
+	pub id: String,
 	pub protocol: Protocol,
-	pub server_name: String,
+	pub remote_addrs: std::net::SocketAddr,
+	pub hostname: String,
+	pub custom_http_path: Option<String>,
+	pub http_method: HttpMethod,
+	pub sni: String,
 	pub ip_as_sni: bool,
 	pub disable_certificate_validation: bool,
-	pub remote_addrs: std::net::SocketAddr,
-	pub interface: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct Config {
+	pub log: Log,
+	pub servers: Vec<Server>,
 	pub serve_addrs: std::net::SocketAddr,
-	pub custom_http_path: Option<String>,
+	pub interface: Option<String>,
 	pub response_timeout: u64,
-	pub http_method: HttpMethod,
 	pub connection_keep_alive: Option<u64>,
+	pub pipe_capacity: usize,
 	pub tls_core: TlsCore,
 	pub fragmenting: Fragmenting,
 	pub noiser: Noiser,
 	pub quic: Quic,
 	pub h2: H2,
-	pub connection: Connection,
+	pub reconnect_sleep: u64,
 	pub tcp_socket_options: TcpSocketOptions,
 	pub doh_server: DohServer,
 	pub runtime: Runtime,

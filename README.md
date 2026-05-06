@@ -30,7 +30,7 @@ This crate uses `#![forbid(unsafe_code)]` to ensure everything is implemented in
 - [x] HTTP/3 Support
 - [x] HTTP/2 Support
 - [x] HTTP/2 TLS Fragmentation
-- [x] HTTP/1.1 Multi-Connection
+- [x] HTTP/1.1 Support
 - [x] DNS over TLS (DoT)
 - [x] UDP Noise Implementation
 - [x] Advanced Rules Management
@@ -42,6 +42,7 @@ This crate uses `#![forbid(unsafe_code)]` to ensure everything is implemented in
 - [x] Interface/Adapter binding
 - [x] POST Method (H2, H3)
 - [x] Logging
+- [x] Multi Server
 
 ## Building the Project
 
@@ -145,80 +146,192 @@ The `config.json` file is a crucial part of the DnsSafeguard application. It con
 
 ### Structure
 
-The configuration file is structured in JSON format and includes the following settings:
+#### **Log**
 
-- `Log`:
-  - `level`: Specifies the logging verbosity. Available options: `error`, `warn`, `info`, `debug`, `trace`. Set to null to disable.
-  - `file`: Path to the log output file. Set to `null` to disable file logging and enable console output instead. Logging to both file and console simultaneously is not supported. You must choose one.
-- `Protocol`: Specifies the protocol used for DNS queries.
-  - `h1`: Single HTTP/1.1 Connection.
-  - `h1_multi`: Multiple HTTP/1.1 Connection.
-  - `h2`: HTTP/2 Connection.
-  - `h3`: HTTP/3 Connection.
-  - `dot`: DOT Connection (DNS over TLS).
-  - `doq`: DoQ Connection (DNS over QUIC).
-- `Server Name`: The domain name of the DNS server.
-- `IP As SNI`: When enabled, the server name is not used as SNI, which can be a good alternative to the fragmenting method. Some public DNS servers, like Google, support this. Supported protocols include H1, H2, DoT, and H1_multi.
-- `Disable Certificate Validation`: This option ignores certificate server name matching, enabling the use of domain fronting. For example, you can use `www.google.com` as the server name, which is not blocked by the Great Firewall (GFW). Many DNS servers, such as Google, Quad9, and NextDNS, support this option. However, Cloudflare does not, as it uses SNI guard. This is the best option for bypassing the GFW. **Disable Fragmenting**.
-- `Remote Addrs`: The IP address and port for the DNS server connection.
-- `Interface`: Name of the Interface/Adapter to bind to. Use `null` for default.
-- `Serve Addrs`: Local UDP address to listen for incoming DNS queries. Use `[::]:53` to enable dual-stack support, but note that network changes may require an application restart. For most setups, `127.0.0.1:53` is recommended.
-- `Custom Http Path`: Specify a custom HTTP path for HTTP-based protocols such as H1, H2, and H3. Use `null` for default which is the standard DoH path.
-  - Examples: `/jsd3n5nb4/dns-query`, `/user/d618995a10e74acec7ed454ac6e39d6eb/dns-query`.
-  - Warning: Custom path must end with `/dns-query`.
-- `Http Method`: Values are `GET` and `POST`. GET is more compatible, it consumes more memory. POST, on the other hand, eliminates the need to encode DNS queries in base64url, resulting in lower memory usage. However, it requires two write system calls.
-- `Response Timeout`: How long to wait for http response for DoQ, H3 and H1.
-- `Connection Keep Alive`: Sends periodic keep-alive signals—such as `GET /` (H2/H3), empty DNS headers (DoT), or empty buffers (DoQ)—at a specified interval in seconds to maintain connections with remote servers that may ignore standard HTTP/2 or QUIC keep-alives; set to `null` to disable.
-- `TLS Core`: Default backend is `rustls`, which supports all current features. Alternative TLS backends include `boring` and `native` (SChannel on Windows, Security.framework on macOS, and OpenSSL on other platforms). Fragmentation is not supported. `boring` and `native` are only compatible with `h1`, `h2`, and `dot`.
-- `Fragmenting`: The fragmentation method to use during the TLS handshake. [Fragmenting page](/FRAG.md)
-- `Noise`: List of UDP noises.
-  - `Ntype`: Noise type. Variants include `dns`, `str`, `lsd`, `tracker`, `stun`, `tftp` and `rand`.
-  - `Content`: Domain for `dns` ntype. Text for `str` ntype.
-  - `Size`: Specifies the length of each noise packet in bytes for `rand` ntype.
-  - `Sleep`: Defines the sleep time (in milliseconds) after each UDP noise packet is sent.
-- `Quic`: Configuration for QUIC protocol.
-  - `Congestion Controller`: The congestion controller algorithm, options are `bbr`, `cubic` and `newreno`.
-  - `Keep Alive Interval`: The interval in seconds to keep the connection alive. Use `null` to disable.
-  - `Datagram Receive Buffer Size`: Size of the receive buffer for datagrams. Use `null` for default.
-  - `Datagram Send Buffer Size`: Size of the send buffer for datagrams. Use `null` for default.
-  - `Connecting Timeout`: Specifies the maximum connection timeout duration in seconds.
-  - `Packet Threshold`: Maximum reordering in packet number space before FACK style loss detection considers a packet lost. Should not be less than 3, per RFC5681.
-  - `Initial MTU`: The initial value to be used as the maximum UDP payload size before running MTU discovery. Must be at least 1200, Use `null` for default.
-  - `Min MTU`: The maximum UDP payload size guaranteed to be supported by the network. Must be at least 1200, Use `null` for default.
-  - `Crypto Buffer Size`: Maximum quantity of out-of-order crypto layer data to buffer. Use `null` for default.
-  - `Stream Receive Window`: Maximum number of bytes the peer may transmit without acknowledgement on any one stream before becoming blocked. Use `null` for default.
-  - `Max Idle Timeout`: Maximum duration in seconds of inactivity to accept before timing out the connection. `null` represents an infinite timeout.
-- `H2`:
-  - `header_table_size`: This setting informs the peer of the maximum size of the header compression table used to encode header blocks.
-  - `max_header_list_size`: This advisory setting informs a peer of the maximum size of header list that the sender is prepared to accept.
-  - `initial_connection_window_size`: Indicates the initial window size (in octets) for connection-level flow control for received data.
-  - `initial_window_size`: Indicates the initial window size (in octets) for stream-level flow control for received data.
-- `Connection`:
-  - `H1 Multi Connections`: Number of connections for the `h1 multi` protocol.
-  - `Reconnect Sleep`: Duration to sleep before reconnecting (in seconds).
-- `Tcp Socket Options`:
-  - `Send Buffer Size`: The size (in bytes) of the socket's send buffer. Use `null` for default.
-  - `Recv Buffer Size`: The size (in bytes) of the socket's receive buffer. Use `null` for default.
-  - `Nodelay`: Disables Nagle's algorithm when set to true. This reduces latency for small packets. Use `null` for default.
-  - `Keepalive`: keepalive enables TCP keepalive probes when set to true. Helps detect dead peers and maintain long-lived connections. Use `null` for default.
-- `DoH Server`: Local DNS over HTTPS (HTTP/2) server for browsers.
-  - `Listen Address`: The IP address and port of the local DoH server (e.g., `127.0.0.1:443`).
-  - `ALPN`: Set up the HTTP version to serve. Supported variants are `h2` and `http/1.1`.
-  - `Certificate`: Path to the certificate file (e.g., `/path/to/certificate.crt`).
-  - `Key`: Path to the key file (e.g., `/path/to/key.key`).
-  - `Cache Control`: cache control as response header.
-  - `Response Timeout`: List of two durations (in seconds) specifying how long to wait for a response attempt.
-  - `Log Errors`: Enable logging DoH sever errors.
-- `Runtime`: [Tokio runtime document](https://docs.rs/tokio/latest/tokio/runtime/struct.Builder.html)
-  - `Runtime Mode`: Variants are `Multi` (Multi-threaded runtime) and `Single` (Single-threaded runtime).
-  - `Worker Threads`: Number of worker threads used in Multi mode.
-  - `Thread Stack Size`: Stack size allocated per thread in Multi mode.
-  - `Event Interval`: Number of scheduler ticks after which the scheduler will poll for external events. `null` for default.
-  - `Global Queue Interval`: Number of scheduler ticks after which the scheduler will poll the global task queue. `null` for default.
-  - `Max Io Events Per Tick`: Enables the I/O driver and configures the max number of events to be processed per tick. `null` for default.
-  - `Thread Keep Alive`: Duration a thread remains alive in the blocking pool when idle. By default, the timeout for a thread is set to 10 seconds. `null` for default.
-- `Rules`: Block or bypass DNS queries containing specified domains or keywords. [Rules Page](/RULES.md).
-- `Overwrite`: Overwrite IPs from DNS responses. [Overwrite Page](/OVERWRITE.md).
+- **level**
+  Defines the verbosity of log output. Supported values:
+  `error`, `warn`, `info`, `debug`, `trace`.
+  Set to `null` to disable logging entirely.
+- **file**
+  Path to the log output file.
+  Set to `null` to disable file logging and output logs to console instead.
+  **Note:** Logging to both file and console simultaneously is not supported. Choose one.
+
+---
+
+#### **Servers**
+
+Configuration for upstream DNS servers.
+
+- **protocol**
+  DNS transport protocol:
+
+  - `h1` — DNS over HTTPS (HTTP/1.1)
+  - `h2` — DNS over HTTPS (HTTP/2)
+  - `h3` — DNS over HTTPS (HTTP/3)
+  - `dot` — DNS over TLS
+  - `doq` — DNS over QUIC
+- **remote_addrs**
+  IP address and port of the DNS server.
+- **hostname**
+  The server's domain name.
+- **custom_http_path**
+  Custom DoH path; must end with `/dns-query`.
+  Set to `null` to use the default DoH path.
+- **http_method**
+  Request method for DoH: `GET` or `POST`.
+
+  - `GET` — more compatible, but uses more memory.
+  - `POST` — more efficient, no base64url encoding required.
+- **sni**
+  The Server Name Indication sent during TLS handshake.
+- **ip_as_sni**
+  When `true`, use the server IP instead of the hostname as SNI.
+  Useful for bypassing censorship. Supported in `h1`, `h2` and `dot`.
+- **disable_certificate_validation**
+  Skips hostname verification in the TLS handshake.
+  Enables domain fronting (e.g., using `www.google.com` as SNI).
+  Supported by Google, Quad9, NextDNS.
+  **Cloudflare does not support this due to SNI Guard.**
+  Recommended when bypassing DPI/GFW. Disable fragmenting when using this option.
+
+---
+
+#### **General Settings**
+
+- **serve_addrs**
+  Local UDP address to receive DNS queries.
+  Example: `127.0.0.1:53` is recommended for local resolvers.
+  Use `[::]:53` for dual-stack; may require application restart after network changes.
+- **interface**
+  Network interface name to bind. Use `null` for default.
+- **response_timeout**
+  Maximum wait time (seconds) for responses.
+- **connection_keep_alive**
+  Interval for sending keep-alive packets (seconds).
+  Set to `null` to disable.
+- **reconnect_sleep**
+  Time to wait (seconds) before reconnecting.
+- **pipe_capacity**
+  Internal pipeline buffer size.
+- **tls_core**
+  TLS backend:
+
+  - `rustls` — default, supports all features including fragmenting
+  - `boring` — supports `h1`, `h2`, and `dot`
+  - `native` — platform TLS (SChannel/Security.framework/OpenSSL); supports `h1`, `h2`, `dot`
+
+---
+
+#### **Fragmenting**
+
+Controls TLS handshake fragmentation. Useful for bypassing DPI.
+
+- **enable** — Enable or disable fragmentation.
+- **method** — Current supported method: `single`.
+- **sleep_interval** — Delay between fragments (ms).
+- **fragment_size** — Size range of each fragment (bytes).
+- **segments** — Number of fragments.
+
+---
+
+#### **Noise**
+
+Injects UDP noise packets to mask query patterns.
+
+- **ntype** — Noise type (`dns`, `str`, `lsd`, `tracker`, `stun`, `tftp`, `rand`).
+- **content** — Domain for `dns`, text for `str`.
+- **size** — Size range (bytes) for `rand`.
+- **sleep** — Delay between packets (ms).
+
+---
+
+#### **QUIC**
+
+QUIC protocol configuration for `doq` and `h3`.
+
+- **congestion_controller** — `bbr`, `cubic`, or `newreno`.
+- **keep_alive_interval** — Interval (seconds); `null` to disable.
+- **datagram_receive_buffer_size** — Receive buffer size; `null` for default.
+- **datagram_send_buffer_size** — Send buffer size; `null` for default.
+- **connecting_timeout** — Max connection timeout (seconds).
+- **packet_threshold** — Reordering threshold, must be ≥ 3 (RFC 5681).
+- **initial_mtu** — Initial MTU; ≥ 1200; `null` for default.
+- **min_mtu** — Minimum guaranteed MTU; ≥ 1200; `null` for default.
+- **crypto_buffer_size** — Buffer for out-of-order crypto data.
+- **stream_receive_window** — Max unacknowledged bytes per stream.
+- **max_idle_timeout** — Idle timeout (seconds); `null` means infinite.
+
+---
+
+#### **HTTP/2 (H2)**
+
+Advanced HTTP/2 protocol tuning.
+
+- **header_table_size** — Size of HPACK header table.
+- **max_header_list_size** — Maximum acceptable header list size.
+- **initial_connection_window_size** — Connection-level flow control window.
+- **initial_window_size** — Stream-level flow control window.
+- **max_pending_accept_reset_streams** — Maximum pending reset streams.
+- **max_concurrent_reset_streams** — Maximum active reset streams.
+- **max_frame_size** — Maximum frame size (default: 16777214).
+
+---
+
+#### **TCP Socket Options**
+
+- **send_buffer_size** — Custom send buffer size (bytes).
+- **recv_buffer_size** — Custom receive buffer size (bytes).
+- **nodelay** — Disable Nagle’s algorithm to reduce latency.
+- **keepalive** — Enable TCP keepalive probes.
+
+---
+
+#### **DoH Server (Local)**
+
+Local DNS-over-HTTPS server for browsers or system resolvers.
+
+- **enable** — Enable or disable local DoH server.
+- **listen_address** — Example: `127.0.0.1:443`.
+- **alpn** — Supported protocols: `h2`, `http/1.1`.
+- **certificate** — Path to certificate file.
+- **key** — Path to private key file.
+- **cache_control** — Cache-Control HTTP response header.
+- **response_timeout** — Response wait time (seconds).
+- **log_errors** — Log DoH server errors when enabled.
+
+---
+
+#### **Runtime**
+
+Tokio runtime configuration for advanced tuning.
+
+- **runtime_mode** — `Multi` (multi-threaded) or `Single` (single-threaded).
+- **worker_threads** — Worker thread count (Multi mode only).
+- **thread_stack_size** — Per-thread stack size.
+- **event_interval** — Scheduler external-event polling frequency.
+- **global_queue_interval** — Scheduler global task queue polling frequency.
+- **max_io_events_per_tick** — Maximum I/O events processed per tick.
+- **thread_keep_alive** — Idle timeout for worker threads (default: 10s).
+
+---
+
+#### **Rules**
+
+Filtering rules for DNS queries.
+
+- **options** — List of domains or keywords.
+- **target**
+
+  - `block`: Blocks matching queries.
+  - (Other rule types documented in `/RULES.md`.)
+
+---
+
+#### **Overwrite**
+
+Rules for overriding IPs returned in DNS responses.
+See `/OVERWRITE.md` for full specification.
 
 ## License
 

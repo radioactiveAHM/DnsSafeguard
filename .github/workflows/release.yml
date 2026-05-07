@@ -121,7 +121,9 @@ jobs:
           
           # Create tarball
           cd artifacts
-          tar -czf ${{ github.event.repository.name }}-${{ matrix.target }}.tar.gz "${{ matrix.binary_name }}"
+          # Copy extra files
+          cp ../config.json .
+          tar -czf ${{ github.event.repository.name }}-${{ matrix.target }}.tar.gz "${{ matrix.binary_name }}" config.json
           
           # Debug: show what files were created
           echo "Contents of artifacts directory:"
@@ -144,7 +146,9 @@ jobs:
           mkdir -p artifacts
           cp "target/${{ matrix.target }}/release/${{ matrix.binary_name }}" "artifacts/${{ matrix.binary_name }}"
           cd artifacts
-          7z a ${{ github.event.repository.name }}-${{ matrix.target }}.zip "${{ matrix.binary_name }}"
+          # Copy extra files
+          cp ../config.json ../MOZILLA_ROOTS.pem .
+          7z a ${{ github.event.repository.name }}-${{ matrix.target }}.zip "${{ matrix.binary_name }}" config.json MOZILLA_ROOTS.pem
 
       - name: Verify artifacts before upload
         shell: bash

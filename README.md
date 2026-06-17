@@ -59,6 +59,12 @@ Requires **CMake** and **NASM** installed.
 cargo build --release
 ```
 
+or
+
+```sh
+RUSTFLAGS="-C target-cpu=native" cargo build --release
+```
+
 ### Alternative Build (ring)
 
 Use this if you prefer the `ring` cryptography backend:

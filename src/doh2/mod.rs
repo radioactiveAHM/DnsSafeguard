@@ -24,6 +24,8 @@ pub async fn http2(server: &'static crate::config::Server, rpipe: crate::pipe::R
 	let mut tank: Option<crate::pipe::Message> = None;
 	let disconnected = crate::disconnected::Disconnected::new();
 
+	let response_timeout = std::time::Duration::from_secs(CONFIG.response_timeout);
+
 	loop {
 		log::info!("{}: H2 connecting", server.id);
 		let tls = crate::tls::dynamic_tls_conn_gen(server, &["h2"], h2tls.clone()).await;
@@ -53,8 +55,9 @@ pub async fn http2(server: &'static crate::config::Server, rpipe: crate::pipe::R
 					message,
 					client,
 					&server.hostname,
-					&server.custom_http_path,
+					&server.path,
 					&server.http_method,
+					response_timeout,
 				)
 				.await
 				{
@@ -71,53 +74,59 @@ pub async fn http2(server: &'static crate::config::Server, rpipe: crate::pipe::R
 			}
 
 			let message = crate::keepalive::pipe_recv_timeout_with(&rpipe, CONFIG.connection_keep_alive, async {
-				match tokio::time::timeout(
+				if let Err(e) = tokio::time::timeout(
 					std::time::Duration::from_secs(CONFIG.response_timeout),
 					pinger.ping(h2::Ping::opaque()),
 				)
-				.await
+				.await?
 				{
-					Err(_) | Ok(Err(_)) => {
-						disconnected.disconnect();
-						log::warn!("{}: timeout/error waiting for pong", server.id);
-					}
-					_ => (),
-				};
+					Err(tokio::io::Error::other(e))
+				} else {
+					Ok(())
+				}
 			})
 			.await;
 
-			if let Some(message) = message
-				&& let Some(message) = rulecheck(CONFIG.rules.is_some(), &CONFIG.rules, message).await
-			{
-				if disconnected.get() {
-					tank = Some(message);
-					watcher.abort();
-					break;
-				}
+			match message {
+				Ok(Some(message)) => {
+					if let Some(message) = rulecheck(CONFIG.rules.is_some(), &CONFIG.rules, message).await {
+						if disconnected.get() {
+							tank = Some(message);
+							watcher.abort();
+							break;
+						}
 
-				match client.clone().ready().await {
-					Ok(client) => {
-						tokio::spawn(async move {
-							if let Err(e) = send_req(
-								message,
-								client,
-								&server.hostname,
-								&server.custom_http_path,
-								&server.http_method,
-							)
-							.await
-							{
-								log::warn!("{}: {e}", server.id);
+						match client.clone().ready().await {
+							Ok(client) => {
+								tokio::spawn(async move {
+									if let Err(e) = send_req(
+										message,
+										client,
+										&server.hostname,
+										&server.path,
+										&server.http_method,
+										response_timeout,
+									)
+									.await
+									{
+										log::warn!("{}: {e}", server.id);
+									}
+								});
 							}
-						});
-					}
-					Err(e) => {
-						log::warn!("{}: {e}", server.id);
-						tank = Some(message);
-						watcher.abort();
-						break;
+							Err(e) => {
+								log::warn!("{}: {e}", server.id);
+								tank = Some(message);
+								watcher.abort();
+								break;
+							}
+						}
 					}
 				}
+				Err(e) => {
+					disconnected.disconnect();
+					log::warn!("{}: keepalive({e})", server.id);
+				}
+				_ => (),
 			}
 		}
 	}
@@ -127,46 +136,50 @@ async fn send_req(
 	message: crate::pipe::Message,
 	mut h2_client: SendRequest<bytes::Bytes>,
 	hostname: &str,
-	custom_http_path: &Option<String>,
+	path: &str,
 	http_method: &config::HttpMethod,
+	response_timeout: std::time::Duration,
 ) -> tokio::io::Result<()> {
-	let path = if let Some(path) = custom_http_path {
-		path.as_str()
-	} else {
-		"/dns-query"
-	};
 	let mut resp = match http_method {
 		config::HttpMethod::GET => get(&mut h2_client, hostname, path, message.message_slice()).await?,
 		config::HttpMethod::POST => post(&mut h2_client, hostname, path, message.message_slice()).await?,
 	};
 
 	if resp.status() == http::status::StatusCode::OK {
-		let clen: usize = if let Some(clen) = resp.headers().get("content-length")
-			&& let Ok(clen) = clen.to_str()
-		{
-			clen.parse().unwrap_or(0)
-		} else {
-			0
-		};
+		let content_length: usize = resp
+			.headers()
+			.get("content-length")
+			.ok_or(tokio::io::Error::other("no content length"))?
+			.to_str()
+			.map_err(tokio::io::Error::other)?
+			.parse::<usize>()
+			.map_err(tokio::io::Error::other)?;
 
-		let timeout_dur = std::time::Duration::from_secs(CONFIG.response_timeout);
+		if content_length < 17 {
+			return Err(tokio::io::Error::other("invalid content-length: expected >= 17 bytes"));
+		} else if content_length > 65535 {
+			return Err(tokio::io::Error::other(
+				"invalid content-length: expected <= 65535 bytes",
+			));
+		}
+
 		let mut data = bytes::BytesMut::from(
-			tokio::time::timeout(timeout_dur, resp.body_mut().data())
+			tokio::time::timeout(response_timeout, resp.body_mut().data())
 				.await?
 				.ok_or(tokio::io::Error::other("stream closed without data"))?
 				.map_err(tokio::io::Error::other)?,
 		);
-		loop {
-			if clen == 0 || data.len() >= clen {
-				// if no content-length provided we read only once
-				break;
-			}
+		while data.len() < content_length {
 			data.put(
-				tokio::time::timeout(timeout_dur, resp.body_mut().data())
+				tokio::time::timeout(response_timeout, resp.body_mut().data())
 					.await?
 					.ok_or(tokio::io::Error::other("stream closed with incomplete data"))?
 					.map_err(tokio::io::Error::other)?,
 			);
+		}
+
+		if data.len() > content_length {
+			return Err(tokio::io::Error::other("content length exceeds"));
 		}
 
 		if CONFIG.overwrite.is_some() {
@@ -181,7 +194,6 @@ async fn send_req(
 	Ok(())
 }
 
-#[inline(always)]
 async fn get(
 	h2_client: &mut SendRequest<bytes::Bytes>,
 	server_name: &str,
@@ -210,7 +222,6 @@ async fn get(
 		.map_err(tokio::io::Error::other)
 }
 
-#[inline(always)]
 async fn post(
 	h2_client: &mut SendRequest<bytes::Bytes>,
 	server_name: &str,

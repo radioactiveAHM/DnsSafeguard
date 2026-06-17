@@ -1,7 +1,7 @@
 {
 	"log": {
 		"level": "info",
-		"file": ".log"
+		"file": "log.txt"
 	},
 	"servers": [
 		{
@@ -9,7 +9,7 @@
 			"protocol": "h2",
 			"remote_addrs": "1.1.1.1:443",
 			"hostname": "cloudflare-dns.com",
-			"custom_http_path": null,
+			"path": "/dns-query",
 			"http_method": "GET",
 			"sni": "cloudflare-dns.com",
 			"ip_as_sni": false,
@@ -18,10 +18,10 @@
 	],
 	"serve_addrs": "127.0.0.1:53",
 	"interface": null,
-	"response_timeout": 5,
+	"response_timeout": 2,
 	"connection_keep_alive": 10,
 	"reconnect_sleep": 1,
-	"pipe_capacity": 6,
+	"pipe_capacity": 12,
 	"tls_core": "rustls",
 	"fragmenting": {
 		"enable": false,
@@ -58,7 +58,7 @@
 		"min_mtu": null,
 		"crypto_buffer_size": 1048576,
 		"stream_receive_window": 8192,
-		"max_idle_timeout": 3600
+		"max_idle_timeout": 300
 	},
 	"h2": {
 		"header_table_size": 4096,

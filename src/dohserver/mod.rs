@@ -11,25 +11,6 @@ use tokio_rustls::{TlsAcceptor, rustls};
 
 use crate::config::DohServer;
 
-pub struct Tc {
-	pub acceptor: TlsAcceptor,
-	pub stream: (tokio::net::TcpStream, std::net::SocketAddr),
-}
-impl Tc {
-	pub fn new(
-		acceptor: TlsAcceptor,
-		stream: Result<(tokio::net::TcpStream, std::net::SocketAddr), tokio::io::Error>,
-	) -> Result<Self, tokio::io::Error> {
-		Ok(Self {
-			acceptor,
-			stream: stream?,
-		})
-	}
-	pub async fn accept(self) -> Result<tokio_rustls::server::TlsStream<tokio::net::TcpStream>, tokio::io::Error> {
-		self.acceptor.accept(self.stream.0).await
-	}
-}
-
 pub async fn doh_server(dsc: &DohServer, spipe: crate::pipe::SendPipe) {
 	sleep(Duration::from_secs(2)).await;
 	let certs = CertificateDer::pem_file_iter(&dsc.certificate)
@@ -51,57 +32,47 @@ pub async fn doh_server(dsc: &DohServer, spipe: crate::pipe::SendPipe) {
 	let log_errors = dsc.log_errors;
 
 	loop {
-		match Tc::new(acceptor.clone(), listener.accept().await) {
-			Ok(tc) => {
-				let spipe = spipe.clone();
-				tokio::spawn(tc_handler(tc, log_errors, spipe));
-			}
-			Err(e) => {
-				if dsc.log_errors {
-					log::warn!("{e}");
-				}
-			}
+		if let Ok((stream, remote_addr)) = listener.accept().await
+			&& let Ok(stream) = acceptor.accept(stream).await
+		{
+			let spipe = spipe.clone();
+			tokio::spawn(stream_handler(stream, remote_addr, log_errors, spipe));
 		}
 	}
 }
 
-async fn tc_handler(tc: Tc, log: bool, spipe: crate::pipe::SendPipe) {
-	let mut tls = match tc.accept().await {
-		Ok(tls) => tls,
-		Err(e) => {
-			if log {
-				log::warn!("TLS: {e}");
-			}
-			return;
-		}
-	};
-
-	if let Some(alpn) = tls.get_ref().1.alpn_protocol() {
+async fn stream_handler(
+	mut stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
+	remote_addr: std::net::SocketAddr,
+	log: bool,
+	spipe: crate::pipe::SendPipe,
+) {
+	if let Some(alpn) = stream.get_ref().1.alpn_protocol() {
 		match alpn {
 			b"h2" => {
-				if let Err(e) = h2p::serve_h2(&mut tls, log, spipe).await
+				if let Err(e) = h2p::serve_h2(&mut stream, log, spipe).await
 					&& log
 				{
-					log::warn!("H2: {e}");
+					log::warn!("H2 <{remote_addr}>: {e}");
 				}
 			}
 			b"http/1.1" => {
-				if let Err(e) = h11p::serve_http11(&mut tls, spipe).await
+				if let Err(e) = h11p::serve_http11(&mut stream, spipe).await
 					&& log
 				{
-					log::warn!("HTTP/1.1: {e}");
+					log::warn!("HTTP/1.1 <{remote_addr}>: {e}");
 				}
 			}
 			_ => {
 				log::warn!("invalid TLS ALPN");
 			}
 		}
-	} else if let Err(e) = h11p::serve_http11(&mut tls, spipe).await
+	} else if let Err(e) = h11p::serve_http11(&mut stream, spipe).await
 		&& log
 	{
-		log::warn!("HTTP/1.1: {e}");
+		log::warn!("HTTP/1.1 <{remote_addr}>: {e}");
 	}
 
-	tls.get_mut().1.send_close_notify();
-	let _ = tls.get_mut().0.shutdown().await;
+	stream.get_mut().1.send_close_notify();
+	let _ = stream.get_mut().0.shutdown().await;
 }

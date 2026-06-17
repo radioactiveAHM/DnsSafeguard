@@ -4,6 +4,9 @@
 
 DnsSafeguard is a fast and secure DNS client written in Rust, designed to intercept DNS queries over a UDP socket and Dns over HTTPS (DoH) to securely transmit them to a DNS server using DNS over HTTPS/TLS/QUIC (DoH/DoT/DoQ) protocols. By leveraging TLS client hello fragmentation and UDP Noise, it successfully bypasses the Great Firewall (GFW) censorship.
 
+> [!CAUTION]
+> DNSSafeGuard is designed for **client use only**. Do **not** run it on public servers, as it is currently vulnerable to **DDoS attacks**. Deploying it on internet-facing systems may result in service disruption or downtime.
+
 ## Struct
 
 ![Graph](./DnsSafeguard%20graph.jpg)
@@ -175,9 +178,8 @@ Configuration for upstream DNS servers.
   IP address and port of the DNS server.
 - **hostname**
   The server's domain name.
-- **custom_http_path**
-  Custom DoH path; must end with `/dns-query`.
-  Set to `null` to use the default DoH path.
+- **path**
+  DoH path. Use `/dns-query` for default.
 - **http_method**
   Request method for DoH: `GET` or `POST`.
 
@@ -239,7 +241,7 @@ Controls TLS handshake fragmentation. Useful for bypassing DPI.
 
 Injects UDP noise packets to mask query patterns.
 
-- **ntype** — Noise type (`dns`, `str`, `lsd`, `tracker`, `stun`, `tftp`, `rand`).
+- **ntype** — Noise type (`dns`, `str`, `lsd`, `tracker`, `stun`, `tftp`, `rand`, `socks5`, `turn`, `dht`).
 - **content** — Domain for `dns`, text for `str`.
 - **size** — Size range (bytes) for `rand`.
 - **sleep** — Delay between packets (ms).

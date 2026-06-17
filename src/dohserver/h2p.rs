@@ -4,7 +4,6 @@ use http::Response;
 
 use crate::CONFIG;
 
-#[inline(always)]
 async fn accept_stream(
 	h2c: &mut h2::server::Connection<&mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>, Bytes>,
 ) -> tokio::io::Result<(http::Request<h2::RecvStream>, SendResponse<Bytes>)> {
@@ -29,7 +28,7 @@ fn h2config(config: &crate::config::H2) -> h2::server::Builder {
 
 pub async fn serve_h2(
 	tls: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
-	log: bool,
+	log_err: bool,
 	spipe: crate::pipe::SendPipe,
 ) -> tokio::io::Result<()> {
 	let peer_addr = tls.get_ref().0.peer_addr()?;
@@ -37,39 +36,51 @@ pub async fn serve_h2(
 		.handshake(tls)
 		.await
 		.map_err(tokio::io::Error::other)?;
+
 	loop {
 		let (mut req, mut resp) = accept_stream(&mut h2c).await?;
 		log::trace!("{:?}", &req);
+
+		let spipe = spipe.clone();
 		match *req.method() {
 			http::Method::GET => {
-				if let Some(bs4dns) = req.uri().query() {
-					if let Ok(dq) = base64_url::decode(&bs4dns.as_bytes()[4..]) {
-						let spipe = spipe.clone();
-						tokio::spawn(async move {
-							if let Err(e) = handle_req(&mut resp, Bytes::from(dq), spipe).await
-								&& log
+				tokio::spawn(async move {
+					match get_method(req) {
+						Ok(dq) => {
+							if let Err(e) = handle_req(&mut resp, dq, spipe).await
+								&& log_err
 							{
 								log::warn!("<{}:stream(GET):{}>: {}", peer_addr, resp.stream_id().as_u32(), e);
 							}
-						});
+						}
+						Err(e) => {
+							if log_err {
+								log::warn!("<{}:stream(GET):{}>: {}", peer_addr, resp.stream_id().as_u32(), e);
+							}
+							resp.send_reset(Reason::PROTOCOL_ERROR);
+						}
 					}
-				} else {
-					resp.send_reset(Reason::PROTOCOL_ERROR);
-				}
+				});
 			}
 			http::Method::POST => {
-				if let Some(Ok(body)) = req.body_mut().data().await {
-					let spipe = spipe.clone();
-					tokio::spawn(async move {
-						if let Err(e) = handle_req(&mut resp, body, spipe).await
-							&& log
-						{
-							log::warn!("<{}:stream(POST):{}>: {}", peer_addr, resp.stream_id().as_u32(), e);
+				tokio::spawn(async move {
+					match recv_post_bytes(&mut req).await {
+						Ok(body) => {
+							if let Err(e) = handle_req(&mut resp, body, spipe).await {
+								if log_err {
+									log::warn!("<{}:stream(POST):{}>: {}", peer_addr, resp.stream_id().as_u32(), e);
+								}
+								resp.send_reset(Reason::PROTOCOL_ERROR);
+							}
 						}
-					});
-				} else {
-					resp.send_reset(Reason::PROTOCOL_ERROR);
-				}
+						Err(e) => {
+							if log_err {
+								log::warn!("<{}:stream(POST):{}>: {}", peer_addr, resp.stream_id().as_u32(), e);
+							}
+							resp.send_reset(Reason::PROTOCOL_ERROR);
+						}
+					}
+				});
 			}
 			_ => {
 				h2c.abrupt_shutdown(Reason::PROTOCOL_ERROR);
@@ -82,7 +93,58 @@ pub async fn serve_h2(
 	}
 }
 
-#[inline(always)]
+async fn recv_post_bytes(recv: &mut http::Request<h2::RecvStream>) -> tokio::io::Result<Bytes> {
+	let content_length = recv
+		.headers()
+		.get("content-length")
+		.ok_or(tokio::io::Error::other("no content length"))?
+		.to_str()
+		.map_err(tokio::io::Error::other)?
+		.parse::<usize>()
+		.map_err(tokio::io::Error::other)?;
+
+	if content_length < 17 {
+		return Err(tokio::io::Error::other("invalid content-length: expected >= 17 bytes"));
+	} else if content_length > 65535 {
+		return Err(tokio::io::Error::other(
+			"invalid content-length: expected <= 65535 bytes",
+		));
+	}
+
+	// TODO: handle multi data frame buffering, first check if required
+	recv.body_mut()
+		.data()
+		.await
+		.ok_or(tokio::io::Error::new(
+			std::io::ErrorKind::UnexpectedEof,
+			"connection closed unexpectedly",
+		))?
+		.map_err(tokio::io::Error::other)
+}
+
+fn get_method(http_request: http::Request<h2::RecvStream>) -> tokio::io::Result<Bytes> {
+	let http_query = http_request
+		.uri()
+		.query()
+		.ok_or(tokio::io::Error::other("none http queery"))?;
+	if http_query.contains("dns=") {
+		if http_query.as_bytes()[4..].is_empty() {
+			return Err(tokio::io::Error::other("invalid http dns queery"));
+		}
+		let dns_query = base64_url::decode(&http_query.as_bytes()[4..])
+			.map_err(|_| tokio::io::Error::other("decode http query failed"))?;
+		if dns_query.len() < 17 {
+			return Err(tokio::io::Error::other("invalid query: expected >= 17 bytes"));
+		} else if dns_query.len() > 65535 {
+			return Err(tokio::io::Error::other("invalid query: expected <= 65535 bytes"));
+		}
+
+		Ok(Bytes::from(dns_query))
+	} else {
+		Err(tokio::io::Error::other("none http dns queery"))
+	}
+}
+
 async fn handle_req(
 	resp: &mut SendResponse<Bytes>,
 	body: Bytes,
@@ -123,25 +185,8 @@ async fn handle_req(
 	}
 }
 
-struct SendResponseHeader<'a>(&'a mut SendResponse<Bytes>, http::Response<()>);
-impl Future for SendResponseHeader<'_> {
-	type Output = tokio::io::Result<Result<h2::SendStream<Bytes>, h2::Error>>;
-	fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
-		let r = self.1.clone();
-		match self.0.poll_reset(cx) {
-			std::task::Poll::Ready(Ok(r)) => std::task::Poll::Ready(Err(tokio::io::Error::new(
-				tokio::io::ErrorKind::ConnectionAborted,
-				r.description(),
-			))),
-			std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Err(tokio::io::Error::other(e))),
-			std::task::Poll::Pending => std::task::Poll::Ready(Ok(self.0.send_response(r, false))),
-		}
-	}
-}
-
-#[inline(always)]
 async fn handle_resp(rframe: &mut SendResponse<Bytes>, buf: Bytes) -> tokio::io::Result<()> {
-	let heads = Response::builder()
+	let http_response = Response::builder()
 		.version(http::Version::HTTP_2)
 		.status(http::status::StatusCode::OK)
 		.header("Content-Type", "application/dns-message")
@@ -151,11 +196,9 @@ async fn handle_resp(rframe: &mut SendResponse<Bytes>, buf: Bytes) -> tokio::io:
 		.body(())
 		.unwrap();
 
-	if let Ok(Ok(mut bframe)) = SendResponseHeader(rframe, heads).await {
-		bframe
-			.send_data(Bytes::copy_from_slice(&buf), true)
-			.map_err(tokio::io::Error::other)
-	} else {
-		Ok(())
+	if let Ok(mut bframe) = rframe.send_response(http_response, false) {
+		bframe.send_data(buf, true).map_err(tokio::io::Error::other)?;
 	}
+
+	Ok(())
 }

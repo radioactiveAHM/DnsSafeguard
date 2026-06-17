@@ -33,6 +33,9 @@ pub enum NoiseType {
 	stun,
 	tftp,
 	ntp,
+	socks5,
+	turn,
+	dht,
 }
 
 #[derive(serde::Deserialize)]
@@ -79,7 +82,7 @@ pub struct Quic {
 	pub min_mtu: Option<u16>,
 	pub crypto_buffer_size: Option<usize>,
 	pub stream_receive_window: Option<u32>,
-	pub max_idle_timeout: Option<u32>,
+	pub max_idle_timeout: Option<u64>,
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -179,7 +182,7 @@ pub struct Server {
 	pub protocol: Protocol,
 	pub remote_addrs: std::net::SocketAddr,
 	pub hostname: String,
-	pub custom_http_path: Option<String>,
+	pub path: String,
 	pub http_method: HttpMethod,
 	pub sni: String,
 	pub ip_as_sni: bool,

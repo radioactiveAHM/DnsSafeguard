@@ -57,6 +57,8 @@ pub async fn http3(server: &'static crate::config::Server, rpipe: crate::pipe::R
 	let mut tank: Option<crate::pipe::Message> = None;
 	let disconnected = crate::disconnected::Disconnected::new();
 
+	let response_timeout = std::time::Duration::from_secs(CONFIG.response_timeout);
+
 	let mut connecting_retry = 0u8;
 	loop {
 		if connecting_retry == 3 {
@@ -131,8 +133,9 @@ pub async fn http3(server: &'static crate::config::Server, rpipe: crate::pipe::R
 					message,
 					h3,
 					&server.hostname,
-					&server.custom_http_path,
+					&server.path,
 					&server.http_method,
+					response_timeout,
 				)
 				.await
 				{
@@ -150,7 +153,7 @@ pub async fn http3(server: &'static crate::config::Server, rpipe: crate::pipe::R
 			}
 
 			let message = crate::keepalive::pipe_recv_timeout_with(&rpipe, CONFIG.connection_keep_alive, async {
-				match tokio::time::timeout(
+				if let Err(e) = tokio::time::timeout(
 					std::time::Duration::from_secs(CONFIG.response_timeout),
 					h3.clone().send_request(
 						http::Request::get(format!("https://{}/", server.hostname.as_str()))
@@ -158,61 +161,62 @@ pub async fn http3(server: &'static crate::config::Server, rpipe: crate::pipe::R
 							.unwrap(),
 					),
 				)
-				.await
+				.await?
 				{
-					Err(_) | Ok(Err(_)) => {
-						disconnected.disconnect();
-						log::warn!("{}: timeout/error waiting for keep-alive response", server.id);
-					}
-					_ => (),
-				};
+					Err(tokio::io::Error::other(e))
+				} else {
+					Ok(())
+				}
 			})
 			.await;
 
-			if let Some(message) = message
-				&& let Some(message) = rulecheck(CONFIG.rules.is_some(), &CONFIG.rules, message).await
-			{
-				if disconnected.get() {
-					tank = Some(message);
-					watcher.abort();
-					break;
-				}
-
-				let h3 = h3.clone();
-				tokio::spawn(async move {
-					if let Err(e) = send_request(
-						message,
-						h3,
-						&server.hostname,
-						&server.custom_http_path,
-						&server.http_method,
-					)
-					.await
-					{
-						log::warn!("{}: {e}", server.id);
-						if e.kind() == std::io::ErrorKind::TimedOut {
-							disconnected.disconnect();
+			match message {
+				Ok(Some(message)) => {
+					if let Some(message) = rulecheck(CONFIG.rules.is_some(), &CONFIG.rules, message).await {
+						if disconnected.get() {
+							tank = Some(message);
+							watcher.abort();
+							break;
 						}
+
+						let h3 = h3.clone();
+						tokio::spawn(async move {
+							if let Err(e) = send_request(
+								message,
+								h3,
+								&server.hostname,
+								&server.path,
+								&server.http_method,
+								response_timeout,
+							)
+							.await
+							{
+								log::warn!("{}: {e}", server.id);
+								if e.kind() == std::io::ErrorKind::TimedOut {
+									disconnected.disconnect();
+								}
+							}
+						});
 					}
-				});
+				}
+				Err(e) => {
+					disconnected.disconnect();
+					log::warn!("{}: keepalive({e})", server.id);
+				}
+				_ => (),
 			}
 		}
 	}
 }
 
-#[inline(always)]
 async fn send_request(
 	message: crate::pipe::Message,
 	mut h3: SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
 	hostname: &str,
-	custom_http_path: &Option<String>,
+	path: &str,
 	http_method: &config::HttpMethod,
+	response_timeout: std::time::Duration,
 ) -> tokio::io::Result<()> {
-	let path = if let Some(path) = custom_http_path {
-		path.as_str()
-	} else {
-		"/dns-query"
-	};
 	let mut reqs = match http_method {
 		config::HttpMethod::GET => get(&mut h3, hostname, path, message.message_slice()).await?,
 		config::HttpMethod::POST => post(&mut h3, hostname, path, message.message_slice()).await?,
@@ -220,40 +224,45 @@ async fn send_request(
 
 	reqs.finish().await.map_err(tokio::io::Error::other)?;
 
-	let resp = timeout(
-		std::time::Duration::from_secs(CONFIG.response_timeout),
-		reqs.recv_response(),
-	)
-	.await?
-	.map_err(tokio::io::Error::other)?;
+	let resp = timeout(response_timeout, reqs.recv_response())
+		.await?
+		.map_err(tokio::io::Error::other)?;
 
 	if resp.status() == http::status::StatusCode::OK {
-		let clen: usize = if let Some(clen) = resp.headers().get("content-length")
-			&& let Ok(clen) = clen.to_str()
-		{
-			clen.parse().unwrap_or(0)
-		} else {
-			0
-		};
+		let content_length: usize = resp
+			.headers()
+			.get("content-length")
+			.ok_or(tokio::io::Error::other("no content length"))?
+			.to_str()
+			.map_err(tokio::io::Error::other)?
+			.parse::<usize>()
+			.map_err(tokio::io::Error::other)?;
 
-		let timeout_dur = std::time::Duration::from_secs(CONFIG.response_timeout);
+		if content_length < 17 {
+			return Err(tokio::io::Error::other("invalid content-length: expected >= 17 bytes"));
+		} else if content_length > 65535 {
+			return Err(tokio::io::Error::other(
+				"invalid content-length: expected <= 65535 bytes",
+			));
+		}
+
 		let mut data = bytes::BytesMut::from(downcast(
-			timeout(timeout_dur, reqs.recv_data())
+			timeout(response_timeout, reqs.recv_data())
 				.await?
 				.map_err(tokio::io::Error::other)?
 				.ok_or(tokio::io::Error::other("stream closed without data"))?,
 		));
-		loop {
-			if clen == 0 || data.len() >= clen {
-				// if no content-length provided we read only once
-				break;
-			}
+		while data.len() < content_length {
 			data.put(
-				timeout(timeout_dur, reqs.recv_data())
+				timeout(response_timeout, reqs.recv_data())
 					.await?
 					.map_err(tokio::io::Error::other)?
 					.ok_or(tokio::io::Error::other("stream closed with incomplete data"))?,
 			);
+		}
+
+		if data.len() > content_length {
+			return Err(tokio::io::Error::other("content length exceeds"));
 		}
 
 		if CONFIG.overwrite.is_some() {
@@ -267,13 +276,11 @@ async fn send_request(
 	Ok(())
 }
 
-#[inline(always)]
 fn downcast(buf: impl std::any::Any + 'static) -> bytes::Bytes {
 	let boxed: Box<dyn std::any::Any> = Box::new(buf);
 	boxed.downcast::<bytes::Bytes>().ok().map(|b| *b).unwrap()
 }
 
-#[inline(always)]
 async fn get(
 	h3: &mut SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
 	server_name: &str,
@@ -298,7 +305,6 @@ async fn get(
 	.map_err(tokio::io::Error::other)
 }
 
-#[inline(always)]
 async fn post(
 	h3: &mut SendRequest<h3_quinn::OpenStreams, bytes::Bytes>,
 	server_name: &str,

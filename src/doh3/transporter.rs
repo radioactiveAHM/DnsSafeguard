@@ -1,5 +1,3 @@
-use quinn::{IdleTimeout, VarInt};
-
 pub fn tc(quic_conf: &crate::config::Quic) -> std::sync::Arc<quinn::TransportConfig> {
 	let mut transport_config = quinn::TransportConfig::default();
 
@@ -13,7 +11,7 @@ pub fn tc(quic_conf: &crate::config::Quic) -> std::sync::Arc<quinn::TransportCon
 	transport_config.max_idle_timeout(
 		quic_conf
 			.max_idle_timeout
-			.map(|max_idle_timeout| IdleTimeout::from(VarInt::from_u32(max_idle_timeout * 1000))),
+			.map(|max_idle_timeout| std::time::Duration::from_secs(max_idle_timeout).try_into().unwrap()),
 	);
 	if let Some(initial_mtu) = quic_conf.initial_mtu {
 		transport_config.initial_mtu(initial_mtu);
@@ -25,7 +23,7 @@ pub fn tc(quic_conf: &crate::config::Quic) -> std::sync::Arc<quinn::TransportCon
 		transport_config.crypto_buffer_size(crypto_buffer_size);
 	}
 	if let Some(stream_receive_window) = quic_conf.stream_receive_window {
-		transport_config.stream_receive_window(VarInt::from_u32(stream_receive_window));
+		transport_config.stream_receive_window(quinn::VarInt::from_u32(stream_receive_window));
 	}
 
 	std::sync::Arc::new(transport_config)

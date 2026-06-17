@@ -33,7 +33,7 @@ pub mod service {
 			.unwrap();
 
 		loop {
-			std::thread::sleep(std::time::Duration::from_secs(5));
+			std::thread::sleep(std::time::Duration::from_secs(2));
 			if stop.load(std::sync::atomic::Ordering::Acquire) {
 				handler
 					.set_service_status(ServiceStatus {

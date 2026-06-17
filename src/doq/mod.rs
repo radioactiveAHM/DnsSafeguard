@@ -22,6 +22,8 @@ pub async fn doq(server: &'static crate::config::Server, rpipe: crate::pipe::Rec
 	let mut tank: Option<crate::pipe::Message> = None;
 	let disconnected = crate::disconnected::Disconnected::new();
 
+	let response_timeout = std::time::Duration::from_secs(CONFIG.response_timeout);
+
 	let mut connecting_retry = 0u8;
 	loop {
 		if connecting_retry == 3 {
@@ -90,7 +92,7 @@ pub async fn doq(server: &'static crate::config::Server, rpipe: crate::pipe::Rec
 					let stream_id = bistream.0.id();
 					let message = tank.unwrap();
 					tokio::spawn(async move {
-						if let Err(e) = send_dq(message, bistream).await {
+						if let Err(e) = send_dq(message, bistream, response_timeout).await {
 							log::warn!("{}: {stream_id}: {e}", server.id);
 						}
 					});
@@ -111,58 +113,57 @@ pub async fn doq(server: &'static crate::config::Server, rpipe: crate::pipe::Rec
 			}
 
 			let message = crate::keepalive::pipe_recv_timeout_with(&rpipe, CONFIG.connection_keep_alive, async {
-				match quic.open_bi().await {
-					Ok((mut send, _)) => {
-						if send.write(&[]).await.is_ok() {
-							let _ = send.finish();
-						}
-					}
-					Err(e) => {
-						log::warn!("{}: {e}", server.id);
-						disconnected.disconnect();
-					}
-				};
+				let mut stream = quic.open_bi().await.map_err(tokio::io::Error::other)?;
+				stream.0.write_all(&[]).await.map_err(tokio::io::Error::other)?;
+				stream.0.finish().map_err(tokio::io::Error::other)
 			})
 			.await;
 
-			// Recive dns query
-			if let Some(message) = message
-				&& let Some(message) = rulecheck(CONFIG.rules.is_some(), &CONFIG.rules, message).await
-			{
-				if disconnected.get() {
-					tank = Some(message);
-					watcher.abort();
+			match message {
+				Ok(Some(message)) => {
+					if let Some(message) = rulecheck(CONFIG.rules.is_some(), &CONFIG.rules, message).await {
+						if disconnected.get() {
+							tank = Some(message);
+							watcher.abort();
+							break;
+						}
+
+						match quic.open_bi().await {
+							Ok(bistream) => {
+								let stream_id = bistream.0.id();
+								tokio::spawn(async move {
+									if let Err(e) = send_dq(message, bistream, response_timeout).await {
+										log::warn!("{}: {stream_id}: {e}", server.id);
+										if e.kind() == std::io::ErrorKind::TimedOut {
+											disconnected.disconnect();
+										}
+									}
+								});
+							}
+							Err(e) => {
+								log::warn!("{}: {e}", server.id);
+								tank = Some(message);
+								watcher.abort();
+								break;
+							}
+						}
+					}
+				}
+				Err(e) => {
+					log::warn!("{}: {e}", server.id);
+					disconnected.disconnect();
 					break;
 				}
-
-				match quic.open_bi().await {
-					Ok(bistream) => {
-						let stream_id = bistream.0.id();
-						tokio::spawn(async move {
-							if let Err(e) = send_dq(message, bistream).await {
-								log::warn!("{}: {stream_id}: {e}", server.id);
-								if e.kind() == std::io::ErrorKind::TimedOut {
-									disconnected.disconnect();
-								}
-							}
-						});
-					}
-					Err(e) => {
-						log::warn!("{}: {e}", server.id);
-						tank = Some(message);
-						watcher.abort();
-						break;
-					}
-				}
+				_ => (),
 			}
 		}
 	}
 }
 
-#[inline(always)]
 async fn send_dq(
 	message: crate::pipe::Message,
 	(mut send, mut recv): (SendStream, RecvStream),
+	response_timeout: std::time::Duration,
 ) -> tokio::io::Result<()> {
 	let mut dq = Vec::with_capacity(message.message_slice().len() + 2);
 	dq.extend_from_slice(&convert_u16_to_two_u8s_be(message.message_slice().len() as u16));
@@ -170,9 +171,8 @@ async fn send_dq(
 	send.write_all(&dq).await?;
 	send.finish()?;
 
-	let timeout_dur = std::time::Duration::from_secs(CONFIG.response_timeout);
 	let mut data = bytes::BytesMut::from(
-		recv_timeout(&mut recv, timeout_dur)
+		recv_timeout(&mut recv, response_timeout)
 			.await?
 			.ok_or(tokio::io::Error::other("stream closed without data"))?
 			.bytes,
@@ -183,20 +183,23 @@ async fn send_dq(
 	}
 
 	let message_size = convert_two_u8s_to_u16_be([data[0], data[1]]) as usize;
-	if message_size == 0 {
-		return Err(tokio::io::Error::other("malformed dns query response"));
+	if message_size < 17 {
+		return Err(tokio::io::Error::other("invalid query size: expected >= 17 bytes"));
+	} else if message_size > 65535 {
+		return Err(tokio::io::Error::other("invalid query size: expected <= 65535 bytes"));
 	}
 
-	loop {
-		if data.len() - 2 >= message_size {
-			break;
-		}
+	while data.len() - 2 < message_size {
 		data.put(
-			recv_timeout(&mut recv, timeout_dur)
+			recv_timeout(&mut recv, response_timeout)
 				.await?
 				.ok_or(tokio::io::Error::other("stream closed with incomplete data"))?
 				.bytes,
 		);
+	}
+
+	if data.len() - 2 > message_size {
+		return Err(tokio::io::Error::other("message length exceeds"));
 	}
 
 	if CONFIG.overwrite.is_some() {
@@ -206,7 +209,6 @@ async fn send_dq(
 	Ok(())
 }
 
-#[inline(always)]
 async fn recv_timeout(recv: &mut RecvStream, dur: std::time::Duration) -> tokio::io::Result<Option<quinn::Chunk>> {
 	Ok(tokio::time::timeout(dur, recv.read_chunk(1024 * 64, true)).await??)
 }

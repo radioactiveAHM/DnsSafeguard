@@ -1,10 +1,10 @@
-use std::net::SocketAddr;
-
 use crate::config::{Noise, NoiseType};
 use rand::{
+	Rng, RngExt,
 	distr::{Alphanumeric, SampleString},
 	rng,
 };
+use std::net::SocketAddr;
 
 // Generate random standard dns record
 pub mod dns {
@@ -172,6 +172,74 @@ fn ntp() -> [u8; 48] {
 	packet
 }
 
+fn turn() -> [u8; 28] {
+	let mut p = [0u8; 28];
+	p[..2].copy_from_slice(&3u16.to_be_bytes());
+	p[2..4].copy_from_slice(&8u16.to_be_bytes());
+	p[4..8].copy_from_slice(&0x2112A442u32.to_be_bytes());
+	for b in &mut p[8..20] {
+		*b = rand::random()
+	}
+	p[20..22].copy_from_slice(&0x19u16.to_be_bytes());
+	p[22..24].copy_from_slice(&4u16.to_be_bytes());
+	p[24] = 17;
+	p
+}
+
+fn socks5udp() -> Vec<u8> {
+	let mut rng = rand::rng();
+
+	let mut packet = vec![0, 0, 0, 1, rng.random(), rng.random(), rng.random(), rng.random()];
+
+	let port: u16 = rng.random_range(53..=65535);
+	packet.extend_from_slice(&port.to_be_bytes());
+
+	let mut payload = [0; 32];
+	rng.fill_bytes(&mut payload);
+	packet.extend_from_slice(&payload[..rng.random_range(8..32)]);
+	packet
+}
+
+fn dht() -> Vec<u8> {
+	let mut rng = rng();
+
+	let txid: [u8; 2] = rng.random();
+	let node_id: [u8; 20] = rng.random();
+
+	let queries = ["ping", "find_node", "get_peers"];
+	let query = queries[rng.random_range(0..queries.len())];
+
+	let mut packet = Vec::new();
+
+	packet.extend_from_slice(b"d1:ad2:id20:");
+	packet.extend_from_slice(&node_id);
+
+	match query {
+		"find_node" => {
+			let target: [u8; 20] = rng.random();
+			packet.extend_from_slice(b"6:target20:");
+			packet.extend_from_slice(&target);
+		}
+		"get_peers" => {
+			let info_hash: [u8; 20] = rng.random();
+			packet.extend_from_slice(b"9:info_hash20:");
+			packet.extend_from_slice(&info_hash);
+		}
+		_ => {}
+	}
+
+	packet.push(b'e');
+
+	packet.extend_from_slice(format!("1:q{}:{}", query.len(), query).as_bytes());
+
+	packet.extend_from_slice(b"1:t2:");
+	packet.extend_from_slice(&txid);
+
+	packet.extend_from_slice(b"1:y1:qe");
+
+	packet
+}
+
 fn rand_noiser(noise: &Noise, target: SocketAddr, udp: &std::net::UdpSocket) -> tokio::io::Result<usize> {
 	let mut packet = [0u8; 1500];
 	let psize_range = crate::utils::parse_range(&noise.size).expect("failed to parse packet length range");
@@ -192,6 +260,9 @@ pub fn noiser(noises: &Vec<Noise>, target: SocketAddr, udp: &std::net::UdpSocket
 			NoiseType::stun => udp.send_to(&stun(), target),
 			NoiseType::tftp => udp.send_to(&tftp(), target),
 			NoiseType::ntp => udp.send_to(&ntp(), target),
+			NoiseType::socks5 => udp.send_to(&socks5udp(), target),
+			NoiseType::turn => udp.send_to(&turn(), target),
+			NoiseType::dht => udp.send_to(&dht(), target),
 		} {
 			log::info!("{sent_bytes} bytes sent as noise");
 			std::thread::sleep(std::time::Duration::from_millis(noise.sleep));

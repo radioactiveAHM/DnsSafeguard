@@ -1,6 +1,5 @@
 #![forbid(unsafe_code)]
 
-mod chttp;
 mod config;
 mod disconnected;
 mod doh2;

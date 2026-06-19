@@ -1,7 +1,6 @@
 use crate::{
 	CONFIG,
 	rule::rulecheck,
-	tls,
 	utils::{convert_two_u8s_to_u16_be, convert_u16_to_two_u8s_be},
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -12,18 +11,19 @@ struct Query {
 }
 
 pub async fn dot(server: &'static crate::config::Server, rpipe: crate::pipe::ReceiverPipe) {
-	let ctls = tls::tlsconf(vec![b"dot".to_vec()], server.disable_certificate_validation);
 	loop {
 		log::info!("{}: TLS connecting", server.id);
-		let tls = crate::tls::dynamic_tls_conn_gen(server, &["dot"], ctls.clone()).await;
-		if let Err(e) = tls {
-			log::warn!("{}: {e}", server.id);
-			tokio::time::sleep(std::time::Duration::from_secs(CONFIG.reconnect_sleep)).await;
-			continue;
-		}
+		let tls = crate::tls::dynamic_tls_conn_gen(server, &["dot"]).await;
+		let tls = match tls {
+			Some(tls) => tls,
+			None => {
+				tokio::time::sleep(std::time::Duration::from_secs(CONFIG.reconnect_sleep)).await;
+				continue;
+			}
+		};
 		log::info!("{}: TLS connection established", server.id);
 
-		let (r, w) = tokio::io::split(tls.unwrap());
+		let (r, w) = tokio::io::split(tls);
 
 		let waiters: std::sync::Arc<tokio::sync::Mutex<std::collections::HashMap<u16, Query>>> =
 			std::sync::Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));

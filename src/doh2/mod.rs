@@ -1,4 +1,4 @@
-use crate::{CONFIG, config, rule::rulecheck, tls};
+use crate::{CONFIG, config, rule::rulecheck};
 use bytes::BufMut;
 use core::str;
 use h2::client::SendRequest;
@@ -18,7 +18,6 @@ fn h2config(config: &config::H2) -> h2::client::Builder {
 }
 
 pub async fn http2(server: &'static crate::config::Server, rpipe: crate::pipe::ReceiverPipe) {
-	let h2tls = tls::tlsconf(vec![b"h2".to_vec()], server.disable_certificate_validation);
 	let builder = h2config(&CONFIG.h2);
 
 	let mut tank: Option<crate::pipe::Message> = None;
@@ -28,14 +27,15 @@ pub async fn http2(server: &'static crate::config::Server, rpipe: crate::pipe::R
 
 	loop {
 		log::info!("{}: H2 connecting", server.id);
-		let tls = crate::tls::dynamic_tls_conn_gen(server, &["h2"], h2tls.clone()).await;
-		if let Err(e) = tls {
-			log::warn!("{}: {e}", server.id);
-			sleep(std::time::Duration::from_secs(CONFIG.reconnect_sleep)).await;
-			continue;
-		}
+		let tls = match crate::tls::dynamic_tls_conn_gen(server, &["h2"]).await {
+			Some(tls) => tls,
+			None => {
+				sleep(std::time::Duration::from_secs(CONFIG.reconnect_sleep)).await;
+				continue;
+			}
+		};
 
-		let (client, mut h2c) = builder.handshake(tls.unwrap()).await.unwrap();
+		let (client, mut h2c) = builder.handshake(tls).await.unwrap();
 		let mut pinger = h2c.ping_pong().unwrap();
 		log::info!("{}: H2 connection established", server.id);
 

@@ -180,7 +180,7 @@ pub struct Runtime {
 pub struct Server {
 	pub id: String,
 	pub protocol: Protocol,
-	pub remote_addrs: std::net::SocketAddr,
+	pub remote_addrs: Vec<std::net::SocketAddr>,
 	pub hostname: String,
 	pub path: String,
 	pub http_method: HttpMethod,

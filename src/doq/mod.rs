@@ -10,73 +10,57 @@ use crate::{
 };
 
 pub async fn doq(server: &'static crate::config::Server, rpipe: crate::pipe::ReceiverPipe) {
-	let mut endpoint = quic_setup(
-		server.remote_addrs,
-		&CONFIG.noiser,
-		&CONFIG.quic,
-		"doq",
-		&CONFIG.interface,
-	)
-	.await;
-
 	let mut tank: Option<crate::pipe::Message> = None;
 	let disconnected = crate::disconnected::Disconnected::new();
 
 	let response_timeout = std::time::Duration::from_secs(CONFIG.response_timeout);
 
-	let mut connecting_retry = 0u8;
 	loop {
-		if connecting_retry == 3 {
-			connecting_retry = 0;
-			endpoint = quic_setup(
-				server.remote_addrs,
-				&CONFIG.noiser,
-				&CONFIG.quic,
-				"doq",
-				&CONFIG.interface,
-			)
-			.await;
-		}
 		log::info!("{}: QUIC connecting", server.id);
-		// Connect to dns server
-		let connecting = endpoint.connect(server.remote_addrs, &server.sni).unwrap();
-
-		let conn = {
-			let timing = timeout(std::time::Duration::from_secs(CONFIG.quic.connecting_timeout), async {
-				let connecting = connecting.into_0rtt();
-				if let Ok((conn, rtt)) = connecting {
-					rtt.await;
-					log::info!("{}: QUIC 0RTT connection established", server.id);
-					Ok(conn)
-				} else {
-					let conn = endpoint.connect(server.remote_addrs, &server.sni).unwrap().await;
-					if conn.is_ok() {
-						log::info!("{}: QUIC connection established", server.id);
+		let quic = match crate::race::race_connect(&server.remote_addrs, async |remote_addrs| {
+			let endpoint = quic_setup(remote_addrs, &CONFIG.noiser, &CONFIG.quic, "doq", &CONFIG.interface).await;
+			for _ in 0..3 {
+				match timeout(std::time::Duration::from_secs(CONFIG.quic.connecting_timeout), async {
+					match endpoint.connect(remote_addrs, &server.sni).unwrap().into_0rtt() {
+						Ok((conn, rtt)) => {
+							if rtt.await {
+								log::info!("{}: {remote_addrs} QUIC 0RTT connection established", server.id);
+							} else {
+								log::info!("{}: {remote_addrs} QUIC connection established", server.id);
+							};
+							Ok(conn)
+						}
+						Err(conn) => {
+							let conn = conn.await;
+							if conn.is_ok() {
+								log::info!("{}: {remote_addrs} QUIC connection established", server.id);
+							}
+							conn
+						}
 					}
-					conn
+				})
+				.await
+				{
+					Ok(Ok(quic)) => return Some(quic),
+					Ok(Err(e)) => {
+						log::warn!("{}: {remote_addrs} {e}", server.id);
+					}
+					Err(_) => {
+						log::warn!("{}: {remote_addrs} connect timeout", server.id);
+					}
 				}
-			})
-			.await;
-
-			if let Ok(pending) = timing {
-				pending
-			} else {
-				connecting_retry += 1;
-				log::warn!("{}: connecting timeout", server.id);
+			}
+			None
+		})
+		.await
+		{
+			Some(quic) => quic,
+			None => {
 				sleep(std::time::Duration::from_secs(CONFIG.reconnect_sleep)).await;
 				continue;
 			}
 		};
 
-		if let Err(e) = conn {
-			log::warn!("{}: {e}", server.id);
-			connecting_retry += 1;
-			sleep(std::time::Duration::from_secs(CONFIG.reconnect_sleep)).await;
-			continue;
-		}
-		connecting_retry = 0;
-
-		let quic = conn.unwrap();
 		disconnected.connect();
 
 		let q2 = quic.clone();

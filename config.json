@@ -7,7 +7,7 @@
 		{
 			"id": "cloudflare",
 			"protocol": "h2",
-			"remote_addrs": "1.1.1.1:443",
+			"remote_addrs": ["1.1.1.1:443", "1.0.0.1:443", "104.16.248.249:443", "104.16.249.249:443"],
 			"hostname": "cloudflare-dns.com",
 			"path": "/dns-query",
 			"http_method": "GET",
@@ -34,16 +34,16 @@
 		"enable": false,
 		"noises": [
 			{
-				"ntype": "tftp",
+				"ntype": "dht",
 				"content": "",
 				"size": "1-100",
-				"sleep": 50
+				"sleep": 10
 			},
 			{
-				"ntype": "rand",
+				"ntype": "tracker",
 				"content": "",
-				"size": "1-6",
-				"sleep": 25
+				"size": "1-100",
+				"sleep": 10
 			}
 		]
 	},

@@ -14,6 +14,7 @@ mod ioutils;
 mod ipoverwrite;
 mod keepalive;
 mod pipe;
+mod race;
 mod rule;
 mod tls;
 mod udp;

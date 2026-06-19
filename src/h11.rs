@@ -4,21 +4,19 @@ use crate::{
 };
 use tokio::{io::AsyncWriteExt, time::sleep};
 
-pub async fn http1(server: &crate::config::Server, rpipe: crate::pipe::ReceiverPipe) {
+pub async fn http1(server: &'static crate::config::Server, rpipe: crate::pipe::ReceiverPipe) {
 	// TLS Client
-	let ctls = crate::tls::tlsconf(vec![b"http/1.1".to_vec()], server.disable_certificate_validation);
 	let response_timeout = std::time::Duration::from_secs(CONFIG.response_timeout);
 	loop {
 		log::info!("{}: HTTP/1.1 connecting", server.id);
-		let tls = crate::tls::dynamic_tls_conn_gen(server, &["http/1.1"], ctls.clone()).await;
-		if let Err(e) = tls {
-			log::warn!("{}: {e}", server.id);
-			sleep(std::time::Duration::from_secs(CONFIG.reconnect_sleep)).await;
-			continue;
-		}
+		let mut tls = match crate::tls::dynamic_tls_conn_gen(server, &["http/1.1"]).await {
+			Some(tls) => tls,
+			None => {
+				sleep(std::time::Duration::from_secs(CONFIG.reconnect_sleep)).await;
+				continue;
+			}
+		};
 		log::info!("{}: HTTP/1.1 connection established", server.id);
-
-		let mut stream = tls.unwrap();
 
 		let mut response_buffer = vec![0; 1024 * 128];
 		let mut response_buffer: tokio::io::ReadBuf<'_> = tokio::io::ReadBuf::new(&mut response_buffer);
@@ -28,7 +26,7 @@ pub async fn http1(server: &crate::config::Server, rpipe: crate::pipe::ReceiverP
 			// rule check
 			if let Some(message) = crate::rule::rulecheck(CONFIG.rules.is_some(), &CONFIG.rules, message).await
 				&& let Err(e) = handler(
-					&mut stream,
+					&mut tls,
 					message,
 					&mut response_buffer,
 					&server.hostname,

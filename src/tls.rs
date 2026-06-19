@@ -49,100 +49,104 @@ impl AsyncIO for tokio_native_tls::TlsStream<tokio::net::TcpStream> {}
 impl AsyncIO for tokio_boring::SslStream<tokio::net::TcpStream> {}
 
 pub async fn dynamic_tls_conn_gen(
-	server: &crate::config::Server,
-	alpn: &[&str],
-	ctls: Arc<tokio_rustls::rustls::ClientConfig>,
-) -> tokio::io::Result<Box<dyn AsyncIO>> {
-	let config: &std::sync::LazyLock<crate::config::Config> = &crate::CONFIG;
-	match config.tls_core {
-		crate::config::TlsCore::native => {
-			let sni = if server.ip_as_sni {
-				server.remote_addrs.ip().to_string()
-			} else {
-				server.sni.clone()
-			};
-
-			{
-				Ok(Box::new(
-					tokio_native_tls::TlsConnector::from(
-						native_tls::TlsConnector::builder()
-							.request_alpns(alpn)
-							.danger_accept_invalid_certs(server.disable_certificate_validation)
-							.build()
-							.map_err(tokio::io::Error::other)?,
-					)
-					.connect(
-						&sni,
-						tcp_connect_handle(
-							server.remote_addrs,
-							config.reconnect_sleep,
-							&config.interface,
-							&config.tcp_socket_options,
-						)
-						.await,
-					)
-					.await
-					.map_err(tokio::io::Error::other)?,
-				))
-			}
-		}
-		crate::config::TlsCore::rustls => {
-			let sni = if server.ip_as_sni {
-				(server.remote_addrs.ip()).into()
-			} else {
-				(server.sni.clone()).try_into().expect("invalid server name")
-			};
-
-			Ok(Box::new(
-				tokio_rustls::TlsConnector::from(ctls)
-					.connect_with(
-						sni,
-						tcp_connect_handle(
-							server.remote_addrs,
-							config.reconnect_sleep,
-							&config.interface,
-							&config.tcp_socket_options,
-						)
-						.await,
-						|tls, tcp| {
-							// Do fragmenting
-							tlsfragmenting(&config.fragmenting, tls, tcp);
-						},
-					)
-					.await?,
-			))
-		}
-		crate::config::TlsCore::boring => {
-			#[cfg(not(target_os = "windows"))]
-			{
-				panic!("boringSSL is not available")
-			}
-
-			#[cfg(target_os = "windows")]
-			{
-				let alpn: &[u8] = match alpn[0] {
-					"h2" => b"\x02h2",
-					"http/1.1" => b"\x08http/1.1",
-					"dot" => b"\x03dot",
-					_ => panic!("invalid alpn"),
+	server: &'static crate::config::Server,
+	alpn: &'static [&str],
+) -> Option<Box<dyn AsyncIO>> {
+	crate::race::race_connect(&server.remote_addrs, async move |remote_addr| {
+		let config: &'static std::sync::LazyLock<crate::config::Config> = &crate::CONFIG;
+		let result: Option<Box<dyn AsyncIO>>;
+		match config.tls_core {
+			crate::config::TlsCore::native => {
+				let sni = if server.ip_as_sni {
+					remote_addr.ip().to_string()
+				} else {
+					server.sni.clone()
 				};
 
-				let mut builder = boring::ssl::SslConnector::builder(boring::ssl::SslMethod::tls())?;
-				builder.set_min_proto_version(Some(boring::ssl::SslVersion::TLS1_2))?;
-				builder.set_alpn_protos(alpn)?;
-				builder.set_verify(if server.disable_certificate_validation {
-					boring::ssl::SslVerifyMode::NONE
+				match tokio_native_tls::TlsConnector::from(
+					native_tls::TlsConnector::builder()
+						.request_alpns(alpn)
+						.danger_accept_invalid_certs(server.disable_certificate_validation)
+						.build()
+						.unwrap(),
+				)
+				.connect(
+					&sni,
+					tcp_connect_handle(
+						remote_addr,
+						config.reconnect_sleep,
+						&config.interface,
+						&config.tcp_socket_options,
+					)
+					.await,
+				)
+				.await
+				{
+					Ok(tls) => {
+						result = Some(Box::new(tls));
+					}
+					Err(e) => {
+						log::warn!("{}: {remote_addr} {e}", server.id);
+						result = None;
+					}
+				}
+			}
+			crate::config::TlsCore::rustls => {
+				let sni = if server.ip_as_sni {
+					(remote_addr.ip()).into()
 				} else {
-					boring::ssl::SslVerifyMode::PEER
-				});
-				builder.set_ca_file("MOZILLA_ROOTS.pem")?;
+					(server.sni.clone()).try_into().expect("invalid server name")
+				};
 
-				Ok(Box::new(
-					tokio_boring::connect(
-						builder.build().configure()?,
+				match tokio_rustls::TlsConnector::from(crate::tls::tlsconf(
+					alpn.iter().map(|p| p.as_bytes().to_vec()).collect(),
+					server.disable_certificate_validation,
+				))
+				.connect_with(
+					sni,
+					tcp_connect_handle(
+						remote_addr,
+						config.reconnect_sleep,
+						&config.interface,
+						&config.tcp_socket_options,
+					)
+					.await,
+					|tls, tcp| {
+						// Do fragmenting
+						tlsfragmenting(&config.fragmenting, tls, tcp);
+					},
+				)
+				.await
+				{
+					Ok(tls) => {
+						result = Some(Box::new(tls));
+					}
+					Err(e) => {
+						log::warn!("{}: {remote_addr} {e}", server.id);
+						result = None;
+					}
+				}
+			}
+			crate::config::TlsCore::boring => {
+				#[cfg(not(target_os = "windows"))]
+				{
+					panic!("boringSSL is not available")
+				}
+
+				#[cfg(target_os = "windows")]
+				{
+					let alpn: &[u8] = match alpn[0] {
+						"h2" => b"\x02h2",
+						"http/1.1" => b"\x08http/1.1",
+						"dot" => b"\x03dot",
+						_ => panic!("invalid alpn"),
+					};
+
+					match tokio_boring::connect(
+						boring_config(alpn, server.disable_certificate_validation).unwrap(),
 						&server.sni,
 						tcp_connect_handle(
-							server.remote_addrs,
+							remote_addr,
 							config.reconnect_sleep,
 							&config.interface,
 							&config.tcp_socket_options,
@@ -150,11 +154,36 @@ pub async fn dynamic_tls_conn_gen(
 						.await,
 					)
 					.await
-					.map_err(tokio::io::Error::other)?,
-				))
+					{
+						Ok(tls) => {
+							result = Some(Box::new(tls));
+						}
+						Err(e) => {
+							log::warn!("{}: {remote_addr} {e}", server.id);
+							result = None;
+						}
+					}
+				}
 			}
-		}
-	}
+		};
+		result
+	})
+	.await
+}
+
+fn boring_config(
+	alpn: &[u8],
+	disable_certificate_validation: bool,
+) -> Result<boring::ssl::ConnectConfiguration, boring::error::ErrorStack> {
+	let mut builder = boring::ssl::SslConnector::builder(boring::ssl::SslMethod::tls())?;
+	builder.set_alpn_protos(alpn)?;
+	builder.set_verify(if disable_certificate_validation {
+		boring::ssl::SslVerifyMode::NONE
+	} else {
+		boring::ssl::SslVerifyMode::PEER
+	});
+	builder.set_ca_file("MOZILLA_ROOTS.pem")?;
+	builder.build().configure()
 }
 
 #[derive(Debug)]

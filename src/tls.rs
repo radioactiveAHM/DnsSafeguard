@@ -171,6 +171,7 @@ pub async fn dynamic_tls_conn_gen(
 	.await
 }
 
+#[cfg(target_os = "windows")]
 fn boring_config(
 	alpn: &[u8],
 	disable_certificate_validation: bool,

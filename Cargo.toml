@@ -1,6 +1,6 @@
 [package]
 name = "DnsSafeguard"
-version = "2.1.0"
+version = "2.2.0"
 edition = "2024"
 license = "Apache-2.0"
 description = "DnsSafeguard is dedicated to providing a secure DNS client solution, ensuring your DNS queries remain private and uncensored."

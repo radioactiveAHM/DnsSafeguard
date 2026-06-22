@@ -1,7 +1,7 @@
 {
 	"log": {
 		"level": "info",
-		"file": "log.txt"
+		"file": null
 	},
 	"servers": [
 		{
@@ -48,16 +48,20 @@
 		]
 	},
 	"quic": {
-		"congestion_controller": "bbr",
+		"congestion_controller": "cubic",
 		"keep_alive_interval": null,
 		"connecting_timeout": 2,
-		"datagram_receive_buffer_size": 1048576,
-		"datagram_send_buffer_size": 1048576,
-		"packet_threshold": 12,
-		"initial_mtu": null,
-		"min_mtu": null,
-		"crypto_buffer_size": 1048576,
-		"stream_receive_window": 8192,
+		"datagram_receive_buffer_size": 67108864,
+		"datagram_send_buffer_size": 67108864,
+		"packet_threshold": 6,
+		"initial_mtu": 1200,
+		"min_mtu": 1200,
+		"crypto_buffer_size": 16384,
+		"stream_receive_window": 65536,
+		"receive_window": 16777216,
+		"send_window": 16777216,
+		"fairness": false,
+		"max_streams": 100,
 		"max_idle_timeout": 300
 	},
 	"h2": {

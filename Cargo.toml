@@ -19,23 +19,22 @@ webpki-roots = "1.0.8"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 rand = "0.10.1"
-quinn = { version = "0.11.9", default-features = false, features = ["runtime-tokio", "bloom"] }
+quinn = { version = "0.11.11", default-features = false, features = ["runtime-tokio"] }
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "rt", "macros", "net", "time"] }
 h3-quinn = "0.0.10"
 h3 = "0.0.8"
-http = "1.4.0"
+http = "1.4.2"
 bytes = "1.12.0"
-base64-url = "3.0.3"
+base64-url = "3.0.4"
 h2 = "0.4.15"
 tokio-rustls = { git = "https://github.com/radioactiveAHM/tokio-rustls.git", features = ["brotli", "zlib", "logging"] }
-socket2 = "0.6.3"
-native-tls = { version = "0.2.18", features = ["alpn"]}
-tokio-native-tls = { version = "0.3.1"}
-log = "0.4.29"
+socket2 = "0.6.4"
+native-tls = { version = "0.2.18", features = ["alpn"] }
+tokio-native-tls = { version = "0.3.1" }
+log = "0.4.33"
 env_logger = "0.11.10"
-fastbloom = "0.17.0" # required for quinn
 if-addrs = "0.15.0"
-crossfire = {version = "3.1.16", features = ["tokio"]}
+crossfire = { version = "3.1.16", features = ["tokio"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-service = "0.8.1"
@@ -54,3 +53,4 @@ lto = true
 opt-level = 2
 strip = true
 debug = false
+overflow-checks = false

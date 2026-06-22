@@ -13,7 +13,7 @@ DnsSafeguard is a fast and secure DNS client written in Rust, designed to interc
 
 ## Safety
 
-This crate uses `#![forbid(unsafe_code)]` to ensure everything is implemented in 100% safe Rust.
+This crate uses **#![forbid(unsafe_code)]** to ensure everything is implemented in 100% safe Rust.
 
 ## Features
 
@@ -25,7 +25,7 @@ This crate uses `#![forbid(unsafe_code)]` to ensure everything is implemented in
 - **Rules:** Create rules for groups of domains and keywords to control DNS queries effectively.
 - **Overwrite:** Overwrite IPs from DNS responses.
 - **Censorship Bypass:** Implements TLS client hello fragmentation with four methods to evade GFW TLS censorship.
-- **Customizable UDP Noise:** Implements 7 dynamic types of UDP Noise to bypass QUIC blocking.
+- **UDP Noise:** Implements dynamic UDP Noise to bypass QUIC blocking.
 
 ## Roadmap
 
@@ -40,20 +40,20 @@ This crate uses `#![forbid(unsafe_code)]` to ensure everything is implemented in
 - [x] DNS over QUIC (DoQ) Support
 - [x] Local HTTP/1.1 and HTTP/2 DoH Server (POST + GET)
 - [x] Block DNS queries based on record type
-- [x] Respond to the DNS query with a static IP(V4 and V6)
 - [x] Owerwrite IPs from DNS responses
 - [x] Interface/Adapter binding
-- [x] POST Method (H2, H3)
+- [x] POST Method
 - [x] Logging
 - [x] Multi Server
+- [x] Happy Eyeballs
 
 ## Building the Project
 
-This project supports two cryptographic backends: **aws-lc-rs** (default) and **ring**. Choose the appropriate build command based on your desired backend.
+This project supports two cryptographic backends: `aws-lc-rs` (default) and `ring`. Choose the appropriate build command based on your desired backend.
 
 ### Default Build (aws-lc-rs)
 
-Requires **CMake** and **NASM** installed.
+Requires `CMake` and `NASM` installed.
 
 ```sh
 cargo build --release
@@ -77,48 +77,48 @@ cargo build --release --no-default-features --features "ring"
 
 ### Windows
 
-1. **Download the Latest Release:**
+1. Download the Latest Release:
     1. Visit the releases page and download the latest version of your DNS client.
     2. Extract the downloaded archive to a folder of your choice.
-2. **Configure the `config.json` File:**
+2. Configure the `config.json` File:
     1. Locate the `config.json` file in the extracted folder.
     2. Open it using a text editor.
     3. Modify the necessary settings based on the instructions in the “Configuration File” section.
-3. **Run the DNS Client:**
+3. Run the DNS Client:
     1. Execute the DNS client application (e.g., DnsSafeguard.exe).
     2. You should see log messages indicating that the client is attempting to establish a connection.
-4. **Verify Connection Establishment:**
+4. Verify Connection Establishment:
     - Keep an eye on the logs. When you see the message “Connection established,” it means the DNS client has successfully connected to the DNS server.
-5. **Set Up Windows DNS:**
+5. Set Up Windows DNS:
     1. Go to your Windows network settings.
     2. Configure the DNS server address to match the IP address specified in the `config.json` file for the `serve_addrs` section.
 
 ### Setting Up DnsSafeguard as a Windows Service
 
-**Important:** Before creating the service, make sure DnsSafeguard is configured and working correctly.
+`Important:` Before creating the service, make sure DnsSafeguard is configured and working correctly.
 
 #### Steps
 
-1. **Open PowerShell as Administrator**
-   - Right‑click the Start menu, choose **Windows PowerShell (Admin)**.
+1. Open PowerShell as Administrator
+   - Right‑click the Start menu, choose Windows PowerShell (Admin).
    - You need administrator rights to create or manage services.
 
-2. **Create the Service**
-   - Replace `"PATH TO DnsSafeguard EXE"` with the actual location of the DnsSafeguard program on your computer.
+2. Create the Service
+   - Replace "PATH TO DnsSafeguard EXE" with the actual location of the DnsSafeguard program on your computer.
    - Run this command in PowerShell:
       `sc.exe create DnsSafeguard binPath= "PATH TO DnsSafeguard EXE" start= auto`
 
    - Example:
      `sc.exe create DnsSafeguard binPath= "C:\Users\Sara\Desktop\DnsSafeguard\DnsSafeguard.exe" start= auto`
 
-3. **Start the Service**
+3. Start the Service
    - Run this command:
      `sc.exe start DnsSafeguard`
 
-4. **Automatic Startup**
+4. Automatic Startup
    - Once created, the DnsSafeguard service will automatically start every time Windows boots up.
 
-5. **Restart After Configuration Changes**  
+5. Restart After Configuration Changes  
    - If you make any changes to the DnsSafeguard configuration file, you must restart the service for the changes to take effect.
    - First, stop the service:
      `sc.exe stop DnsSafeguard`
@@ -128,12 +128,12 @@ cargo build --release --no-default-features --features "ring"
 
 #### Managing the Service in Windows (Alternative Way)
 
-You don’t always need PowerShell — Windows also provides a built‑in tool to manage services:
+You don’t always need PowerShell - Windows also provides a built‑in tool to manage services:
 
-- Press **Windows Key + R** to open the Run dialog.  
-- Type `services.msc` and press **Enter**.  
-- In the **Services** window, scroll down to find **DnsSafeguard**.  
-- From here you can **Start**, **Stop**, or **Restart** the service by right‑clicking it and choosing the option you need.
+- Press `Windows Key + R` to open the Run dialog.  
+- Type `services.msc` and press Enter.  
+- In the `Services` window, scroll down to find `DnsSafeguard`.  
+- From here you can `Start`, `Stop`, or `Restart` the service by right‑clicking it and choosing the option you need.
 
 > 💡 This is a simple way to manage services if you prefer a graphical interface instead of command‑line tools.
 
@@ -155,191 +155,206 @@ The `config.json` file is a crucial part of the DnsSafeguard application. It con
 
 ### Structure
 
-#### **Log**
+#### `Log`
 
-- **level**
+- `level`
   Defines the verbosity of log output. Supported values:
   `error`, `warn`, `info`, `debug`, `trace`.
   Set to `null` to disable logging entirely.
-- **file**
+- `file`
   Path to the log output file.
   Set to `null` to disable file logging and output logs to console instead.
-  **Note:** Logging to both file and console simultaneously is not supported. Choose one.
+  `Note:` Logging to both file and console simultaneously is not supported. Choose one.
 
 ---
 
-#### **Servers**
+#### `Servers`
 
 Configuration for upstream DNS servers.
 
-- **protocol**
+- `protocol`
   DNS transport protocol:
 
-  - `h1` — DNS over HTTPS (HTTP/1.1)
-  - `h2` — DNS over HTTPS (HTTP/2)
-  - `h3` — DNS over HTTPS (HTTP/3)
-  - `dot` — DNS over TLS
-  - `doq` — DNS over QUIC
-- **remote_addrs**
-  IP address and port of the DNS server.
-- **hostname**
+  - `h1` - DNS over HTTPS (HTTP/1.1)
+  - `h2` - DNS over HTTPS (HTTP/2)
+  - `h3` - DNS over HTTPS (HTTP/3)
+  - `dot` - DNS over TLS
+  - `doq` - DNS over QUIC
+- `remote_addrs`
+  List of IP address and port of the DNS server. When multiple address are configured, DnsSafeguard performs TLS/QUIC handshakes concurrently and automatically selects the first successfully established connection.
+- `hostname`
   The server's domain name.
-- **path**
+- `path`
   DoH path. Use `/dns-query` for default.
-- **http_method**
+- `http_method`
   Request method for DoH: `GET` or `POST`.
 
-  - `GET` — more compatible, but uses more memory.
-  - `POST` — more efficient, no base64url encoding required.
-- **sni**
+  - `GET` - more compatible, but uses more memory.
+  - `POST` - more efficient, no base64url encoding required.
+- `sni`
   The Server Name Indication sent during TLS handshake.
-- **ip_as_sni**
+- `ip_as_sni`
   When `true`, use the server IP instead of the hostname as SNI.
   Useful for bypassing censorship. Supported in `h1`, `h2` and `dot`.
-- **disable_certificate_validation**
+- `disable_certificate_validation`
   Skips hostname verification in the TLS handshake.
   Enables domain fronting (e.g., using `www.google.com` as SNI).
   Supported by Google, Quad9, NextDNS.
-  **Cloudflare does not support this due to SNI Guard.**
+  `Cloudflare does not support this due to SNI Guard.`
   Recommended when bypassing DPI/GFW. Disable fragmenting when using this option.
 
 ---
 
-#### **General Settings**
+#### `General Settings`
 
-- **serve_addrs**
+- `serve_addrs`
   Local UDP address to receive DNS queries.
   Example: `127.0.0.1:53` is recommended for local resolvers.
   Use `[::]:53` for dual-stack; may require application restart after network changes.
-- **interface**
+- `interface`
   Network interface name to bind. Use `null` for default.
-- **response_timeout**
+- `response_timeout`
   Maximum wait time (seconds) for responses.
-- **connection_keep_alive**
+- `connection_keep_alive`
   Interval for sending keep-alive packets (seconds).
   Set to `null` to disable.
-- **reconnect_sleep**
+- `reconnect_sleep`
   Time to wait (seconds) before reconnecting.
-- **pipe_capacity**
+- `pipe_capacity`
   Internal pipeline buffer size.
-- **tls_core**
+- `tls_core`
   TLS backend:
 
-  - `rustls` — default, supports all features including fragmenting
-  - `boring` — supports `h1`, `h2`, and `dot`
-  - `native` — platform TLS (SChannel/Security.framework/OpenSSL); supports `h1`, `h2`, `dot`
+  - `rustls` - default, supports all features including fragmenting
+  - `boring` - supports `h1`, `h2`, and `dot`
+  - `native` - platform TLS (SChannel/Security.framework/OpenSSL); supports `h1`, `h2`, `dot`
 
 ---
 
-#### **Fragmenting**
+#### `Fragmenting`
 
 Controls TLS handshake fragmentation. Useful for bypassing DPI.
 
-- **enable** — Enable or disable fragmentation.
-- **method** — Current supported method: `single`.
-- **sleep_interval** — Delay between fragments (ms).
-- **fragment_size** — Size range of each fragment (bytes).
-- **segments** — Number of fragments.
+- `enable` - Enable or disable fragmentation.
+- `method` - Current supported method: `single`.
+- `sleep_interval` - Delay between fragments (ms).
+- `fragment_size` - Size range of each fragment (bytes).
+- `segments` - Number of fragments.
 
 ---
 
-#### **Noise**
+#### `Noiser`
 
-Injects UDP noise packets to mask query patterns.
+Controls UDP noise injection, which can help bypass firewall-based blocking of H3/DoQ (QUIC) traffic.
 
-- **ntype** — Noise type (`dns`, `str`, `lsd`, `tracker`, `stun`, `tftp`, `rand`, `socks5`, `turn`, `dht`).
-- **content** — Domain for `dns`, text for `str`.
-- **size** — Size range (bytes) for `rand`.
-- **sleep** — Delay between packets (ms).
+- `enable` - Enables or disables noise injection.
+- `noises` - List of noise packet definitions to send.
+  - `ntype` - Type of noise packet. Supported values:
+    - `dns` - DNS query packet.
+    - `str` - Plain text payload.
+    - `lsd` - Local Service Discovery packet.
+    - `tracker` - BitTorrent tracker packet.
+    - `stun` - STUN packet.
+    - `tftp` - TFTP packet.
+    - `rand` - Random UDP payload.
+    - `socks5` - SOCKS5 UDP packet.
+    - `turn` - TURN packet.
+    - `dht` - BitTorrent DHT packet.
+  - `content` - Payload content:
+    - For `dns`, specifies the domain name to query (for example, `www.google.com`).
+    - For `str`, specifies the text payload to send.
+    - Ignored for other packet types.
+  - `size` - Payload size or size range (in bytes) for `rand` packets.
+  - `sleep` - Delay between consecutive packets, in milliseconds.
 
 ---
 
-#### **QUIC**
+#### `QUIC`
 
 QUIC protocol configuration for `doq` and `h3`.
 
-- **congestion_controller** — `bbr`, `cubic`, or `newreno`.
-- **keep_alive_interval** — Interval (seconds); `null` to disable.
-- **datagram_receive_buffer_size** — Receive buffer size; `null` for default.
-- **datagram_send_buffer_size** — Send buffer size; `null` for default.
-- **connecting_timeout** — Max connection timeout (seconds).
-- **packet_threshold** — Reordering threshold, must be ≥ 3 (RFC 5681).
-- **initial_mtu** — Initial MTU; ≥ 1200; `null` for default.
-- **min_mtu** — Minimum guaranteed MTU; ≥ 1200; `null` for default.
-- **crypto_buffer_size** — Buffer for out-of-order crypto data.
-- **stream_receive_window** — Max unacknowledged bytes per stream.
-- **max_idle_timeout** — Idle timeout (seconds); `null` means infinite.
+- `congestion_controller` - `bbr`, `cubic`, or `newreno`.
+- `keep_alive_interval` - Interval (seconds); `null` to disable.
+- `datagram_receive_buffer_size` - Receive buffer size; `null` for default.
+- `datagram_send_buffer_size` - Send buffer size; `null` for default.
+- `connecting_timeout` - Max connection timeout (seconds).
+- `packet_threshold` - Reordering threshold, must be ≥ 3 (RFC 5681).
+- `initial_mtu` - Initial MTU; ≥ 1200; `null` for default.
+- `min_mtu` - Minimum guaranteed MTU; ≥ 1200; `null` for default.
+- `crypto_buffer_size` - Buffer for out-of-order crypto data.
+- `stream_receive_window` - Max unacknowledged bytes per stream.
+- `max_idle_timeout` - Idle timeout (seconds); `null` means infinite.
 
 ---
 
-#### **HTTP/2 (H2)**
+#### `HTTP/2 (H2)`
 
 Advanced HTTP/2 protocol tuning.
 
-- **header_table_size** — Size of HPACK header table.
-- **max_header_list_size** — Maximum acceptable header list size.
-- **initial_connection_window_size** — Connection-level flow control window.
-- **initial_window_size** — Stream-level flow control window.
-- **max_pending_accept_reset_streams** — Maximum pending reset streams.
-- **max_concurrent_reset_streams** — Maximum active reset streams.
-- **max_frame_size** — Maximum frame size (default: 16777214).
+- `header_table_size` - Size of HPACK header table.
+- `max_header_list_size` - Maximum acceptable header list size.
+- `initial_connection_window_size` - Connection-level flow control window.
+- `initial_window_size` - Stream-level flow control window.
+- `max_pending_accept_reset_streams` - Maximum pending reset streams.
+- `max_concurrent_reset_streams` - Maximum active reset streams.
+- `max_frame_size` - Maximum frame size.
 
 ---
 
-#### **TCP Socket Options**
+#### `TCP Socket Options`
 
-- **send_buffer_size** — Custom send buffer size (bytes).
-- **recv_buffer_size** — Custom receive buffer size (bytes).
-- **nodelay** — Disable Nagle’s algorithm to reduce latency.
-- **keepalive** — Enable TCP keepalive probes.
+- `send_buffer_size` - Custom send buffer size (bytes).
+- `recv_buffer_size` - Custom receive buffer size (bytes).
+- `nodelay` - Disable Nagle’s algorithm to reduce latency.
+- `keepalive` - Enable TCP keepalive probes.
 
 ---
 
-#### **DoH Server (Local)**
+#### `DoH Server (Local)`
 
 Local DNS-over-HTTPS server for browsers or system resolvers.
 
-- **enable** — Enable or disable local DoH server.
-- **listen_address** — Example: `127.0.0.1:443`.
-- **alpn** — Supported protocols: `h2`, `http/1.1`.
-- **certificate** — Path to certificate file.
-- **key** — Path to private key file.
-- **cache_control** — Cache-Control HTTP response header.
-- **response_timeout** — Response wait time (seconds).
-- **log_errors** — Log DoH server errors when enabled.
+- `enable` - Enable or disable local DoH server.
+- `listen_address` - Example: `127.0.0.1:443`.
+- `alpn` - Supported protocols: `h2`, `http/1.1`.
+- `certificate` - Path to certificate file.
+- `key` - Path to private key file.
+- `cache_control` - Cache-Control HTTP response header.
+- `response_timeout` - Response wait time (seconds).
+- `log_errors` - Log DoH server errors when enabled.
 
 ---
 
-#### **Runtime**
+#### `Runtime`
 
 Tokio runtime configuration for advanced tuning.
 
-- **runtime_mode** — `Multi` (multi-threaded) or `Single` (single-threaded).
-- **worker_threads** — Worker thread count (Multi mode only).
-- **thread_stack_size** — Per-thread stack size.
-- **event_interval** — Scheduler external-event polling frequency.
-- **global_queue_interval** — Scheduler global task queue polling frequency.
-- **max_io_events_per_tick** — Maximum I/O events processed per tick.
-- **thread_keep_alive** — Idle timeout for worker threads (default: 10s).
+- `runtime_mode` - `Multi` (multi-threaded) or `Single` (single-threaded).
+- `worker_threads` - Worker thread count (Multi mode only).
+- `thread_stack_size` - Per-thread stack size.
+- `event_interval` - Scheduler external-event polling frequency.
+- `global_queue_interval` - Scheduler global task queue polling frequency.
+- `max_io_events_per_tick` - Maximum I/O events processed per tick.
+- `thread_keep_alive` - Idle timeout for worker threads (default: 10s).
 
 ---
 
-#### **Rules**
+#### `Rules`
 
 Filtering rules for DNS queries.
 
-- **options** — List of domains or keywords.
-- **target**
+- `options` - List of domains or keywords.
+- `target`
 
   - `block`: Blocks matching queries.
-  - (Other rule types documented in `/RULES.md`.)
+  - (Other rule types documented in [RULES.md](/RULES.md).)
 
 ---
 
-#### **Overwrite**
+#### `Overwrite`
 
 Rules for overriding IPs returned in DNS responses.
-See `/OVERWRITE.md` for full specification.
+See [OVERWRITE.md](/OVERWRITE.md) for full specification.
 
 ## License
 

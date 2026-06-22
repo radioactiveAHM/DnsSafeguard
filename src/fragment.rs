@@ -3,15 +3,15 @@ use tokio_rustls::rustls::ClientConnection;
 
 async fn segmentation<IO: AsyncWriteExt + std::marker::Unpin>(
 	tcp: &mut IO,
-	fragmenting: &crate::config::Fragmenting,
+	segments: usize,
+	sleep_interval: &std::ops::Range<u64>,
 	fragment: &[u8],
 ) -> tokio::io::Result<()> {
-	let sleep_interval = crate::utils::parse_range(&fragmenting.sleep_interval)
-		.expect("failed to parse fragmenting sleep_interval range");
-	for segment in fragment.chunks((fragment.len() as f32 / fragmenting.segments as f32).ceil() as usize) {
+	log::info!("TLS Fragment size: {}", fragment.len());
+	for segment in fragment.chunks((fragment.len() / segments) + fragment.len() % segments) {
+		log::info!("Send segment {} bytes", segment.len());
 		tcp.write_all(segment).await?;
 		tcp.flush().await?;
-
 		sleep(std::time::Duration::from_millis(rand::random_range(
 			sleep_interval.clone(),
 		)))
@@ -33,7 +33,10 @@ pub async fn fragment_client_hello_rand<IO: AsyncWriteExt + std::marker::Unpin>(
 		panic!("maximum fragment size can not be bigger than 255");
 	}
 
-	let mut tls_hello = Vec::with_capacity(1024 * 8);
+	let sleep_interval: std::ops::Range<u64> = crate::utils::parse_range(&fragmenting.sleep_interval)
+		.expect("failed to parse fragmenting sleep_interval range");
+
+	let mut tls_hello = Vec::with_capacity(1024 * 2);
 	let l = c.write_tls(&mut tls_hello)?;
 
 	let mut written = 5;
@@ -45,7 +48,7 @@ pub async fn fragment_client_hello_rand<IO: AsyncWriteExt + std::marker::Unpin>(
 			fragmented_tls_hello.clear();
 			fragmented_tls_hello.extend_from_slice(&[22, 3, 1, 0, tls_hello[written..l].len() as u8]);
 			fragmented_tls_hello.extend_from_slice(&tls_hello[written..l]);
-			segmentation(tcp, fragmenting, &fragmented_tls_hello).await?;
+			segmentation(tcp, fragmenting.segments, &sleep_interval, &fragmented_tls_hello).await?;
 			break;
 		} else {
 			fragmented_tls_hello.clear();
@@ -57,7 +60,7 @@ pub async fn fragment_client_hello_rand<IO: AsyncWriteExt + std::marker::Unpin>(
 				tls_hello[written..(chunck_size + written)].len() as u8,
 			]);
 			fragmented_tls_hello.extend_from_slice(&tls_hello[written..(chunck_size + written)]);
-			segmentation(tcp, fragmenting, &fragmented_tls_hello).await?;
+			segmentation(tcp, fragmenting.segments, &sleep_interval, &fragmented_tls_hello).await?;
 			written += chunck_size;
 		}
 	}
@@ -77,11 +80,14 @@ pub async fn fragment_client_hello_pack<IO: AsyncWriteExt + std::marker::Unpin>(
 		panic!("maximum fragment size can not be bigger than 255");
 	}
 
+	let sleep_interval: std::ops::Range<u64> = crate::utils::parse_range(&fragmenting.sleep_interval)
+		.expect("failed to parse fragmenting sleep_interval range");
+
 	let mut tls_hello = Vec::with_capacity(512);
 	let l = c.write_tls(&mut tls_hello)?;
 
 	let mut written = 5;
-	let mut fragmented_tls_hello = Vec::with_capacity(1024 * 8);
+	let mut fragmented_tls_hello = Vec::with_capacity(1024 * 2);
 	loop {
 		let size: usize = rand::random_range(fragment_size.clone());
 		if written + size >= l {
@@ -95,7 +101,7 @@ pub async fn fragment_client_hello_pack<IO: AsyncWriteExt + std::marker::Unpin>(
 		written += size;
 	}
 
-	segmentation(tcp, fragmenting, &fragmented_tls_hello).await?;
+	segmentation(tcp, fragmenting.segments, &sleep_interval, &fragmented_tls_hello).await?;
 
 	Ok(())
 }

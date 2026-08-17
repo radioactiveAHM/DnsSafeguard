@@ -1,6 +1,6 @@
 [package]
 name = "DnsSafeguard"
-version = "2.2.0"
+version = "2.2.1"
 edition = "2024"
 license = "Apache-2.0"
 description = "DnsSafeguard is dedicated to providing a secure DNS client solution, ensuring your DNS queries remain private and uncensored."
@@ -15,31 +15,31 @@ categories = [
 ]
 
 [dependencies]
-webpki-roots = "1.0.8"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.150"
-rand = "0.10.1"
+webpki-roots = "1.0.9"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+rand = "0.10.2"
 quinn = { version = "0.11.11", default-features = false, features = ["runtime-tokio"] }
-tokio = { version = "1.52.3", features = ["rt-multi-thread", "rt", "macros", "net", "time"] }
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "rt", "macros", "net", "time"] }
 h3-quinn = "0.0.10"
 h3 = "0.0.8"
-http = "1.4.2"
-bytes = "1.12.0"
+http = "1.5.0"
+bytes = "1.12.1"
 base64-url = "3.0.4"
-h2 = "0.4.15"
+h2 = "0.4.16"
 tokio-rustls = { git = "https://github.com/radioactiveAHM/tokio-rustls.git", features = ["brotli", "zlib", "logging"] }
-socket2 = "0.6.4"
+socket2 = "0.6.5"
 native-tls = { version = "0.2.18", features = ["alpn"] }
 tokio-native-tls = { version = "0.3.1" }
 log = "0.4.33"
-env_logger = "0.11.10"
+env_logger = "0.11.11"
 if-addrs = "0.15.0"
-crossfire = { version = "3.1.16", features = ["tokio"] }
+crossfire = { version = "3.1.19", features = ["tokio"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-service = "0.8.1"
-boring = "5.1.0"
-tokio-boring = "5.0.0"
+boring = "5.2.0"
+tokio-boring = "5.2.0"
 
 [features]
 default = ["aws-lc-rs"]

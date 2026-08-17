@@ -40,7 +40,7 @@ async fn handle_req(
 				.write_all(
 					format!(
 						"HTTP/1.1 200 OK\r\nContent-Type: application/dns-message\r\nCache-Control: {}\r\nAccess-Control-Allow-Origin: *\r\ncontent-length: {}\r\n\r\n",
-						&CONFIG.doh_server.cache_control,
+						CONFIG.doh_server.cache_control,
 						response.len()
 					)
 					.as_bytes(),

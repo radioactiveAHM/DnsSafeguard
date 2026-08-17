@@ -39,7 +39,7 @@ pub async fn serve_h2(
 
 	loop {
 		let (mut req, mut resp) = accept_stream(&mut h2c).await?;
-		log::trace!("{:?}", &req);
+		log::trace!("{:?}", req);
 
 		let spipe = spipe.clone();
 		match *req.method() {

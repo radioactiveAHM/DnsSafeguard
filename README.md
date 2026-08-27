@@ -9,7 +9,7 @@ DnsSafeguard is a fast and secure DNS client written in Rust, designed to interc
 
 ## Struct
 
-![Graph](./DnsSafeguard%20graph.jpg)
+![Graph](./DnsSafeguard%20graph.webp)
 
 ## Safety
 
